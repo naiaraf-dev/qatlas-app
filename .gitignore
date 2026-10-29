@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+release/
+*.tsbuildinfo
+.tsbuild/
+coverage/
+electronegativity.sarif
+.env
+.env.*
+!.env.example
+
+# Nunca versionar datos de pruebas reales
+*.qatlas
+fixtures/private/
+e2e-report/
+test-results/

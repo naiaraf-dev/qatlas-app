@@ -1,0 +1,10 @@
+node_modules
+out
+dist
+release
+coverage
+package-lock.json
+docs/especificacion-qatlas.md
+electronegativity.sarif
+e2e-report
+test-results

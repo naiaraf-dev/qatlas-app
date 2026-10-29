@@ -1,0 +1,11 @@
+{
+  "name": "@qatlas/security-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Suite de seguridad de QAtlas (TS-01 a TS-14). Obligatoria en CI.",
+  "dependencies": {
+    "@qatlas/desktop": "*",
+    "@qatlas/shared": "*"
+  }
+}

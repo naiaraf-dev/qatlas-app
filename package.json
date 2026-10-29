@@ -1,0 +1,44 @@
+{
+  "name": "qatlas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QAtlas: aplicación de escritorio local-first y cifrada para testing de aplicaciones web",
+  "license": "UNLICENSED",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "security-tests"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "npm ci && npm run setup:native",
+    "setup:native": "node scripts/allowed-install-scripts.mjs",
+    "dev": "npm run dev -w @qatlas/desktop",
+    "build": "npm run build -w @qatlas/desktop",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.web.json && tsc -p security-tests && tsc -p tsconfig.tools.json",
+    "test": "vitest run",
+    "test:security": "vitest run --project security",
+    "audit:electron": "npx --yes @doyensec/electronegativity@1.10.3 -i apps/desktop/src -r -o electronegativity.sarif",
+    "audit:deps": "npm audit --audit-level=high",
+    "check": "npm run lint && npm run typecheck && npm test && npm run audit:electron",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}
