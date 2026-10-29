@@ -56,12 +56,28 @@ export const ConnectionEntry = z
   .strict();
 export type ConnectionEntry = z.infer<typeof ConnectionEntry>;
 
+export const ThemePreference = z.enum(['system', 'light', 'dark']);
+export type ThemePreference = z.infer<typeof ThemePreference>;
+
+export const AppearanceState = z
+  .object({
+    preference: ThemePreference,
+    effective: z.enum(['light', 'dark']),
+  })
+  .strict();
+export type AppearanceState = z.infer<typeof AppearanceState>;
+
 export const ipcContract = {
   'app:getInfo': { request: Empty, response: AppInfo },
   'security:getStatus': { request: Empty, response: SecurityStatus },
   'privacy:listConnections': {
     request: z.object({ limit: z.number().int().min(1).max(500) }).strict(),
     response: z.array(ConnectionEntry),
+  },
+  'appearance:get': { request: Empty, response: AppearanceState },
+  'appearance:setTheme': {
+    request: z.object({ preference: ThemePreference }).strict(),
+    response: AppearanceState,
   },
 } as const;
 

@@ -19,6 +19,10 @@ const api: QatlasApi = {
   security: {
     getStatus: () => invoke('security:getStatus'),
   },
+  appearance: {
+    get: () => invoke('appearance:get'),
+    setTheme: (req) => invoke('appearance:setTheme', req),
+  },
   privacy: {
     listConnections: (req) => invoke('privacy:listConnections', req),
   },

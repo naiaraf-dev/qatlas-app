@@ -13,6 +13,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 
 - Fase 1, semana 1 terminada: monorepo, Electron endurecido, CSP, protocolo `app://`, IPC tipado,
   suite de seguridad inicial (TS-03 parcial, TS-07, TS-08), E2E con Playwright y CI.
+- Sistema de diseño Índigo aplicado: shell con menú lateral, Inicio, Privacidad y conexiones,
+  páginas "en construcción" y selector de tema (Sistema · Claro · Oscuro).
 - Próximo: semana 2, paquete `packages/crypto` (sección 3.4 y 10.1).
 
 ## Stack (no cambiar sin consultar)
@@ -43,6 +45,16 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Cada dependencia nueva: justificarla y consultar antes de agregarla.
 - Si una decisión implica un tradeoff de seguridad, explicarlo y esperar respuesta. Nunca relajar un
   control para "hacer que funcione".
+
+## Diseño
+
+- Sistema de diseño "Índigo": `docs/diseno/sistema-de-diseno.md`. Un sistema, dos modos (claro y
+  oscuro); por defecto sigue al sistema operativo.
+- Usar siempre los tokens (`bg-surface`, `text-muted`, `bg-accent`…) y los componentes de
+  `renderer/src/ui/`. Nunca colores sueltos en hexadecimal.
+- Verificar contraste en los dos modos. El color nunca comunica solo: siempre con texto.
+- Funciones que todavía no existen: visibles, deshabilitadas y con "Llega en: …". Nunca datos
+  inventados en la interfaz.
 
 ## Convenciones
 

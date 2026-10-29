@@ -1,15 +1,157 @@
+/*
+ * Sistema de diseño de QAtlas — "Índigo" (docs/diseno/sistema-de-diseno.md)
+ *
+ * - Un solo sistema con dos modos: claro y oscuro. Cambian fondos y textos;
+ *   el acento, las formas y la estructura son los mismos.
+ * - El modo efectivo se aplica como atributo data-theme en <html> (theme.ts):
+ *   en "Sistema" sigue al sistema operativo y se actualiza solo; si la persona
+ *   elige uno a mano, también se cambia el tema nativo de la ventana.
+ * - Tipografías empaquetadas en la app: nunca se descargan (especificación 3.5).
+ */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
 @import 'tailwindcss';
 
-/* Tipografía del sistema: sin fuentes remotas (especificación 3.5). */
-@theme {
-  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, monospace;
+:root {
+  color-scheme: light;
+
+  /* Superficies */
+  --qa-bg: #f6f7f9;
+  --qa-surface: #ffffff;
+  --qa-surface-2: #f9fafb;
+  --qa-sidebar: #ffffff;
+  --qa-border: #e4e7ec;
+  --qa-border-strong: #d0d5dd;
+  --qa-shadow: 0 1px 2px rgb(16 24 40 / 0.05);
+
+  /* Texto */
+  --qa-text: #101828;
+  --qa-text-2: #344054;
+  --qa-muted: #5b6475;
+
+  /* Acento índigo */
+  --qa-accent: #5b5bd6;
+  --qa-accent-hover: #4b4bc4;
+  --qa-accent-fg: #ffffff;
+  --qa-accent-text: #4646c2;
+  --qa-accent-soft: #eef0ff;
+  --qa-accent-soft-text: #3434a8;
+
+  /* Estado correcto */
+  --qa-ok-bg: #ecfdf3;
+  --qa-ok-border: #abefc6;
+  --qa-ok-text: #067647;
+
+  /* Severidades (siempre acompañadas de texto, nunca solo color) */
+  --qa-crit-bg: #fee4e2;
+  --qa-crit-text: #b42318;
+  --qa-high-bg: #fef0c7;
+  --qa-high-text: #b54708;
+  --qa-med-bg: #fef7c3;
+  --qa-med-text: #854a0e;
+  --qa-low-bg: #f2f4f7;
+  --qa-low-text: #475467;
 }
 
-:root {
+:root[data-theme='dark'] {
   color-scheme: dark;
+
+  --qa-bg: #0b0d12;
+  --qa-surface: #141821;
+  --qa-surface-2: #1a1f2b;
+  --qa-sidebar: #0f1218;
+  --qa-border: #232836;
+  --qa-border-strong: #2b3142;
+  --qa-shadow: none;
+
+  --qa-text: #e7e9ee;
+  --qa-text-2: #b4bac8;
+  --qa-muted: #9aa1b2;
+
+  --qa-accent: #5b5bd6;
+  --qa-accent-hover: #6d6de3;
+  --qa-accent-fg: #ffffff;
+  --qa-accent-text: #a5a8ff;
+  --qa-accent-soft: #1d2136;
+  --qa-accent-soft-text: #c7c9ff;
+
+  --qa-ok-bg: #10261f;
+  --qa-ok-border: #1d4535;
+  --qa-ok-text: #7ee2b8;
+
+  --qa-crit-bg: #3a1518;
+  --qa-crit-text: #fca5a5;
+  --qa-high-bg: #3a2312;
+  --qa-high-text: #fdba74;
+  --qa-med-bg: #33300f;
+  --qa-med-text: #fde68a;
+  --qa-low-bg: #222733;
+  --qa-low-text: #c3c9d6;
+}
+
+/* Los tokens se exponen a Tailwind: bg-surface, text-muted, border-border… */
+@theme inline {
+  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', Consolas, monospace;
+
+  --color-bg: var(--qa-bg);
+  --color-surface: var(--qa-surface);
+  --color-surface-2: var(--qa-surface-2);
+  --color-sidebar: var(--qa-sidebar);
+  --color-border: var(--qa-border);
+  --color-border-strong: var(--qa-border-strong);
+  --color-text: var(--qa-text);
+  --color-text-2: var(--qa-text-2);
+  --color-muted: var(--qa-muted);
+  --color-accent: var(--qa-accent);
+  --color-accent-hover: var(--qa-accent-hover);
+  --color-accent-fg: var(--qa-accent-fg);
+  --color-accent-text: var(--qa-accent-text);
+  --color-accent-soft: var(--qa-accent-soft);
+  --color-accent-soft-text: var(--qa-accent-soft-text);
+  --color-ok-bg: var(--qa-ok-bg);
+  --color-ok-border: var(--qa-ok-border);
+  --color-ok-text: var(--qa-ok-text);
+  --color-crit-bg: var(--qa-crit-bg);
+  --color-crit-text: var(--qa-crit-text);
+  --color-high-bg: var(--qa-high-bg);
+  --color-high-text: var(--qa-high-text);
+  --color-med-bg: var(--qa-med-bg);
+  --color-med-text: var(--qa-med-text);
+  --color-low-bg: var(--qa-low-bg);
+  --color-low-text: var(--qa-low-text);
+
+  --shadow-card: var(--qa-shadow);
+  --radius-control: 10px;
+  --radius-card: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  @apply bg-slate-900 text-slate-100 antialiased;
+  margin: 0;
+  background: var(--qa-bg);
+  color: var(--qa-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Foco visible y consistente en toda la app (navegación con teclado). */
+:focus-visible {
+  outline: 2px solid var(--qa-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

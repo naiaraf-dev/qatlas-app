@@ -5,16 +5,24 @@
  * - la ventana carga desde app:// (no desde file:// ni desde internet);
  * - la interfaz no tiene acceso a Node;
  * - todos los controles del panel de seguridad están en verde;
- * - la prueba de contención bloquea todas las conexiones salientes.
+ * - la prueba de contención bloquea todas las conexiones salientes;
+ * - el tema sigue al sistema y se puede cambiar a mano.
  *
  * Requiere `npm run build` antes.
  */
 import path from 'node:path';
-import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test';
 
 const APP_DIR = path.resolve(import.meta.dirname, '../apps/desktop');
 
 let app: ElectronApplication;
+let page: Page;
 
 test.beforeAll(async () => {
   app = await electron.launch({
@@ -22,21 +30,24 @@ test.beforeAll(async () => {
     // En CI Linux sin entorno gráfico se corre con xvfb-run.
     env: { ...process.env, ELECTRON_RENDERER_URL: '' },
   });
+  page = await app.firstWindow();
 });
 
 test.afterAll(async () => {
   await app.close();
 });
 
+const nav = () => page.getByRole('navigation', { name: 'Principal' });
+
 test('la interfaz carga desde el protocolo propio app://', async () => {
-  const window = await app.firstWindow();
-  await expect(window.getByRole('heading', { name: 'QAtlas' })).toBeVisible();
-  expect(window.url()).toBe('app://qatlas/index.html');
+  await expect(
+    page.getByRole('heading', { name: 'Te damos la bienvenida a QAtlas' }),
+  ).toBeVisible();
+  expect(page.url()).toBe('app://qatlas/index.html');
 });
 
 test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
-  const window = await app.firstWindow();
-  const exposed = await window.evaluate(() => {
+  const exposed = await page.evaluate(() => {
     const scope = globalThis as Record<string, unknown>;
     return {
       require: typeof scope.require,
@@ -50,31 +61,62 @@ test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
     require: 'undefined',
     process: 'undefined',
     module: 'undefined',
-    apiKeys: ['app', 'privacy', 'security'],
+    apiKeys: ['app', 'appearance', 'privacy', 'security'],
     apiFrozen: true,
   });
 });
 
+test('el indicador de protecciones está visible en la barra superior', async () => {
+  await expect(page.getByText('Protecciones activas · sin conexiones externas')).toBeVisible();
+});
+
+test('las secciones no construidas muestran cuándo llegan', async () => {
+  await page.getByRole('button', { name: 'UAT' }).click();
+  await expect(page.getByRole('heading', { name: 'UAT', level: 1 })).toBeVisible();
+  await expect(page.getByText('Llega en: Fase 2')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'UAT' })).toHaveAttribute('aria-current', 'page');
+});
+
 test('todos los controles del panel de seguridad están correctos', async () => {
-  const window = await app.firstWindow();
-  const panel = window.getByRole('region', { name: 'Estado de seguridad' });
-  await expect(panel.getByText('correcto')).toHaveCount(9);
+  await page.getByRole('button', { name: 'Privacidad y conexiones' }).click();
+  const panel = page.getByRole('region', { name: 'Estado de seguridad' });
+  await expect(panel.getByText('correcto', { exact: true })).toHaveCount(9);
   await expect(panel.getByText('con problemas')).toHaveCount(0);
 });
 
 test('la prueba de contención bloquea todas las conexiones salientes', async () => {
-  const window = await app.firstWindow();
-  await window.getByRole('button', { name: 'Probar conexiones salientes' }).click();
-  const results = window.getByRole('list').filter({ hasText: 'Bloqueado' });
-  await expect(results.getByText(/✔ Bloqueado/)).toHaveCount(3);
-  await expect(window.getByText(/NO bloqueado/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Probar conexiones salientes' }).click();
+  const results = page.getByRole('region', { name: 'Prueba de contención de red' });
+  await expect(results.getByText('Bloqueado:')).toHaveCount(3);
+  await expect(results.getByText('NO bloqueado:')).toHaveCount(0);
+});
+
+test('el tema se puede cambiar a mano y vuelve a seguir al sistema', async () => {
+  const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const themes = page.getByRole('radiogroup', { name: 'Tema de la interfaz' });
+
+  await themes.getByRole('radio', { name: 'Oscuro' }).click();
+  await expect.poll(background).toBe('rgb(11, 13, 18)');
+
+  await themes.getByRole('radio', { name: 'Claro' }).click();
+  await expect.poll(background).toBe('rgb(246, 247, 249)');
+  await expect(themes.getByRole('radio', { name: 'Claro' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+
+  await themes.getByRole('radio', { name: 'Sistema' }).click();
+  await expect(themes.getByRole('radio', { name: 'Sistema' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
 });
 
 test('la app no muestra ventanas nuevas aunque la página lo intente', async () => {
-  const page = await app.firstWindow();
   await page.evaluate(() => {
     globalThis.open('https://example.com', '_blank');
   });
   await page.waitForTimeout(500);
   expect(app.windows()).toHaveLength(1);
+  await expect(nav()).toBeVisible();
 });

@@ -11,6 +11,12 @@ export interface QatlasApi {
   security: {
     getStatus(): Promise<IpcResult<IpcResponse<'security:getStatus'>>>;
   };
+  appearance: {
+    get(): Promise<IpcResult<IpcResponse<'appearance:get'>>>;
+    setTheme(
+      req: IpcRequest<'appearance:setTheme'>,
+    ): Promise<IpcResult<IpcResponse<'appearance:setTheme'>>>;
+  };
   privacy: {
     listConnections(
       req: IpcRequest<'privacy:listConnections'>,

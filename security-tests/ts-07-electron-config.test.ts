@@ -21,7 +21,7 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = path.join(dir, name);
     if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.(ts|tsx|html)$/.test(name) && !name.endsWith('.test.ts') ? [full] : [];
+    return /\.(ts|tsx|html|css)$/.test(name) && !name.endsWith('.test.ts') ? [full] : [];
   });
 }
 
@@ -128,6 +128,12 @@ describe('TS-07 · Interfaz sin recursos remotos', () => {
       expect(withoutContainmentTest, file).not.toMatch(/(src|href)=["']https?:\/\//);
       expect(withoutContainmentTest, file).not.toMatch(/@import\s+url\(["']?https?:/);
     }
+  });
+
+  it('las tipografías vienen empaquetadas, no de Google Fonts ni de un CDN', () => {
+    const styles = files.find((f) => f.file === path.join('renderer', 'src', 'styles.css'));
+    expect(styles?.code).toContain("@import '@fontsource-variable/inter'");
+    expect(styles?.code).not.toMatch(/fonts\.googleapis|fonts\.gstatic|https?:\/\//);
   });
 
   it('no se usa shell.openExternal sin el canal con confirmación (pendiente)', () => {

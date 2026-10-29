@@ -6,9 +6,11 @@ QAtlas permite escanear una aplicación web autorizada, importar casos de prueba
 Excel, ejecutarlos de forma manual o automatizada y generar reportes de bugs con evidencia, sin que
 ningún dato salga del equipo salvo por una acción explícita del usuario.
 
-![Estructura base de QAtlas](docs/captura-base.png)
+| Modo claro                                      | Modo oscuro                                       |
+| ----------------------------------------------- | ------------------------------------------------- |
+| ![QAtlas en modo claro](docs/captura-claro.png) | ![QAtlas en modo oscuro](docs/captura-oscuro.png) |
 
-> **Estado:** fase 1, semana 1 — estructura base endurecida. Ver el [plan por fases](docs/especificacion-qatlas.md).
+> **Estado:** fase 1, semana 1 — estructura base endurecida y sistema de diseño Índigo (claro y oscuro). Ver el [plan por fases](docs/especificacion-qatlas.md).
 
 ## Por qué
 
@@ -40,7 +42,7 @@ Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amena
 
 ## Stack
 
-Electron · React 19 + TypeScript · Vite · Tailwind CSS · Zod · Vitest · Playwright ·
+Electron · React 19 + TypeScript · Vite · Tailwind CSS (tokens propios, Inter y JetBrains Mono empaquetadas) · Zod · Vitest · Playwright ·
 (próximamente) SQLite + SQLCipher, Drizzle, ExcelJS, FFmpeg.
 
 ## Estructura
@@ -86,5 +88,6 @@ npm run dev          # app en modo desarrollo con recarga en caliente
 
 - [Especificación funcional, técnica y de seguridad](docs/especificacion-qatlas.md)
 - [Modelo de amenazas](docs/modelo-de-amenazas.md)
+- [Sistema de diseño](docs/diseno/sistema-de-diseno.md)
 - [Decisiones técnicas](docs/decisiones/)
 - [Triage de Electronegativity](docs/seguridad/electronegativity.md)

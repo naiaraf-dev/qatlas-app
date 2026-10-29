@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { app, BrowserWindow, Menu, protocol } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme, protocol } from 'electron';
 import { applyHardening } from './hardening';
 import { registerIpc } from './ipc/register';
 import { makeSenderCheck } from './ipc/create-handler';
@@ -88,7 +88,8 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'QAtlas',
-    backgroundColor: '#0f172a',
+    // Mismo fondo que la interfaz, para que no haya un destello al abrir.
+    backgroundColor: windowBackground(),
     webPreferences: {
       ...SECURE_WEB_PREFERENCES,
       // Repetidos de forma explícita para que el análisis estático
@@ -103,6 +104,14 @@ function createMainWindow(): BrowserWindow {
   });
   mainWindowPreferences = { ...SECURE_WEB_PREFERENCES, devTools: !app.isPackaged };
 
+  const onThemeChange = (): void => {
+    window.setBackgroundColor(windowBackground());
+  };
+  nativeTheme.on('updated', onThemeChange);
+  window.on('closed', () => {
+    nativeTheme.off('updated', onThemeChange);
+  });
+
   window.once('ready-to-show', () => {
     window.show();
   });
@@ -116,6 +125,11 @@ function createMainWindow(): BrowserWindow {
     void window.loadURL(`${APP_SCHEME}://${APP_HOST}/index.html`);
   }
   return window;
+}
+
+function windowBackground(): string {
+  // Debe coincidir con --qa-bg en styles.css.
+  return nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f6f7f9';
 }
 
 // --- Arranque --------------------------------------------------------------------

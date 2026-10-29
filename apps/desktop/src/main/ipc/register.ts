@@ -1,4 +1,4 @@
-import { app, ipcMain, type WebPreferences } from 'electron';
+import { app, ipcMain, nativeTheme, type WebPreferences } from 'electron';
 import { IPC_CHANNELS, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, type HandlerOptions, type IpcImplementation } from './create-handler';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
@@ -42,6 +42,16 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     },
 
     'privacy:listConnections': ({ limit }) => deps.connectionLog.list(limit),
+
+    // El tema lo decide nativeTheme: cambia la barra de título de la ventana y
+    // la media query prefers-color-scheme de la interfaz al mismo tiempo.
+    // Por ahora la preferencia vive en memoria; en la semana 3 se guarda en la
+    // configuración cifrada de la bóveda.
+    'appearance:get': () => currentAppearance(),
+    'appearance:setTheme': ({ preference }) => {
+      nativeTheme.themeSource = preference;
+      return currentAppearance();
+    },
   };
 }
 
@@ -58,4 +68,11 @@ function registerChannel<C extends IpcChannel>(
   options: HandlerOptions,
 ): void {
   ipcMain.handle(channel, createIpcHandler(channel, implementation, options));
+}
+
+function currentAppearance() {
+  return {
+    preference: nativeTheme.themeSource,
+    effective: nativeTheme.shouldUseDarkColors ? ('dark' as const) : ('light' as const),
+  };
 }

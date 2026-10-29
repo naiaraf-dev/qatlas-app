@@ -125,3 +125,25 @@ describe('TS-08 · Validación de la salida', () => {
     expect(rejections).toEqual(['privacy:listConnections:ENTRADA_INVALIDA']);
   });
 });
+
+describe('TS-08 · Canal de apariencia', () => {
+  const handler = createIpcHandler(
+    'appearance:setTheme',
+    ({ preference }) => ({ preference, effective: 'dark' as const }),
+    { isAllowedSender },
+  );
+
+  it.each(['system', 'light', 'dark'])('acepta el tema "%s"', async (preference) => {
+    const res = await handler(fromApp, { preference });
+    expect(res.ok).toBe(true);
+  });
+
+  it.each([
+    ['valor fuera de la lista', { preference: 'rosa' }],
+    ['inyección de CSS', { preference: 'dark; background:url(https://evil.example)' }],
+    ['campo extra', { preference: 'dark', css: 'body{}' }],
+    ['tipo incorrecto', { preference: 1 }],
+  ])('rechaza: %s', async (_label, payload) => {
+    expect(await handler(fromApp, payload)).toEqual({ ok: false, error: 'ENTRADA_INVALIDA' });
+  });
+});
