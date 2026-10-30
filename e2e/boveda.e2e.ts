@@ -234,11 +234,11 @@ test('una carpeta sincronizada se advierte, y al cancelar no se escribe nada', a
   await simularDialogos(destino);
   const mensajes = await app.evaluate(({ dialog }) => {
     const vistos: string[] = [];
-    dialog.showMessageBox = ((...args: unknown[]) => {
+    dialog.showMessageBox = (...args: unknown[]) => {
       vistos.push((args.at(-1) as { message: string }).message);
       (globalThis as unknown as { vistos: string[] }).vistos = vistos;
       return Promise.resolve({ response: 0, checkboxChecked: false });
-    }) as typeof dialog.showMessageBox;
+    };
     return vistos.length;
   });
   expect(mensajes).toBe(0);

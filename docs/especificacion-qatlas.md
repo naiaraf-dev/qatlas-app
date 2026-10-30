@@ -284,7 +284,10 @@ bloqueo automático.
 
 3.  Al crear la bóveda se genera una **clave de datos maestra**
     aleatoria de 256 bits, que se guarda únicamente cifrada con la KEK
-    (AES-256-GCM).
+    (AES-256-GCM), en el archivo `boveda.sellada` junto a la base: hace
+    falta antes de poder abrirla (ver ADR 010). Al leerlo se rechazan
+    parámetros de Argon2id por debajo de los mínimos, y se escribe de
+    forma atómica.
 
 4.  La base de datos SQLite se cifra completa con **SQLCipher** usando
     una clave derivada de la clave de datos maestra.
@@ -742,8 +745,8 @@ campo. Los campos JSON se guardan como texto.
 
 | **Entidad**           | **Campos principales**                                                                                                                                                                                                                             | **Fase** |
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| boveda_meta           | version_esquema, salt_kdf, parametros_kdf, clave_maestra_cifrada, recordar_en_equipo                                                                                                                                                               | 1        |
-| configuracion         | bloqueo_minutos, actualizaciones_activas, retencion_dias, idioma                                                                                                                                                                                   | 1        |
+| boveda_meta           | version_esquema, recordar_en_equipo (el salt, los parámetros de la KDF y la clave maestra envuelta van en `boveda.sellada`, ADR 010)                                                                                                               | 1        |
+| configuracion         | bloqueo_minutos, actualizaciones_activas, retencion_dias, idioma, tema                                                                                                                                                                             | 1        |
 | proyecto              | nombre, url_base, dominios_permitidos (JSON), max_rps, max_paginas, solo_lectura, exclusiones (JSON), modo_datos_sensibles, selectores_sensibles (JSON), clave_proyecto_cifrada                                                                    | 1        |
 | autorizacion          | proyecto_id, texto_aceptado, version_texto, fecha, verificacion_dominio                                                                                                                                                                            | 1        |
 | credencial            | proyecto_id, nombre, usuario, secreto (C), url_login, pasos_login (JSON)                                                                                                                                                                           | 1        |
@@ -826,7 +829,11 @@ Protección de todos los datos de QAtlas con la contraseña maestra.
 
 - Cambio de contraseña maestra.
 
-- Copia de seguridad cifrada de la bóveda completa y restauración.
+- Copia de seguridad cifrada de la bóveda completa, con la base abierta
+  (VACUUM INTO, ADR 010), y restauración. Las copias anteriores conservan
+  los proyectos eliminados después; al restaurar sobre una bóveda
+  existente se combinan las lápidas de las dos y después se purga (ADR
+  009).
 
 - Opción "Recordar en este equipo" (desactivada por defecto).
 
@@ -2103,7 +2110,9 @@ puedan compartir sin exponer información.
 9.  Semana 9: reportes (PDF, Markdown, HTML, captura anotada, ZIP) y
     exportación guiada; TS-10 y TS-14.
 
-10. Semana 10: firma e instaladores, documentación, demo y revisión con
+10. Semana 10: firma e instaladores, compilación de SQLCipher desde
+    fuente para los instaladores (ADR 006), asarUnpack con verificación
+    sobre el binario final (ADR 007), documentación, demo y revisión con
     el checklist de Electron.
 
 ## 10.2 Fase 2 — Casos de prueba: Excel, manual, UAT y sin código
