@@ -10,6 +10,8 @@
  *
  * Requiere `npm run build` antes.
  */
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   _electron as electron,
@@ -18,23 +20,27 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { lanzarApp } from './lanzar';
 
-const APP_DIR = path.resolve(import.meta.dirname, '../apps/desktop');
+const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
 let app: ElectronApplication;
 let page: Page;
+let carpeta: string;
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: [APP_DIR],
-    // En CI Linux sin entorno gráfico se corre con xvfb-run.
-    env: { ...process.env, ELECTRON_RENDERER_URL: '' },
-  });
-  page = await app.firstWindow();
+  // Carpeta de datos temporal: nunca la bóveda real del equipo.
+  carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-e2e-'));
+  ({ app, page } = await lanzarApp(electron, carpeta));
+  await page.getByLabel('Contraseña maestra', { exact: true }).fill(CONTRASENA);
+  await page.getByLabel('Repetí la contraseña', { exact: true }).fill(CONTRASENA);
+  await page.getByRole('checkbox', { name: /no hay recuperación/ }).check();
+  await page.getByRole('button', { name: 'Crear bóveda' }).click();
 });
 
 test.afterAll(async () => {
   await app.close();
+  rmSync(carpeta, { recursive: true, force: true });
 });
 
 const nav = () => page.getByRole('navigation', { name: 'Principal' });
@@ -61,7 +67,7 @@ test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
     require: 'undefined',
     process: 'undefined',
     module: 'undefined',
-    apiKeys: ['app', 'appearance', 'privacy', 'security'],
+    apiKeys: ['app', 'appearance', 'privacy', 'security', 'vault'],
     apiFrozen: true,
   });
 });

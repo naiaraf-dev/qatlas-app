@@ -1,5 +1,5 @@
 /**
- * Corre los tests de crypto dentro del runtime real de Electron.
+ * Corre los tests de crypto y de la base dentro del runtime real de Electron.
  *
  * Electron usa BoringSSL, no OpenSSL: `crypto.argon2` existe y aun así falla ahí, sin
  * que ningún test en Node lo detecte. Por eso los vectores y las pruebas de formato
@@ -17,7 +17,16 @@ const vitest = path.join(raiz, 'node_modules/vitest/vitest.mjs');
 
 const { status, error } = spawnSync(
   electron,
-  [vitest, 'run', 'packages/crypto', 'security-tests/ts-01', 'security-tests/ts-10'],
+  [
+    vitest,
+    'run',
+    'packages/crypto',
+    'packages/db',
+    'security-tests/ts-01',
+    'security-tests/ts-02',
+    'security-tests/ts-09',
+    'security-tests/ts-10',
+  ],
   {
     cwd: raiz,
     stdio: 'inherit',
