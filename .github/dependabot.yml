@@ -1,7 +1,10 @@
+# target-branch: todos los PR entran por develop, también los de Dependabot. A main solo
+# llega el PR de cada versión (ver CONTRIBUTING.md).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -18,5 +21,6 @@ updates:
         update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
