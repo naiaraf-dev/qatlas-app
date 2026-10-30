@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Suite de seguridad de QAtlas (TS-01 a TS-14). Obligatoria en CI.",
   "dependencies": {
+    "@qatlas/crypto": "*",
     "@qatlas/desktop": "*",
     "@qatlas/shared": "*"
   }
