@@ -4,7 +4,7 @@
 
 QAtlas es una aplicación de ESCRITORIO de testing para aplicaciones web: escaneo automático,
 importación de casos desde Excel, ejecución manual y UAT, casos sin código y reportes de bugs con
-evidencia. Es el proyecto de portfolio de QA Automation de la autora, que trabaja como tester QA.
+evidencia. Es un proyecto de portfolio de QA Automation.
 
 La especificación completa está en `docs/especificacion-qatlas.md`. Leé la sección 3 (Seguridad y
 privacidad) antes de cualquier cambio: es el requisito central del proyecto.
@@ -52,6 +52,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Cada dependencia nueva: justificarla y consultar antes de agregarla.
 - Si una decisión implica un tradeoff de seguridad, explicarlo y esperar respuesta. Nunca relajar un
   control para "hacer que funcione".
+- Datos personales: el repo es público. En ningún archivo versionado, mensaje de commit, test, fixture,
+  log de ejemplo, documentación ni descripción de PR puede aparecer nada que identifique a la autora o
+  a su equipo: rutas locales, nombre de usuario de Windows, nombre del equipo, nombres de carpetas
+  reales, emails, nombres de organizaciones, URLs internas ni datos de su trabajo.
+  - Usar siempre datos ficticios inventados: usuario "ana", rutas como
+    `C:\Users\ana\AppData\Local\QAtlas`, dominios `example.com` y `example.test`, emails `@example.com`.
+  - Nunca partir de un valor real para redactarlo o abreviarlo (ni iniciales). Inventarlo desde cero.
+  - Si un comando muestra una ruta o dato real de la máquina, no copiarlo a ningún archivo ni repetirlo
+    en resúmenes: decir "la ruta local". `security-tests/privacidad-repo.test.ts` lo verifica.
 
 ## Reglas de Git (no negociables)
 

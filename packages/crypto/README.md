@@ -116,7 +116,8 @@ así que la columna `evidencia.nonce` de la sección 5 de la especificación dej
 
 ### Rendimiento de Argon2id
 
-Medido el 2026-10-30 en Electron 45.1.0, con un AMD Ryzen 7 5700G, 7 corridas de 64 MiB y 3 iteraciones:
+Medido el 2026-10-30 en Electron 45.1.0, con una CPU de escritorio de 8 núcleos, 7 corridas de 64 MiB y
+3 iteraciones:
 
 | Carriles        | Mínimo | Mediana | Máximo |
 | --------------- | ------ | ------- | ------ |

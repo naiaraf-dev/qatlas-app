@@ -106,7 +106,9 @@ describe('TS-08 · Validación de la salida', () => {
     const failing = createIpcHandler(
       'privacy:listConnections',
       () => {
-        throw new Error('fallo en C:\\Users\\ana\\AppData\\Local\\QAtlas con clave abc123');
+        throw new Error(
+          'fallo en C:\\Users\\ana\\AppData\\Local\\QAtlas\\boveda.db con clave abc123',
+        );
       },
       { isAllowedSender },
     );

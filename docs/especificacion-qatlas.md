@@ -11,7 +11,7 @@ Aplicación de escritorio para testing de aplicaciones web
 | Producto  | QAtlas (nombre provisorio)                                                        |
 | Documento | Especificación funcional, técnica y de seguridad — todas las fases                |
 | Versión   | 0.3 — Borrador                                                                    |
-| Autora    | ana Feinsilber                                                                 |
+| Autora    | ana (nombre ficticio)                                                             |
 | Fecha     | Octubre 2026                                                                      |
 | Stack     | Electron · React + TypeScript · Node.js · Playwright · SQLite cifrada (SQLCipher) |
 
