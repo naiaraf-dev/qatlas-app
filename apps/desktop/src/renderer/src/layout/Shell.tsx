@@ -1,10 +1,18 @@
 import type { ReactNode } from 'react';
 import type { ThemePreference } from '@qatlas/shared';
 import { Icon, Logo, type IconName } from '../ui/Icon';
-import { SegmentedControl, StatusPill, cx } from '../ui/components';
+import { Button, SegmentedControl, StatusPill, cx } from '../ui/components';
 
 export type PageId =
-  'inicio' | 'escaneos' | 'casos' | 'ejecuciones' | 'hallazgos' | 'reportes' | 'uat' | 'privacidad';
+  | 'inicio'
+  | 'escaneos'
+  | 'casos'
+  | 'ejecuciones'
+  | 'hallazgos'
+  | 'reportes'
+  | 'uat'
+  | 'privacidad'
+  | 'boveda';
 
 export const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   inicio: { label: 'Inicio', icon: 'home' },
@@ -15,6 +23,7 @@ export const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   reportes: { label: 'Reportes', icon: 'report' },
   uat: { label: 'UAT', icon: 'uat' },
   privacidad: { label: 'Privacidad y conexiones', icon: 'shield' },
+  boveda: { label: 'Bóveda', icon: 'lock' },
 };
 
 const MAIN_NAV: PageId[] = [
@@ -38,6 +47,7 @@ export function Shell({
   onNavigate,
   theme,
   onThemeChange,
+  onLock,
   protectionsOk,
   children,
 }: {
@@ -45,6 +55,7 @@ export function Shell({
   onNavigate: (page: PageId) => void;
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
+  onLock: () => void;
   protectionsOk: boolean | null;
   children: ReactNode;
 }) {
@@ -76,6 +87,10 @@ export function Shell({
 
         <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
           <NavItem id="privacidad" current={page === 'privacidad'} onNavigate={onNavigate} />
+          <NavItem id="boveda" current={page === 'boveda'} onNavigate={onNavigate} />
+          <Button icon="lock" onClick={onLock}>
+            Bloquear
+          </Button>
           <SegmentedControl
             label="Tema de la interfaz"
             value={theme}
