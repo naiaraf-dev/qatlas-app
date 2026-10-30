@@ -9,7 +9,7 @@ La especificación (3.4) pide Argon2id con 64 MiB, 3 iteraciones y salt de 16 by
 
 Lo primero fue verificar si había Argon2 nativo. En el proceso principal de Electron 45.1.0 (Node
 24.22.1), `crypto.argon2Sync` existe, pero al llamarla lanza `ERR_CRYPTO_ARGON2_NOT_SUPPORTED`:
-Electron usa BoringSSL, no OpenSSL. En Node 22.18, el del equipo de desarrollo y el CI, no existe.
+Electron usa BoringSSL, no OpenSSL. En Node 22, el del equipo de desarrollo y el CI, no existe.
 
 ## Opciones
 
@@ -40,7 +40,8 @@ Por esto, la regla del proyecto pasa a ser usar una **implementación de referen
 
 - Vector oficial de RFC 9106 (sección 5.3), en Node y dentro del runtime real de Electron.
 - `npm run test:crypto:electron` corre toda la suite de crypto en Electron, también en CI.
-- Se resuelve con revisión externa en la fase 4 (riesgos, sección 12 de la especificación).
+- La revisión de seguridad externa de la fase 4 (sección 10.4 de la especificación) debe incluir esta
+  decisión. La sección 12 todavía dice "librerías auditadas": queda pendiente actualizarla.
 
 ## Consecuencias
 
