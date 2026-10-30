@@ -17,6 +17,12 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "better-sqlite3-multiple-ciphers": [
+        "./node_modules/better-sqlite3-multiple-ciphers/index.d.ts"
+      ],
+      "better-sqlite3": ["./node_modules/better-sqlite3-multiple-ciphers/index.d.ts"]
+    }
   }
 }

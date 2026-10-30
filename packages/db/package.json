@@ -1,0 +1,15 @@
+{
+  "name": "@qatlas/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Base SQLite cifrada con SQLCipher, esquema y migraciones de QAtlas",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@qatlas/crypto": "*",
+    "better-sqlite3-multiple-ciphers": "13.0.3",
+    "drizzle-orm": "0.45.4"
+  }
+}
