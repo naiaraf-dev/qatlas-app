@@ -1,20 +1,26 @@
-import { app, ipcMain, nativeTheme, type WebPreferences } from 'electron';
+import { app, ipcMain, nativeTheme, type BrowserWindow, type WebPreferences } from 'electron';
 import { IPC_CHANNELS, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, type HandlerOptions, type IpcImplementation } from './create-handler';
+import { elegirCopiaARestaurar, elegirDestinoDeCopia } from '../boveda/dialogos';
+import type { ServicioBoveda } from '../boveda/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
 
 export interface IpcDependencies {
   /** Preferencias con las que se creó la ventana principal. */
   getWindowPreferences: () => WebPreferences | undefined;
+  getWindow: () => BrowserWindow | null;
   connectionLog: ConnectionLog;
   cspActive: boolean;
   dataDirectorySynced: boolean;
+  boveda: ServicioBoveda;
+  alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
+  const { boveda } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -45,12 +51,47 @@ function buildImplementations(deps: IpcDependencies): Implementations {
 
     // El tema lo decide nativeTheme: cambia la barra de título de la ventana y
     // la media query prefers-color-scheme de la interfaz al mismo tiempo.
-    // Por ahora la preferencia vive en memoria; en la semana 3 se guarda en la
-    // configuración cifrada de la bóveda.
+    // La preferencia se guarda en la configuración cifrada: con la bóveda
+    // bloqueada no se conoce, y las pantallas siguen al sistema.
     'appearance:get': () => currentAppearance(),
     'appearance:setTheme': ({ preference }) => {
+      boveda.cambiarConfiguracion({ tema: preference });
       nativeTheme.themeSource = preference;
       return currentAppearance();
+    },
+
+    'vault:getStatus': () => ({
+      estado: boveda.estado(),
+      esperaSegundos: boveda.esperaSegundos(),
+    }),
+    'vault:create': async ({ contrasena, confirmacion }) => {
+      if (contrasena !== confirmacion) return { resultado: 'rechazada', motivo: 'no-coincide' };
+      // Esta decisión la toma el asistente cuando las actualizaciones existan (semana 10).
+      return boveda.crear(contrasena, false);
+    },
+    'vault:unlock': ({ contrasena }) => boveda.desbloquear(contrasena),
+    'vault:lock': () => {
+      boveda.bloquear();
+      return { estado: 'bloqueada' };
+    },
+    'vault:getSettings': () => ({ bloqueoMinutos: boveda.configuracion().bloqueoMinutos }),
+    'vault:setSettings': ({ bloqueoMinutos }) => {
+      const guardada = boveda.cambiarConfiguracion({ bloqueoMinutos }).bloqueoMinutos;
+      deps.alCambiarBloqueoMinutos(guardada);
+      return { bloqueoMinutos: guardada };
+    },
+    'vault:createBackup': async () => {
+      const destino = await elegirDestinoDeCopia(deps.getWindow());
+      if (!destino) return { resultado: 'cancelada' };
+      boveda.crearCopia(destino);
+      return { resultado: 'creada' };
+    },
+    'vault:restoreBackup': async ({ contrasena }) => {
+      const estado = boveda.estado();
+      if (estado === 'bloqueada') return { resultado: 'rechazada' };
+      const origen = await elegirCopiaARestaurar(deps.getWindow(), estado === 'danada');
+      if (!origen) return { resultado: 'cancelada' };
+      return boveda.restaurar(origen, contrasena);
     },
   };
 }

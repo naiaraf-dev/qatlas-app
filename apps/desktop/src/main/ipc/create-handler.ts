@@ -1,4 +1,5 @@
 import {
+  CANALES_SIN_BOVEDA,
   ipcContract,
   type IpcChannel,
   type IpcErrorCode,
@@ -29,6 +30,8 @@ export type IpcImplementation<C extends IpcChannel> = (
 export interface HandlerOptions {
   isAllowedSender: (frameUrl: string | undefined) => boolean;
   onRejected?: (channel: string, code: IpcErrorCode) => void;
+  /** Si devuelve true, se rechazan los canales que no están en CANALES_SIN_BOVEDA (RN-BOV-03). */
+  isVaultLocked?: () => boolean;
 }
 
 export function createIpcHandler<C extends IpcChannel>(
@@ -45,6 +48,9 @@ export function createIpcHandler<C extends IpcChannel>(
 
   return async (event, rawRequest) => {
     if (!options.isAllowedSender(event.senderFrame?.url)) return fail('ORIGEN_NO_PERMITIDO');
+    if (options.isVaultLocked?.() && !CANALES_SIN_BOVEDA.has(channel)) {
+      return fail('BOVEDA_BLOQUEADA');
+    }
 
     const parsedRequest = schemas.request.safeParse(rawRequest);
     if (!parsedRequest.success) return fail('ENTRADA_INVALIDA');

@@ -1,14 +1,21 @@
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { app, BrowserWindow, Menu, nativeTheme, protocol } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, protocol } from 'electron';
+import { DetectorInactividad } from './boveda/inactividad';
+import type { ServicioBoveda } from './boveda/servicio';
 import { applyHardening } from './hardening';
 import { registerIpc } from './ipc/register';
 import { makeSenderCheck } from './ipc/create-handler';
 import { APP_HOST, APP_ORIGIN, APP_SCHEME, resolveAppRequest } from './security/app-protocol';
 import { buildCsp } from './security/csp';
 import { isLikelySyncedPath, resolveDataDirectory } from './security/data-dir';
+import { verificarNativos, type ModuloNativo } from './security/nativos';
 import { ConnectionLog } from './security/network-policy';
 import { SECURE_WEB_PREFERENCES } from './security/web-preferences';
+
+/** Lo define electron.vite.config.ts en el build. */
+declare const __QATLAS_NATIVOS__: readonly ModuloNativo[];
 
 /**
  * Punto de entrada del proceso principal de QAtlas.
@@ -46,6 +53,13 @@ const rendererDir = path.join(import.meta.dirname, '../renderer');
 const connectionLog = new ConnectionLog();
 
 let mainWindow: BrowserWindow | null = null;
+let saliendo = false;
+
+const requerir = createRequire(import.meta.url);
+const MS_POR_MINUTO = 60_000;
+const INTERVALO_INACTIVIDAD_MS = 5_000;
+// El límite real lo fija la configuración cifrada al desbloquear.
+const inactividad = new DetectorInactividad(15 * MS_POR_MINUTO, performance.now());
 
 const allowedOrigins = devServerOrigin ? [APP_ORIGIN, devServerOrigin] : [APP_ORIGIN];
 const isAllowedOrigin = makeSenderCheck(allowedOrigins);
@@ -112,6 +126,11 @@ function createMainWindow(): BrowserWindow {
     nativeTheme.off('updated', onThemeChange);
   });
 
+  // Lo escucha el proceso principal, no la interfaz: un XSS no puede evitar el bloqueo.
+  window.webContents.on('input-event', () => {
+    inactividad.registrarActividad(performance.now());
+  });
+
   window.once('ready-to-show', () => {
     window.show();
   });
@@ -141,8 +160,60 @@ app.on('second-instance', () => {
   }
 });
 
-void app.whenReady().then(() => {
+/**
+ * Verifica los módulos nativos ANTES de cargarlos. Por eso el servicio de la bóveda, que los
+ * importa, se carga de forma dinámica recién acá (ADR 007, TS-07).
+ */
+async function cargarBoveda(): Promise<ServicioBoveda | null> {
+  const carpetaDelPaquete = (paquete: string): string =>
+    path.dirname(requerir.resolve(`${paquete}/package.json`));
+  if (!verificarNativos(__QATLAS_NATIVOS__, { carpetaDelPaquete })) return null;
+
+  const { ServicioBoveda: Servicio } = await import('./boveda/servicio');
+  return new Servicio({
+    carpeta: dataDirectory,
+    alBloquear: () => {
+      // Las pantallas previas al desbloqueo siguen al sistema: la preferencia está cifrada.
+      nativeTheme.themeSource = 'system';
+      // Recargar descarta todo el estado de la interfaz: vuelve al desbloqueo sin datos.
+      if (!saliendo) mainWindow?.webContents.reload();
+    },
+    alDesbloquear: ({ tema, bloqueoMinutos }) => {
+      nativeTheme.themeSource = tema;
+      inactividad.cambiarLimite(bloqueoMinutos * MS_POR_MINUTO);
+      inactividad.registrarActividad(performance.now());
+    },
+  });
+}
+
+function vigilarBloqueo(boveda: ServicioBoveda): void {
+  const bloquear = (): void => {
+    boveda.bloquear();
+  };
+  powerMonitor.on('suspend', bloquear);
+  powerMonitor.on('lock-screen', bloquear);
+  app.on('before-quit', () => {
+    saliendo = true;
+    bloquear();
+  });
+  setInterval(() => {
+    if (boveda.estado() === 'desbloqueada' && inactividad.venció(performance.now())) bloquear();
+  }, INTERVALO_INACTIVIDAD_MS).unref();
+}
+
+void app.whenReady().then(async () => {
   if (app.isPackaged) Menu.setApplicationMenu(null);
+
+  const boveda = await cargarBoveda();
+  if (!boveda) {
+    dialog.showErrorBox(
+      'QAtlas no puede iniciar',
+      'Un componente de la aplicación fue modificado o no se encuentra. Por seguridad no se ejecuta nada. Volvé a instalar QAtlas.',
+    );
+    app.exit(1);
+    return;
+  }
+  vigilarBloqueo(boveda);
 
   applyHardening({
     devServerOrigin,
@@ -153,12 +224,18 @@ void app.whenReady().then(() => {
   registerIpc(
     {
       getWindowPreferences: () => mainWindowPreferences,
+      getWindow: () => mainWindow,
       connectionLog,
       cspActive: true,
       dataDirectorySynced,
+      boveda,
+      alCambiarBloqueoMinutos: (minutos) => {
+        inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
+      },
     },
     {
       isAllowedSender: isAllowedOrigin,
+      isVaultLocked: () => boveda.estado() !== 'desbloqueada',
       onRejected: (channel, code) => {
         // Sin datos de la solicitud: solo canal y motivo.
         console.warn(`[ipc] rechazado ${channel}: ${code}`);
