@@ -36,6 +36,8 @@ jobs:
       - run: npm run typecheck
       - name: Tests unitarios
         run: npx vitest run --project unit
+      - name: Cobertura de crypto (RNF-11)
+        run: npm run test:coverage
       - name: Suite de seguridad (TS-xx)
         run: npm run test:security
       - name: Auditoría de dependencias
