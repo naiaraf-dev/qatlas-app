@@ -15,14 +15,19 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   suite de seguridad inicial (TS-03 parcial, TS-07, TS-08), E2E con Playwright y CI.
 - Sistema de diseño Índigo aplicado: shell con menú lateral, Inicio, Privacidad y conexiones,
   páginas "en construcción" y selector de tema (Sistema · Claro · Oscuro).
-- Próximo: semana 2, paquete `packages/crypto` (sección 3.4 y 10.1).
+- Fase 1, semana 2 terminada: paquete `packages/crypto` (Argon2id, jerarquía de claves, archivos en
+  streaming, campos, borrado criptográfico). Todavía sin integrar a la app. Ver su README.
+- Por ahora solo se soporta Windows x64 (ver `docs/decisiones/005-argon2id.md`).
+- Próximo: semana 3, bóveda con SQLCipher, desbloqueo, bloqueo automático y copia de seguridad;
+  TS-02 y TS-09. Leer antes los "Pendientes" de `packages/crypto/README.md`.
 
 ## Stack (no cambiar sin consultar)
 
 - Electron + electron-vite. React 19 + TypeScript 6 + Vite 8 + Tailwind 4.
 - IPC solo por el contrato de `packages/shared/src/ipc-contract.ts` (Zod).
 - Vitest para unitarios y seguridad; Playwright para E2E de la app.
-- Próximas: SQLite + SQLCipher (better-sqlite3-multiple-ciphers) + Drizzle; crypto de Node + Argon2id.
+- Criptografía: `crypto` de Node (AES-256-GCM, HKDF) + `argon2` (versión exacta, ADR 005).
+- Próximas: SQLite + SQLCipher (better-sqlite3-multiple-ciphers) + Drizzle.
 - TypeScript 6 (no 7): typescript-eslint todavía no soporta TS 7. Ver `docs/decisiones/`.
 
 ## Reglas de seguridad (no negociables)
@@ -38,6 +43,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   aceptar rutas de archivo desde la interfaz ni devolver secretos. Agregar casos a TS-08.
 - El preload solo importa tipos de `@qatlas/shared` y expone funciones específicas.
 - Fallar cerrado: si un control de seguridad no se puede aplicar, no se ejecuta nada.
+- Criptografía: solo primitivas estándar, de una implementación de referencia o auditada. Nada de
+  criptografía propia. Lo que dependa de `crypto` debe probarse también en Electron (usa BoringSSL).
 - Cada control de seguridad tiene su test en `security-tests/`. Ninguna tarea está terminada si la
   suite de seguridad no pasa.
 - `.npmrc` tiene `ignore-scripts=true`. Si un paquete necesita su script de instalación, agregarlo a

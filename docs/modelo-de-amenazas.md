@@ -37,23 +37,39 @@ funcionalidad nueva (checklist de versión, ítem 10).
 
 ## Amenazas y estado de las mitigaciones (STRIDE)
 
-| ID   | Amenaza                                                        | Categoría    | Mitigación                                                 | Estado         | Test                      |
-| ---- | -------------------------------------------------------------- | ------------ | ---------------------------------------------------------- | -------------- | ------------------------- |
-| A-01 | XSS en la interfaz lee archivos o ejecuta comandos             | Elevación    | Sandbox, sin Node, aislamiento de contexto                 | ✅             | TS-07, E2E                |
-| A-02 | XSS en la interfaz envía datos a internet                      | Divulgación  | CSP `connect-src 'none'` + bloqueo en el proceso principal | ✅             | TS-03, TS-07, E2E         |
-| A-03 | La interfaz abusa del IPC (rutas, campos extra)                | Manipulación | Validación de origen, entrada y salida                     | ✅             | TS-08                     |
-| A-04 | Un handler devuelve un secreto por error                       | Divulgación  | Validación de la salida con esquema estricto               | ✅             | TS-08                     |
-| A-05 | Lectura de archivos fuera de la interfaz vía protocolo         | Divulgación  | `app://` con protección de path traversal                  | ✅             | app-protocol              |
-| A-06 | Navegación o ventanas hacia sitios externos                    | Suplantación | will-navigate, setWindowOpenHandler, Auxclick              | ✅             | E2E                       |
-| A-07 | Electron/Chromium contacta servicios de terceros               | Divulgación  | Corrector ortográfico desactivado, red denegada            | ✅ parcial     | TS-03 completo (semana 5) |
-| A-08 | Datos sincronizados a la nube sin querer                       | Divulgación  | `%LOCALAPPDATA%`, detección de carpetas sincronizadas      | ✅             | data-dir                  |
-| A-09 | Paquete npm malicioso ejecuta código al instalarse             | Elevación    | `ignore-scripts` + lista permitida                         | ✅             | —                         |
-| A-10 | Dependencia de análisis con vulnerabilidades entra al proyecto | Manipulación | Electronegativity aislado vía npx                          | ✅             | npm audit                 |
-| A-11 | Robo del equipo o del disco                                    | Divulgación  | Bóveda cifrada, contraseña maestra, bloqueo                | ⏳ semanas 2-3 | TS-02, TS-09              |
-| A-12 | El sitio probado redirige o carga recursos de otros dominios   | Divulgación  | Proxy de salida con lista permitida                        | ⏳ semana 5    | TS-03, TS-04              |
-| A-13 | Contraseñas o tokens en evidencias                             | Divulgación  | Login sin grabación, redacción, detector                   | ⏳ semanas 6-7 | TS-01, TS-06              |
-| A-14 | Excel malicioso (macros, vínculos, bomba zip)                  | Elevación    | Proceso aislado, sin ejecución, límites                    | ⏳ fase 2      | TS-12                     |
-| A-15 | Inyección de fórmulas en exportaciones                         | Manipulación | Escapado de celdas                                         | ⏳ fase 2      | TS-11                     |
+| ID   | Amenaza                                                                    | Categoría              | Mitigación                                                             | Estado                                              | Test                      |
+| ---- | -------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- | --------------------------------------------------- | ------------------------- |
+| A-01 | XSS en la interfaz lee archivos o ejecuta comandos                         | Elevación              | Sandbox, sin Node, aislamiento de contexto                             | ✅                                                  | TS-07, E2E                |
+| A-02 | XSS en la interfaz envía datos a internet                                  | Divulgación            | CSP `connect-src 'none'` + bloqueo en el proceso principal             | ✅                                                  | TS-03, TS-07, E2E         |
+| A-03 | La interfaz abusa del IPC (rutas, campos extra)                            | Manipulación           | Validación de origen, entrada y salida                                 | ✅                                                  | TS-08                     |
+| A-04 | Un handler devuelve un secreto por error                                   | Divulgación            | Validación de la salida con esquema estricto                           | ✅                                                  | TS-08                     |
+| A-05 | Lectura de archivos fuera de la interfaz vía protocolo                     | Divulgación            | `app://` con protección de path traversal                              | ✅                                                  | app-protocol              |
+| A-06 | Navegación o ventanas hacia sitios externos                                | Suplantación           | will-navigate, setWindowOpenHandler, Auxclick                          | ✅                                                  | E2E                       |
+| A-07 | Electron/Chromium contacta servicios de terceros                           | Divulgación            | Corrector ortográfico desactivado, red denegada                        | ✅ parcial                                          | TS-03 completo (semana 5) |
+| A-08 | Datos sincronizados a la nube sin querer                                   | Divulgación            | `%LOCALAPPDATA%`, detección de carpetas sincronizadas                  | ✅                                                  | data-dir                  |
+| A-09 | Paquete npm malicioso ejecuta código al instalarse                         | Elevación              | `ignore-scripts` + lista permitida                                     | ✅                                                  | —                         |
+| A-10 | Dependencia de análisis con vulnerabilidades entra al proyecto             | Manipulación           | Electronegativity aislado vía npx                                      | ✅                                                  | npm audit                 |
+| A-11 | Robo del equipo o del disco                                                | Divulgación            | Bóveda cifrada, contraseña maestra, bloqueo                            | ⏳ semana 3 (paquete crypto ✅)                     | TS-01, TS-02, TS-09       |
+| A-12 | El sitio probado redirige o carga recursos de otros dominios               | Divulgación            | Proxy de salida con lista permitida                                    | ⏳ semana 5                                         | TS-03, TS-04              |
+| A-13 | Contraseñas o tokens en evidencias                                         | Divulgación            | Login sin grabación, redacción, detector                               | ⏳ semanas 6-7                                      | TS-01, TS-06              |
+| A-14 | Excel malicioso (macros, vínculos, bomba zip)                              | Elevación              | Proceso aislado, sin ejecución, límites                                | ⏳ fase 2                                           | TS-12                     |
+| A-15 | Inyección de fórmulas en exportaciones                                     | Manipulación           | Escapado de celdas                                                     | ⏳ fase 2                                           | TS-11                     |
+| A-16 | Ataque de fuerza bruta a la contraseña con una copia de la bóveda          | Divulgación            | Argon2id con piso de parámetros; parámetros autenticados               | ✅                                                  | Vectores RFC 9106, crypto |
+| A-17 | Alterar, reordenar, duplicar o truncar un archivo o valor cifrado          | Manipulación           | AES-256-GCM, formato STREAM, AAD con versión y propósito               | ✅                                                  | crypto                    |
+| A-18 | Mover un valor cifrado a otro proyecto, campo o evidencia                  | Manipulación           | Contexto en el AAD; ID en la derivación de la clave                    | ✅                                                  | crypto                    |
+| A-19 | Evidencias de un proyecto eliminado siguen legibles                        | Divulgación            | Borrado criptográfico de la clave del proyecto                         | ✅ parcial: faltan los restos en la base (semana 3) | TS-10                     |
+| A-20 | Archivo manipulado agota la memoria en el desbloqueo                       | Denegación de servicio | Techo de parámetros validado antes de derivar; bloque fijo por versión | ✅                                                  | crypto                    |
+| A-21 | Un módulo nativo manipulado en el disco roba la contraseña                 | Elevación              | El `.node` queda fuera de la integridad del asar                       | ⏳ semana 3                                         | —                         |
+| A-22 | Contraseña comprometida y copia vieja de la bóveda en manos de un atacante | Divulgación            | Cambiar la contraseña no alcanza; "rotar clave maestra"                | ⏳ pendiente, sin asignar                           | Test de la limitación     |
+| A-23 | Claves residuales en memoria o en la paginación                            | Divulgación            | `fill(0)`, sin claves en strings; limitaciones documentadas            | ✅ parcial                                          | crypto                    |
+
+## Limitaciones aceptadas del paquete crypto
+
+Detalle en [`packages/crypto/README.md`](../packages/crypto/README.md):
+
+- **Sin auditoría publicada de la librería de Argon2id** ([ADR 005](decisiones/005-argon2id.md)).
+- JavaScript no permite garantizar que no queden copias de una clave en memoria.
+- Por ahora solo se soporta Windows x64.
 
 ## Fuera del alcance
 
