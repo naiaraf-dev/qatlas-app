@@ -5,6 +5,7 @@ import { Button, SegmentedControl, StatusPill, cx } from '../ui/components';
 
 export type PageId =
   | 'inicio'
+  | 'proyectos'
   | 'escaneos'
   | 'casos'
   | 'ejecuciones'
@@ -16,6 +17,7 @@ export type PageId =
 
 export const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   inicio: { label: 'Inicio', icon: 'home' },
+  proyectos: { label: 'Proyectos', icon: 'folderPlus' },
   escaneos: { label: 'Escaneos', icon: 'scan' },
   casos: { label: 'Casos de prueba', icon: 'cases' },
   ejecuciones: { label: 'Ejecuciones', icon: 'play' },
@@ -28,6 +30,7 @@ export const PAGES: Record<PageId, { label: string; icon: IconName }> = {
 
 const MAIN_NAV: PageId[] = [
   'inicio',
+  'proyectos',
   'escaneos',
   'casos',
   'ejecuciones',
@@ -66,18 +69,6 @@ export function Shell({
           <Logo />
           <span className="text-[17px] font-bold tracking-tight">QAtlas</span>
         </div>
-
-        <button
-          type="button"
-          disabled
-          className="flex min-h-11 items-center justify-between gap-2 rounded-[var(--radius-control)] border border-border bg-surface-2 px-3 py-2 text-left disabled:cursor-not-allowed"
-        >
-          <span className="flex flex-col">
-            <span className="text-[11px] text-muted">Proyecto</span>
-            <span className="font-semibold text-text-2">Sin proyectos todavía</span>
-          </span>
-          <Icon name="chevronDown" size={16} className="text-muted" />
-        </button>
 
         <nav aria-label="Principal" className="flex flex-col gap-0.5">
           {MAIN_NAV.map((id) => (
