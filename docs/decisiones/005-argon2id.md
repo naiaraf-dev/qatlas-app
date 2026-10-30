@@ -41,7 +41,7 @@ Por esto, la regla del proyecto pasa a ser usar una **implementación de referen
 - Vector oficial de RFC 9106 (sección 5.3), en Node y dentro del runtime real de Electron.
 - `npm run test:crypto:electron` corre toda la suite de crypto en Electron, también en CI.
 - La revisión de seguridad externa de la fase 4 (sección 10.4 de la especificación) debe incluir esta
-  decisión. La sección 12 todavía dice "librerías auditadas": queda pendiente actualizarla.
+  decisión.
 
 ## Consecuencias
 
