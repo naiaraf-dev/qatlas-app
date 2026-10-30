@@ -36,4 +36,34 @@ export interface QatlasApi {
       req: IpcRequest<'vault:restoreBackup'>,
     ): Promise<IpcResult<IpcResponse<'vault:restoreBackup'>>>;
   };
+  proyectos: {
+    listar(): Promise<IpcResult<IpcResponse<'proyectos:listar'>>>;
+    obtener(
+      req: IpcRequest<'proyectos:obtener'>,
+    ): Promise<IpcResult<IpcResponse<'proyectos:obtener'>>>;
+    validar(
+      req: IpcRequest<'proyectos:validar'>,
+    ): Promise<IpcResult<IpcResponse<'proyectos:validar'>>>;
+    crear(req: IpcRequest<'proyectos:crear'>): Promise<IpcResult<IpcResponse<'proyectos:crear'>>>;
+    actualizar(
+      req: IpcRequest<'proyectos:actualizar'>,
+    ): Promise<IpcResult<IpcResponse<'proyectos:actualizar'>>>;
+    eliminar(
+      req: IpcRequest<'proyectos:eliminar'>,
+    ): Promise<IpcResult<IpcResponse<'proyectos:eliminar'>>>;
+    aceptarAutorizacion(
+      req: IpcRequest<'proyectos:aceptarAutorizacion'>,
+    ): Promise<IpcResult<IpcResponse<'proyectos:aceptarAutorizacion'>>>;
+  };
+  credenciales: {
+    guardar(
+      req: IpcRequest<'credenciales:guardar'>,
+    ): Promise<IpcResult<IpcResponse<'credenciales:guardar'>>>;
+    reemplazarSecreto(
+      req: IpcRequest<'credenciales:reemplazarSecreto'>,
+    ): Promise<IpcResult<IpcResponse<'credenciales:reemplazarSecreto'>>>;
+    eliminar(
+      req: IpcRequest<'credenciales:eliminar'>,
+    ): Promise<IpcResult<IpcResponse<'credenciales:eliminar'>>>;
+  };
 }

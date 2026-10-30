@@ -36,6 +36,20 @@ const api: QatlasApi = {
     createBackup: () => invoke('vault:createBackup'),
     restoreBackup: (req) => invoke('vault:restoreBackup', req),
   },
+  proyectos: {
+    listar: () => invoke('proyectos:listar'),
+    obtener: (req) => invoke('proyectos:obtener', req),
+    validar: (req) => invoke('proyectos:validar', req),
+    crear: (req) => invoke('proyectos:crear', req),
+    actualizar: (req) => invoke('proyectos:actualizar', req),
+    eliminar: (req) => invoke('proyectos:eliminar', req),
+    aceptarAutorizacion: (req) => invoke('proyectos:aceptarAutorizacion', req),
+  },
+  credenciales: {
+    guardar: (req) => invoke('credenciales:guardar', req),
+    reemplazarSecreto: (req) => invoke('credenciales:reemplazarSecreto', req),
+    eliminar: (req) => invoke('credenciales:eliminar', req),
+  },
 };
 
 contextBridge.exposeInMainWorld('qatlas', Object.freeze(api));

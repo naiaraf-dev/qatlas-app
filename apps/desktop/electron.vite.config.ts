@@ -11,6 +11,7 @@ import { defineConfig } from 'electron-vite';
 const WORKSPACE_PACKAGES = [
   '@qatlas/shared',
   '@qatlas/shared/contrasena',
+  '@qatlas/shared/dominios',
   '@qatlas/crypto',
   '@qatlas/db',
 ];
