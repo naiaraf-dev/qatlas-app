@@ -1,0 +1,21 @@
+# Todo el texto usa LF en el repo y en la copia de trabajo, en cualquier sistema operativo:
+# Prettier exige LF y, si no, `npm run format:check` falla en Windows. Ver CONTRIBUTING.md.
+* text=auto eol=lf
+
+# Binarios: Git nunca debe convertirlos ni intentar mostrarlos como texto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.xlsx binary
+*.docx binary
+*.mp4 binary
+*.webm binary

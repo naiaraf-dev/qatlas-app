@@ -22,6 +22,19 @@ Nunca se commitea directamente en `main` ni en `develop`.
 - Commits chicos: un cambio por commit.
 - Si hace falta explicar el motivo, va en el cuerpo, separado por una línea en blanco.
 
+## Finales de línea
+
+[`.gitattributes`](.gitattributes) fija LF para todo el texto, en el repo y en la copia de trabajo, y
+marca como binarios tipos como `png`, `ico` o `woff2`. Existe porque Prettier exige LF: con
+`core.autocrlf=true`, habitual en Windows, Git dejaba los archivos con CRLF al cambiar de rama y
+`npm run format:check` fallaba en local aunque pasara en CI.
+
+Si un clon anterior a este archivo todavía tiene CRLF, con la copia de trabajo limpia:
+
+```bash
+git rm --cached -r -q . && git reset --hard
+```
+
 ## Cómo abrir un PR
 
 1. Crear la rama desde un `develop` actualizado.
