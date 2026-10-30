@@ -1,0 +1,13 @@
+{
+  "name": "@qatlas/crypto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Esquema de claves, cifrado de archivos y de campos de QAtlas",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "argon2": "0.45.1"
+  }
+}

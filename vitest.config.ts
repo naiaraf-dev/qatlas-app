@@ -2,6 +2,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // RNF-11: mínimo de 80 % en los paquetes críticos.
+    coverage: {
+      provider: 'v8',
+      include: ['packages/crypto/src/**/*.ts'],
+      exclude: ['**/*.test.ts'],
+      thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
+    },
     projects: [
       {
         test: {
