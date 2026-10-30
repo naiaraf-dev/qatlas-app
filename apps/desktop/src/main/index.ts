@@ -4,6 +4,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, protocol } from 'electron';
 import { DetectorInactividad } from './boveda/inactividad';
 import type { ServicioBoveda } from './boveda/servicio';
+import type { ServicioProyectos } from './proyectos/servicio';
 import { applyHardening } from './hardening';
 import { registerIpc } from './ipc/register';
 import { makeSenderCheck } from './ipc/create-handler';
@@ -164,13 +165,17 @@ app.on('second-instance', () => {
  * Verifica los módulos nativos ANTES de cargarlos. Por eso el servicio de la bóveda, que los
  * importa, se carga de forma dinámica recién acá (ADR 007, TS-07).
  */
-async function cargarBoveda(): Promise<ServicioBoveda | null> {
+async function cargarServicios(): Promise<{
+  boveda: ServicioBoveda;
+  proyectos: ServicioProyectos;
+} | null> {
   const carpetaDelPaquete = (paquete: string): string =>
     path.dirname(requerir.resolve(`${paquete}/package.json`));
   if (!verificarNativos(__QATLAS_NATIVOS__, { carpetaDelPaquete })) return null;
 
   const { ServicioBoveda: Servicio } = await import('./boveda/servicio');
-  return new Servicio({
+  const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
+  const boveda = new Servicio({
     carpeta: dataDirectory,
     alBloquear: () => {
       // Las pantallas previas al desbloqueo siguen al sistema: la preferencia está cifrada.
@@ -184,6 +189,7 @@ async function cargarBoveda(): Promise<ServicioBoveda | null> {
       inactividad.registrarActividad(performance.now());
     },
   });
+  return { boveda, proyectos: new Proyectos(boveda) };
 }
 
 function vigilarBloqueo(boveda: ServicioBoveda): void {
@@ -204,8 +210,8 @@ function vigilarBloqueo(boveda: ServicioBoveda): void {
 void app.whenReady().then(async () => {
   if (app.isPackaged) Menu.setApplicationMenu(null);
 
-  const boveda = await cargarBoveda();
-  if (!boveda) {
+  const servicios = await cargarServicios();
+  if (!servicios) {
     dialog.showErrorBox(
       'QAtlas no puede iniciar',
       'Un componente de la aplicación fue modificado o no se encuentra. Por seguridad no se ejecuta nada. Volvé a instalar QAtlas.',
@@ -213,6 +219,7 @@ void app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
+  const { boveda, proyectos } = servicios;
   vigilarBloqueo(boveda);
 
   applyHardening({
@@ -229,6 +236,7 @@ void app.whenReady().then(async () => {
       cspActive: true,
       dataDirectorySynced,
       boveda,
+      proyectos,
       alCambiarBloqueoMinutos: (minutos) => {
         inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
       },

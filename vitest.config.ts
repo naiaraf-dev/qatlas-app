@@ -13,7 +13,10 @@ export default defineConfig({
       include: [
         'packages/crypto/src/**/*.ts',
         'packages/db/src/**/*.ts',
+        'packages/shared/src/dominios.ts',
+        'packages/shared/src/declaracion.ts',
         'apps/desktop/src/main/boveda/**/*.ts',
+        'apps/desktop/src/main/proyectos/**/*.ts',
       ],
       exclude: ['**/*.test.ts'],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },

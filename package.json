@@ -28,7 +28,7 @@
     "audit:deps": "npm audit --audit-level=high",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:coverage && npm run audit:electron",
     "test:e2e": "playwright test && npm run test:crypto:electron",
-    "test:coverage": "vitest run --project unit --coverage packages/crypto packages/db apps/desktop/src/main/boveda",
+    "test:coverage": "vitest run --project unit --coverage packages/crypto packages/db packages/shared apps/desktop/src/main/boveda apps/desktop/src/main/proyectos",
     "test:crypto:electron": "node scripts/test-crypto-electron.mjs"
   },
   "devDependencies": {
