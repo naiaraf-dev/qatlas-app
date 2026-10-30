@@ -22,4 +22,18 @@ export interface QatlasApi {
       req: IpcRequest<'privacy:listConnections'>,
     ): Promise<IpcResult<IpcResponse<'privacy:listConnections'>>>;
   };
+  vault: {
+    getStatus(): Promise<IpcResult<IpcResponse<'vault:getStatus'>>>;
+    create(req: IpcRequest<'vault:create'>): Promise<IpcResult<IpcResponse<'vault:create'>>>;
+    unlock(req: IpcRequest<'vault:unlock'>): Promise<IpcResult<IpcResponse<'vault:unlock'>>>;
+    lock(): Promise<IpcResult<IpcResponse<'vault:lock'>>>;
+    getSettings(): Promise<IpcResult<IpcResponse<'vault:getSettings'>>>;
+    setSettings(
+      req: IpcRequest<'vault:setSettings'>,
+    ): Promise<IpcResult<IpcResponse<'vault:setSettings'>>>;
+    createBackup(): Promise<IpcResult<IpcResponse<'vault:createBackup'>>>;
+    restoreBackup(
+      req: IpcRequest<'vault:restoreBackup'>,
+    ): Promise<IpcResult<IpcResponse<'vault:restoreBackup'>>>;
+  };
 }
