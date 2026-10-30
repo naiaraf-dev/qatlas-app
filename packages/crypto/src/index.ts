@@ -2,6 +2,7 @@ export { ErrorCripto, type CodigoErrorCripto } from './errores';
 export { borrar, contrasenaABuffer, igualesEnTiempoConstante } from './memoria';
 export {
   PARAMETROS_POR_DEFECTO,
+  validarParametros,
   type EntradaArgon2id,
   type ImplementacionArgon2id,
   type ParametrosKdf,

@@ -3,7 +3,7 @@
 Esquema de claves de la bóveda, cifrado de archivos (evidencias) y cifrado de campos (credenciales).
 Node puro: no importa `electron` y se prueba con Vitest. Especificación: sección 3.4.
 
-Todavía no está integrado a la app: la bóveda, SQLCipher y las pantallas son de la semana 3.
+La app lo usa desde `apps/desktop/src/main/boveda/servicio.ts`, con la base de `packages/db`.
 
 ## Esquema de claves
 
@@ -50,7 +50,7 @@ Toda clave tiene un solo uso. Cada salida de HKDF se separa por `info`: `qatlas/
 | `abrirBoveda(contraseña, sellada)`                            | Devuelve la clave maestra                             |
 | `cambiarContrasena(actual, nueva, sellada, opciones?)`        | Vuelve a envolver la clave maestra; no toca nada más  |
 | `crearClaveProyecto(maestra, id)` / `abrirClaveProyecto(...)` | Clave por proyecto, envuelta y atada a su ID          |
-| `derivarClaveSqlcipher(maestra)`                              | Clave de la base (semana 3)                           |
+| `derivarClaveSqlcipher(maestra)`                              | Clave de la base                                      |
 | `cifrarCampo(clave, contexto, texto)` / `descifrarCampo(...)` | Secretos a nivel de campo                             |
 | `crearCifradorArchivo(clave, id)` / `crearDescifradorArchivo` | Streams `Transform` para archivos de cualquier tamaño |
 | `borrar(...buffers)` / `igualesEnTiempoConstante(a, b)`       | Higiene de memoria y comparación segura               |
@@ -116,7 +116,8 @@ así que la columna `evidencia.nonce` de la sección 5 de la especificación dej
 
 ### Rendimiento de Argon2id
 
-Medido el 2026-10-30 en Electron 45.1.0, con un AMD Ryzen 7 5700G, 7 corridas de 64 MiB y 3 iteraciones:
+Medido el 2026-10-30 en Electron 45.1.0, con una CPU de escritorio de 8 núcleos, 7 corridas de 64 MiB y
+3 iteraciones:
 
 | Carriles        | Mínimo | Mediana | Máximo |
 | --------------- | ------ | ------- | ------ |
@@ -134,9 +135,8 @@ y `darwin-x64`, que quedan para los instaladores (semana 10). El CI corre en Lin
 
 ### Módulo nativo fuera del asar
 
-Al empaquetar, el `.node` de `argon2` queda fuera del asar y de la validación de integridad del
-fuse `EnableEmbeddedAsarIntegrityValidation`. Se resuelve en la **semana 3**, junto con SQLCipher, que
-tiene el mismo problema.
+Al empaquetar, el `.node` de `argon2` queda fuera del asar. Su SHA-256 se verifica antes de cargarlo,
+junto con el de SQLCipher ([ADR 007](../../docs/decisiones/007-integridad-modulos-nativos.md)).
 
 ### Memoria en JavaScript
 
@@ -145,8 +145,8 @@ que no queden copias:
 
 - Node copia las claves dentro de los objetos nativos de cifrado, y esas copias no se pueden borrar
   desde JS. Se liberan cuando actúa el recolector de basura.
-- Los strings son inmutables y no se pueden borrar. La contraseña que llegue por IPC en la semana 3
-  será un string: hay que convertirla enseguida y no guardarla.
+- Los strings son inmutables y no se pueden borrar. La contraseña llega por IPC como string: el servicio
+  de la bóveda la convierte enseguida y no la guarda.
 - `Buffer.from(string)` y `Buffer.concat` pueden usar el pool compartido de Node. Por eso las claves
   y los textos descifrados usan `Buffer.alloc`.
 - No hay `mlock`: el sistema operativo puede mandar la memoria a la paginación o a la hibernación.
@@ -161,23 +161,24 @@ vio comprometida y alguien ya copió la bóveda. Hay un test que deja esto a la 
 ### Borrado criptográfico
 
 Destruir la clave de un proyecto deja ilegibles sus datos solo si **no queda ninguna copia de la clave
-envuelta**, por ejemplo en respaldos, en el WAL o en páginas libres de SQLite. Esta semana se prueba
-la parte criptográfica; también hay un test que deja este límite a la vista.
+envuelta**, por ejemplo en una copia de seguridad ya hecha. La base usa `secure_delete` y no usa WAL. La
+política está en la [ADR 009](../../docs/decisiones/009-copias-y-borrado-criptografico.md); un test deja
+este límite a la vista.
 
 ## Pendientes
 
 - **Rotar la clave maestra:** una opción que genere una clave maestra nueva y vuelva a cifrar todo (base
   de datos y claves de proyecto), para cuando la contraseña se haya visto comprometida. Sin asignar a
   una semana todavía.
-- **Reglas para la semana 3:**
+- **Reglas para las evidencias (semana 7):**
   - **Una evidencia se verifica completa antes de mostrarse.** El descifrador entrega bloques ya
     autenticados, pero un truncamiento o un bloque alterado pueden detectarse recién al final, así que
     no se muestra nada hasta que el stream termine sin error.
   - **Nunca se escribe texto plano parcial a disco.** Tampoco en temporales. Si el stream falla, lo
     recibido se descarta y se borra de memoria.
-  - Resolver el módulo nativo fuera del asar (ver arriba).
-  - Quitar `evidencia.nonce` del modelo de datos.
-  - Destruir todas las copias de la clave envuelta al eliminar un proyecto.
+- **Eliminación de proyectos (semana 4):** destruir todas las copias de la clave envuelta y registrar la
+  lápida ([ADR 009](../../docs/decisiones/009-copias-y-borrado-criptografico.md)).
+- Quitar `evidencia.nonce` del modelo de datos cuando se cree esa tabla.
 
 ## Tests
 

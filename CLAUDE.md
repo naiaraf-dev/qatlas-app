@@ -4,7 +4,7 @@
 
 QAtlas es una aplicación de ESCRITORIO de testing para aplicaciones web: escaneo automático,
 importación de casos desde Excel, ejecución manual y UAT, casos sin código y reportes de bugs con
-evidencia. Es el proyecto de portfolio de QA Automation de la autora, que trabaja como tester QA.
+evidencia. Es un proyecto de portfolio de QA Automation.
 
 La especificación completa está en `docs/especificacion-qatlas.md`. Leé la sección 3 (Seguridad y
 privacidad) antes de cualquier cambio: es el requisito central del proyecto.
@@ -16,10 +16,16 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Sistema de diseño Índigo aplicado: shell con menú lateral, Inicio, Privacidad y conexiones,
   páginas "en construcción" y selector de tema (Sistema · Claro · Oscuro).
 - Fase 1, semana 2 terminada: paquete `packages/crypto` (Argon2id, jerarquía de claves, archivos en
-  streaming, campos, borrado criptográfico). Todavía sin integrar a la app. Ver su README.
+  streaming, campos, borrado criptográfico). Ver su README.
+- Fase 1, semana 3 terminada: `packages/db` (SQLCipher, Drizzle, migraciones, `boveda.sellada`, copia),
+  primer inicio, desbloqueo con freno, bloqueo, restauración, tema persistido; TS-02 y TS-09. Ver las
+  ADR 006 a 010.
 - Por ahora solo se soporta Windows x64 (ver `docs/decisiones/005-argon2id.md`).
-- Próximo: semana 3, bóveda con SQLCipher, desbloqueo, bloqueo automático y copia de seguridad;
-  TS-02 y TS-09. Leer antes los "Pendientes" de `packages/crypto/README.md`.
+- Próximo: semana 4, proyectos, autorización y credenciales cifradas; app de prueba. Cada tabla nueva
+  con `proyecto_id` va en `TABLAS_DE_PROYECTO`, y un canal IPC nuevo queda bloqueado con la bóveda
+  bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
+- Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006) y
+  `asarUnpack` con verificación sobre el binario final (ADR 007).
 
 ## Stack (no cambiar sin consultar)
 
@@ -27,7 +33,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - IPC solo por el contrato de `packages/shared/src/ipc-contract.ts` (Zod).
 - Vitest para unitarios y seguridad; Playwright para E2E de la app.
 - Criptografía: `crypto` de Node (AES-256-GCM, HKDF) + `argon2` (versión exacta, ADR 005).
-- Próximas: SQLite + SQLCipher (better-sqlite3-multiple-ciphers) + Drizzle.
+- SQLite + SQLCipher (better-sqlite3-multiple-ciphers, versión exacta, ADR 006) + Drizzle, sin
+  drizzle-kit. Contraseñas: `@zxcvbn-ts` (ADR 008).
 - TypeScript 6 (no 7): typescript-eslint todavía no soporta TS 7. Ver `docs/decisiones/`.
 
 ## Reglas de seguridad (no negociables)
@@ -52,6 +59,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Cada dependencia nueva: justificarla y consultar antes de agregarla.
 - Si una decisión implica un tradeoff de seguridad, explicarlo y esperar respuesta. Nunca relajar un
   control para "hacer que funcione".
+- Datos personales: el repo es público. En ningún archivo versionado, mensaje de commit, test, fixture,
+  log de ejemplo, documentación ni descripción de PR puede aparecer nada que identifique a la autora o
+  a su equipo: rutas locales, nombre de usuario de Windows, nombre del equipo, nombres de carpetas
+  reales, emails, nombres de organizaciones, URLs internas ni datos de su trabajo.
+  - Usar siempre datos ficticios inventados: usuario "ana", rutas como
+    `C:\Users\ana\AppData\Local\QAtlas`, dominios `example.com` y `example.test`, emails `@example.com`.
+  - Nunca partir de un valor real para redactarlo o abreviarlo (ni iniciales). Inventarlo desde cero.
+  - Si un comando muestra una ruta o dato real de la máquina, no copiarlo a ningún archivo ni repetirlo
+    en resúmenes: decir "la ruta local". `security-tests/privacidad-repo.test.ts` lo verifica.
 
 ## Reglas de Git (no negociables)
 

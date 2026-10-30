@@ -5,9 +5,13 @@
   "type": "module",
   "description": "Contratos IPC y tipos compartidos entre los procesos de QAtlas",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./contrasena": "./src/contrasena.ts"
   },
   "dependencies": {
+    "@zxcvbn-ts/core": "4.2.0",
+    "@zxcvbn-ts/language-common": "4.1.3",
+    "@zxcvbn-ts/language-es-es": "4.1.2",
     "zod": "^4.6.7"
   }
 }

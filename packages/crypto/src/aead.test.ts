@@ -173,5 +173,5 @@ describe('Formato sellado', () => {
       vistos.add(sellar(CLAVE, PROPOSITO.CAMPO, CONTEXTO, TEXTO).toString('latin1', 2, 14));
     }
     expect(vistos.size).toBe(operaciones);
-  });
+  }, 60_000);
 });

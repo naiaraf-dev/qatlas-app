@@ -26,6 +26,16 @@ const api: QatlasApi = {
   privacy: {
     listConnections: (req) => invoke('privacy:listConnections', req),
   },
+  vault: {
+    getStatus: () => invoke('vault:getStatus'),
+    create: (req) => invoke('vault:create', req),
+    unlock: (req) => invoke('vault:unlock', req),
+    lock: () => invoke('vault:lock'),
+    getSettings: () => invoke('vault:getSettings'),
+    setSettings: (req) => invoke('vault:setSettings', req),
+    createBackup: () => invoke('vault:createBackup'),
+    restoreBackup: (req) => invoke('vault:restoreBackup', req),
+  },
 };
 
 contextBridge.exposeInMainWorld('qatlas', Object.freeze(api));

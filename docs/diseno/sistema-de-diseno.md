@@ -25,7 +25,9 @@ Implementación: `apps/desktop/src/renderer/src/styles.css` (tokens), `ui/compon
 - Selector en el menú lateral: **Sistema · Claro · Oscuro**. Al elegir uno, también se cambia el
   tema nativo de la ventana (barra de título).
 - El modo efectivo se aplica como `data-theme="light|dark"` en `<html>`.
-- La preferencia se guarda en la configuración cifrada a partir de la semana 3 (hoy dura la sesión).
+- La preferencia se guarda en la configuración cifrada de la bóveda. Por eso, las pantallas previas al
+  desbloqueo (primer inicio, desbloqueo, bóveda dañada) siempre siguen al sistema operativo: al bloquear,
+  el tema vuelve a "Sistema" y la preferencia se recupera al desbloquear.
 
 ## Paleta
 

@@ -5,6 +5,7 @@
  * rechazan, y un handler nunca puede devolver datos no declarados.
  */
 import { describe, expect, it } from 'vitest';
+import { ipcContract, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, makeSenderCheck } from '../apps/desktop/src/main/ipc/create-handler';
 
 const APP = 'app://qatlas';
@@ -106,7 +107,9 @@ describe('TS-08 · Validación de la salida', () => {
     const failing = createIpcHandler(
       'privacy:listConnections',
       () => {
-        throw new Error('fallo en C:\\Users\\ana\\AppData\\Local\\QAtlas con clave abc123');
+        throw new Error(
+          'fallo en C:\\Users\\ana\\AppData\\Local\\QAtlas\\boveda.db con clave abc123',
+        );
       },
       { isAllowedSender },
     );
@@ -123,6 +126,126 @@ describe('TS-08 · Validación de la salida', () => {
     });
     await handler(fromApp, { limit: 10, token: 'secreto' });
     expect(rejections).toEqual(['privacy:listConnections:ENTRADA_INVALIDA']);
+  });
+});
+
+describe('TS-08 · Canales de la bóveda', () => {
+  const entrada = (canal: IpcChannel) => ipcContract[canal].request;
+  const salida = (canal: IpcChannel) => ipcContract[canal].response;
+  const CREAR = { contrasena: 'x'.repeat(16), confirmacion: 'x'.repeat(16) };
+
+  it.each<[string, IpcChannel, unknown]>([
+    ['crear sin confirmar que no hay recuperación', 'vault:create', CREAR],
+    [
+      'crear con la confirmación en false',
+      'vault:create',
+      { ...CREAR, entiendeSinRecuperacion: false },
+    ],
+    [
+      'crear con un campo extra',
+      'vault:create',
+      { ...CREAR, entiendeSinRecuperacion: true, ruta: 'C:\\Windows' },
+    ],
+    ['desbloquear sin contraseña', 'vault:unlock', {}],
+    ['desbloquear con contraseña vacía', 'vault:unlock', { contrasena: '' }],
+    ['desbloquear con contraseña enorme', 'vault:unlock', { contrasena: 'x'.repeat(1025) }],
+    ['desbloquear con otro tipo', 'vault:unlock', { contrasena: 123 }],
+    ['desbloquear con un campo extra', 'vault:unlock', { contrasena: 'x', clave: 'y' }],
+    ['bloquear con datos', 'vault:lock', { motivo: 'x' }],
+    ['configurar 0 minutos', 'vault:setSettings', { bloqueoMinutos: 0 }],
+    ['configurar demasiados minutos', 'vault:setSettings', { bloqueoMinutos: 241 }],
+    ['configurar minutos no enteros', 'vault:setSettings', { bloqueoMinutos: 1.5 }],
+    ['configurar un campo extra', 'vault:setSettings', { bloqueoMinutos: 5, tema: 'dark' }],
+    ['copia con una ruta desde la interfaz', 'vault:createBackup', { ruta: 'C:\\copia.qatlas' }],
+    [
+      'restaurar con una ruta desde la interfaz',
+      'vault:restoreBackup',
+      { contrasena: 'x', ruta: 'C:\\copia.qatlas' },
+    ],
+  ])('rechaza: %s', (_nombre, canal, datos) => {
+    expect(entrada(canal).safeParse(datos).success).toBe(false);
+  });
+
+  it.each<[string, IpcChannel, unknown]>([
+    ['crear', 'vault:create', { ...CREAR, entiendeSinRecuperacion: true }],
+    ['desbloquear', 'vault:unlock', { contrasena: 'x' }],
+    ['bloquear', 'vault:lock', undefined],
+    ['configurar', 'vault:setSettings', { bloqueoMinutos: 15 }],
+    ['copia', 'vault:createBackup', undefined],
+    ['restaurar', 'vault:restoreBackup', { contrasena: 'x' }],
+  ])('acepta: %s', (_nombre, canal, datos) => {
+    expect(entrada(canal).safeParse(datos).success).toBe(true);
+  });
+
+  it.each<[string, IpcChannel, unknown]>([
+    [
+      'estado con una clave',
+      'vault:getStatus',
+      { estado: 'bloqueada', esperaSegundos: 0, clave: 'x' },
+    ],
+    ['estado desconocido', 'vault:getStatus', { estado: 'otro', esperaSegundos: 0 }],
+    ['desbloqueo con la maestra', 'vault:unlock', { resultado: 'desbloqueada', maestra: 'x' }],
+    [
+      'rechazo con un detalle interno',
+      'vault:unlock',
+      { resultado: 'rechazada', esperaSegundos: 0, error: 'x' },
+    ],
+    ['creación con la contraseña', 'vault:create', { resultado: 'creada', contrasena: 'x' }],
+    ['copia con la ruta', 'vault:createBackup', { resultado: 'creada', ruta: 'C:\\x' }],
+    ['restauración con la ruta', 'vault:restoreBackup', { resultado: 'restaurada', ruta: 'C:\\x' }],
+  ])('la salida no deja pasar: %s', (_nombre, canal, datos) => {
+    expect(salida(canal).safeParse(datos).success).toBe(false);
+  });
+
+  it('un handler que filtra la contraseña se bloquea', async () => {
+    const handler = createIpcHandler(
+      'vault:unlock',
+      () => ({ resultado: 'desbloqueada', contrasena: 'CANARIO' }) as never,
+      { isAllowedSender },
+    );
+    const res = await handler(fromApp, { contrasena: 'x' });
+    expect(res).toEqual({ ok: false, error: 'ERROR_INTERNO' });
+    expect(JSON.stringify(res)).not.toContain('CANARIO');
+  });
+
+  it('un mensaje de otro origen no llega al handler de desbloqueo', async () => {
+    let ejecutado = false;
+    const handler = createIpcHandler(
+      'vault:unlock',
+      () => {
+        ejecutado = true;
+        return { resultado: 'desbloqueada' };
+      },
+      { isAllowedSender },
+    );
+    const res = await handler(
+      { senderFrame: { url: 'https://evil.example/' } },
+      { contrasena: 'x' },
+    );
+    expect(res).toEqual({ ok: false, error: 'ORIGEN_NO_PERMITIDO' });
+    expect(ejecutado).toBe(false);
+  });
+
+  it('informa el rechazo sin el contenido: nunca la contraseña', async () => {
+    const rechazos: string[] = [];
+    const handler = createIpcHandler('vault:unlock', () => ({ resultado: 'desbloqueada' }), {
+      isAllowedSender,
+      onRejected: (canal, codigo) => rechazos.push(`${canal}:${codigo}`),
+    });
+    await handler(fromApp, { contrasena: 'CANARIO', extra: true });
+    expect(rechazos).toEqual(['vault:unlock:ENTRADA_INVALIDA']);
+  });
+
+  it('el tema se rechaza con la bóveda bloqueada, porque se guarda cifrado', async () => {
+    const handler = createIpcHandler(
+      'appearance:setTheme',
+      ({ preference }) => ({ preference, effective: 'dark' as const }),
+      { isAllowedSender, isVaultLocked: () => true },
+    );
+    expect(await handler(fromApp, { preference: 'dark' })).toEqual({
+      ok: false,
+      error: 'BOVEDA_BLOQUEADA',
+    });
   });
 });
 
