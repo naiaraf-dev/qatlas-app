@@ -12,6 +12,10 @@ updates:
       # Ver docs/decisiones/002-typescript-6.md
       - dependency-name: typescript
         versions: ['>=6.1.0']
+      # Debe coincidir con la versión mínima de Node del proyecto (hoy 22, ver "engines"
+      # en package.json). Con una mayor, los tipos aceptan APIs que no existen en Node 22.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
