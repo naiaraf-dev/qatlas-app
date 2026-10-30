@@ -66,6 +66,7 @@ export default tseslint.config(
       'apps/desktop/src/main/**/*.ts',
       'apps/desktop/src/preload/**/*.ts',
       'scripts/**',
+      'apps/sandbox-site/**',
       '**/*.config.{js,ts,mjs}',
     ],
     languageOptions: { globals: globals.node },
