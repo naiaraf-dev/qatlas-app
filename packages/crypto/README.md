@@ -3,7 +3,8 @@
 Esquema de claves de la bóveda, cifrado de archivos (evidencias) y cifrado de campos (credenciales).
 Node puro: no importa `electron` y se prueba con Vitest. Especificación: sección 3.4.
 
-La app lo usa desde `apps/desktop/src/main/boveda/servicio.ts`, con la base de `packages/db`.
+La app lo usa desde `apps/desktop/src/main/boveda/servicio.ts` y `proyectos/servicio.ts`, con la base de
+`packages/db`.
 
 ## Esquema de claves
 
@@ -176,8 +177,6 @@ este límite a la vista.
     no se muestra nada hasta que el stream termine sin error.
   - **Nunca se escribe texto plano parcial a disco.** Tampoco en temporales. Si el stream falla, lo
     recibido se descarta y se borra de memoria.
-- **Eliminación de proyectos (semana 4):** destruir todas las copias de la clave envuelta y registrar la
-  lápida ([ADR 009](../../docs/decisiones/009-copias-y-borrado-criptografico.md)).
 - Quitar `evidencia.nonce` del modelo de datos cuando se cree esa tabla.
 
 ## Tests

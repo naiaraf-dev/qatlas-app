@@ -10,7 +10,7 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 | ----------------------------------------------- | ------------------------------------------------- |
 | ![QAtlas en modo claro](docs/captura-claro.png) | ![QAtlas en modo oscuro](docs/captura-oscuro.png) |
 
-> **Estado:** fase 1, semana 3 — estructura base endurecida, sistema de diseño Índigo y bóveda cifrada con desbloqueo, bloqueo automático y copia de seguridad. Ver el [plan por fases](docs/especificacion-qatlas.md).
+> **Estado:** fase 1, semana 4 — estructura base endurecida, sistema de diseño Índigo, bóveda cifrada, proyectos con autorización, credenciales cifradas y app de prueba. Ver el [plan por fases](docs/especificacion-qatlas.md).
 
 ## Por qué
 
@@ -23,26 +23,30 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 
 La seguridad no se agrega al final: es lo primero que se construye y se verifica en cada versión.
 
-| Control                                                                                            | Estado      |
-| -------------------------------------------------------------------------------------------------- | ----------- |
-| Interfaz en sandbox, sin Node, con aislamiento de contexto                                         | ✅          |
-| Content Security Policy estricta (`connect-src 'none'`)                                            | ✅          |
-| Red de la interfaz: denegar por defecto, con registro                                              | ✅          |
-| Protocolo propio `app://` (sin `file://`), protegido contra path traversal                         | ✅          |
-| IPC tipado: valida origen, entrada **y salida**                                                    | ✅          |
-| Sin permisos del navegador, sin ventanas nuevas, sin `<webview>`                                   | ✅          |
-| Datos fuera de carpetas sincronizadas (OneDrive, Dropbox…)                                         | ✅          |
-| Scripts de instalación bloqueados (`ignore-scripts`) con lista permitida                           | ✅          |
-| Esquema de claves y cifrado (Argon2id, AES-256-GCM, HKDF): paquete crypto                          | ✅          |
-| Bóveda en la app: SQLCipher, primer inicio y desbloqueo con freno                                  | ✅          |
-| Bloqueo manual, por inactividad, al suspender, al bloquear el sistema y al cerrar                  | ✅          |
-| Canales IPC rechazados por defecto con la bóveda bloqueada                                         | ✅          |
-| Copia de seguridad cifrada y restauración, con ruta elegida en el proceso principal                | ✅          |
-| Borrado criptográfico: claves, `secure_delete` y lápidas (una copia ya hecha conserva el proyecto) | ✅ parcial  |
-| Integridad de los módulos nativos (completa con fuses y firma, semana 10)                          | ✅ parcial  |
-| Test de datos personales en el repositorio                                                         | ✅          |
-| Proxy de salida para el navegador de pruebas                                                       | ⏳ semana 5 |
-| Redacción y detector de secretos; test del secreto canario                                         | ⏳ semana 7 |
+| Control                                                                                              | Estado      |
+| ---------------------------------------------------------------------------------------------------- | ----------- |
+| Interfaz en sandbox, sin Node, con aislamiento de contexto                                           | ✅          |
+| Content Security Policy estricta (`connect-src 'none'`)                                              | ✅          |
+| Red de la interfaz: denegar por defecto, con registro                                                | ✅          |
+| Protocolo propio `app://` (sin `file://`), protegido contra path traversal                           | ✅          |
+| IPC tipado: valida origen, entrada **y salida**                                                      | ✅          |
+| Sin permisos del navegador, sin ventanas nuevas, sin `<webview>`                                     | ✅          |
+| Datos fuera de carpetas sincronizadas (OneDrive, Dropbox…)                                           | ✅          |
+| Scripts de instalación bloqueados (`ignore-scripts`) con lista permitida                             | ✅          |
+| Esquema de claves y cifrado (Argon2id, AES-256-GCM, HKDF): paquete crypto                            | ✅          |
+| Bóveda en la app: SQLCipher, primer inicio y desbloqueo con freno                                    | ✅          |
+| Bloqueo manual, por inactividad, al suspender, al bloquear el sistema y al cerrar                    | ✅          |
+| Canales IPC rechazados por defecto con la bóveda bloqueada                                           | ✅          |
+| Copia de seguridad cifrada y restauración, con ruta elegida en el proceso principal                  | ✅          |
+| Borrado criptográfico de proyectos: clave, `secure_delete`, lápidas (una copia conserva el proyecto) | ✅ parcial  |
+| Autorización versionada; sin autorización vigente el chequeo falla cerrado                           | ✅          |
+| Dominios permitidos: sin comodines amplios ni IPs, con opciones explícitas y auditadas               | ✅          |
+| Credenciales con cifrado de campo; ningún canal devuelve el secreto                                  | ✅          |
+| Auditoría local, con solo IDs y nombres de campos                                                    | ✅          |
+| Integridad de los módulos nativos (completa con fuses y firma, semana 10)                            | ✅ parcial  |
+| Test de datos personales en el repositorio                                                           | ✅          |
+| Proxy de salida para el navegador de pruebas                                                         | ⏳ semana 5 |
+| Redacción y detector de secretos; test del secreto canario                                           | ⏳ semana 7 |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·
 [especificación, sección 3](docs/especificacion-qatlas.md).
@@ -57,7 +61,7 @@ Electron · React 19 + TypeScript · Vite · Tailwind CSS (tokens propios, Inter
 ```
 apps/
   desktop/          App Electron: main (seguridad, IPC), preload (puente mínimo), renderer (React)
-  sandbox-site/     App de prueba con errores y trampas plantadas (semana 4)
+  sandbox-site/     App de prueba con errores y trampas plantadas (nunca se empaqueta)
 packages/
   shared/           Contrato IPC con Zod, compartido por todos los procesos
   crypto/           Esquema de claves, cifrado de archivos y de campos
@@ -88,10 +92,10 @@ npm run dev          # app en modo desarrollo con recarga en caliente
 | `npm run check`                | Lint, tipos, tests, cobertura y Electronegativity                        |
 | `npm test`                     | Tests unitarios y suite de seguridad                                     |
 | `npm run test:security`        | Solo la suite de seguridad                                               |
-| `npm run test:coverage`        | Crypto, base y bóveda con cobertura (mínimo 80 %)                        |
+| `npm run test:coverage`        | Crypto, base, dominios, bóveda y proyectos con cobertura (mínimo 80 %)   |
 | `npm run build`                | Compila la app                                                           |
 | `npm run test:e2e`             | Prueba la app compilada y corre crypto y base en Electron (tras `build`) |
-| `npm run test:crypto:electron` | Solo crypto, base, TS-02 y TS-09, dentro del runtime real de Electron    |
+| `npm run test:crypto:electron` | Solo crypto, base, proyectos y sus tests de seguridad, en Electron       |
 | `npm run audit:deps`           | Auditoría de dependencias                                                |
 | `npm run audit:electron`       | Análisis estático de seguridad de Electron                               |
 

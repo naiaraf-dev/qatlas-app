@@ -41,5 +41,5 @@ salió del equipo no se puede borrar desde QAtlas.
 ## Verificación
 
 `boveda.test.ts` prueba el orden con un proyecto eliminado antes de la copia, otro después y otro vivo.
-La purga real de cada tabla se suma con la eliminación de proyectos (semana 4) y el TS-10 completo
-(semana 9). `TABLAS_DE_PROYECTO` empieza vacía porque todavía no hay tablas de proyecto.
+La purga real está en `security-tests/secreto-credenciales.test.ts`, y un test verifica que toda tabla con
+`proyecto_id` esté en `TABLAS_DE_PROYECTO`. El TS-10 completo, con evidencias, llega en la semana 9.
