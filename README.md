@@ -96,3 +96,4 @@ npm run dev          # app en modo desarrollo con recarga en caliente
 - [Sistema de diseño](docs/diseno/sistema-de-diseno.md)
 - [Decisiones técnicas](docs/decisiones/)
 - [Triage de Electronegativity](docs/seguridad/electronegativity.md)
+- [Cómo contribuir](CONTRIBUTING.md)

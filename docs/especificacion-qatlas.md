@@ -1961,7 +1961,7 @@ avisa.</td>
 
 | **ID** | **Categoría**               | **Requisito**                                                                                                                                       |
 |--------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| RNF-01 | Plataformas                 | Windows 10/11, macOS 13 o superior y Linux (Ubuntu 22.04 o superior), x64 y ARM64.                                                                  |
+| RNF-01 | Plataformas                 | Por ahora, solo Windows 10/11 x64 (ADR 005). Objetivo desde los instaladores (semana 10): Windows 10/11, macOS 13 o superior y Linux (Ubuntu 22.04 o superior), x64 y ARM64. |
 | RNF-02 | Instalación                 | Instaladores firmados; sin permisos de administrador para la instalación por usuario.                                                               |
 | RNF-03 | Rendimiento                 | Inicio y desbloqueo en menos de 3 segundos; la interfaz responde en menos de 200 ms en operaciones comunes.                                         |
 | RNF-04 | Rendimiento                 | Un escaneo de 100 páginas termina en menos de 15 minutos con la configuración por defecto.                                                          |
@@ -2274,7 +2274,7 @@ bug de seguridad suma además un test en la suite de seguridad.
 | **Riesgo**                              | **Impacto** | **Mitigación**                                                                                                                |
 |-----------------------------------------|-------------|-------------------------------------------------------------------------------------------------------------------------------|
 | Alcance grande para una persona         | Alto        | Fases independientes; no avanzar sin cerrar la anterior                                                                       |
-| Error de implementación criptográfica   | Alto        | Solo primitivas estándar (AES-GCM, Argon2id) de librerías auditadas; tests con vectores conocidos; revisión externa en fase 4 |
+| Error de implementación criptográfica   | Alto        | Solo primitivas estándar (AES-GCM, Argon2id) de una implementación de referencia o auditada; tests con vectores conocidos; revisión externa en fase 4 |
 | Pérdida de la contraseña maestra        | Alto        | Advertencia clara, copia de seguridad sugerida, "Recordar en este equipo" opcional                                            |
 | Vulnerabilidad en Electron o Chromium   | Alto        | Actualización rápida de versiones; el contenido del sitio probado nunca se ejecuta en la ventana de QAtlas                    |
 | Fuga por redacción incompleta           | Medio       | Detector de secretos, modo datos sensibles, revisión previa a exportar, test canario                                          |

@@ -53,6 +53,23 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Si una decisión implica un tradeoff de seguridad, explicarlo y esperar respuesta. Nunca relajar un
   control para "hacer que funcione".
 
+## Reglas de Git (no negociables)
+
+- Nunca hacer push, pull ni fetch de remotos, merge a `develop` o `main`, force push ni borrar ramas
+  remotas. Eso lo hace la autora. Claude solo commitea en local.
+- Ramas: siempre `feat/[funcionalidad-modulo]`, creadas desde `develop` (ej.: `feat/boveda-db`,
+  `feat/escaneo-runner`, `feat/importacion-excel`).
+- Nunca commitear en `main` ni en `develop`.
+- Al terminar una tarea, entregar el título y la descripción del PR, usando la plantilla
+  `.github/pull_request_template.md`, con el checklist ya evaluado ítem por ítem y la tabla de
+  dependencias nuevas completa.
+- Flujo completo: `CONTRIBUTING.md`.
+
+## Reglas de procesos
+
+- Nunca cerrar procesos por nombre (por ejemplo, todos los `electron.exe`). Solo los que inició Claude,
+  por su PID.
+
 ## Diseño
 
 - Sistema de diseño "Índigo": `docs/diseno/sistema-de-diseno.md`. Un sistema, dos modos (claro y

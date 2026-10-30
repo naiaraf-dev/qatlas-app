@@ -1,7 +1,10 @@
+# target-branch: todos los PR entran por develop, también los de Dependabot. A main solo
+# llega el PR de cada versión (ver CONTRIBUTING.md).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -12,7 +15,12 @@ updates:
       # Ver docs/decisiones/002-typescript-6.md
       - dependency-name: typescript
         versions: ['>=6.1.0']
+      # Debe coincidir con la versión mínima de Node del proyecto (hoy 22, ver "engines"
+      # en package.json). Con una mayor, los tipos aceptan APIs que no existen en Node 22.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: weekly
