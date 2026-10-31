@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Icon, type IconName } from '../ui/Icon';
 import { Button, Card, PageHeader } from '../ui/components';
 import type { PageId } from '../layout/Shell';
@@ -23,7 +24,21 @@ const CAPABILITIES: ReadonlyArray<{ icon: IconName; title: string; text: string;
   },
 ];
 
-export function Inicio({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+export function Inicio({
+  onNavigate,
+  onCrearProyecto,
+}: {
+  onNavigate: (page: PageId) => void;
+  onCrearProyecto: () => void;
+}) {
+  const [cantidad, setCantidad] = useState<number | null>(null);
+
+  useEffect(() => {
+    void window.qatlas.proyectos.listar().then((res) => {
+      if (res.ok) setCantidad(res.data.length);
+    });
+  }, []);
+
   return (
     <>
       <PageHeader
@@ -37,27 +52,36 @@ export function Inicio({ onNavigate }: { onNavigate: (page: PageId) => void }) {
             <Icon name="folderPlus" size={26} />
           </span>
           <div className="flex flex-col gap-1.5">
-            <h2 className="text-lg font-semibold">Todavía no hay proyectos</h2>
+            <h2 className="text-lg font-semibold">
+              {cantidad === null || cantidad === 0
+                ? 'Todavía no hay proyectos'
+                : cantidad === 1
+                  ? 'Tenés 1 proyecto'
+                  : `Tenés ${String(cantidad)} proyectos`}
+            </h2>
             <p className="max-w-md text-muted">
               Un proyecto es la aplicación que vas a probar: su dirección, los dominios permitidos y
               las credenciales de prueba.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2.5">
-            <Button
-              variant="primary"
-              icon="folderPlus"
-              disabled
-              aria-describedby="proximamente-proyectos"
-            >
+            <Button variant="primary" icon="folderPlus" onClick={onCrearProyecto}>
               Crear proyecto
             </Button>
+            {cantidad !== null && cantidad > 0 && (
+              <Button
+                onClick={() => {
+                  onNavigate('proyectos');
+                }}
+              >
+                Ver proyectos
+              </Button>
+            )}
             <Button icon="sheet" disabled aria-describedby="proximamente-excel">
               Importar casos desde Excel
             </Button>
           </div>
           <p className="text-[13px] text-muted">
-            <span id="proximamente-proyectos">Crear proyectos llega en la semana 4.</span>{' '}
             <span id="proximamente-excel">La importación desde Excel, en la fase 2.</span>
           </p>
         </div>

@@ -11,6 +11,7 @@ import {
 import {
   abrirBaseCifrada,
   analizarSellada,
+  completarBorradosPendientes,
   crearCopia,
   ErrorBoveda,
   escribirAtomico,
@@ -143,6 +144,7 @@ export class ServicioBoveda {
     try {
       migrar(base);
       verificarIntegridad(base);
+      completarBorradosPendientes(base);
       this.opciones.alDesbloquear?.(leerConfiguracion(base));
     } catch (error) {
       base.close();
@@ -258,6 +260,15 @@ export class ServicioBoveda {
   private baseAbierta(): BaseCifrada {
     if (!this.base) throw new BovedaBloqueada();
     return this.base;
+  }
+
+  /**
+   * Acceso para otros servicios del proceso principal. Síncrono a propósito: la base y la clave
+   * maestra no pueden cerrarse ni borrarse a mitad de la operación, y nada las conserva después.
+   */
+  conAcceso<T>(operacion: (base: BaseCifrada, maestra: Buffer) => T): T {
+    if (!this.base || !this.maestra) throw new BovedaBloqueada();
+    return operacion(this.base, this.maestra);
   }
 
   configuracion(): Configuracion {

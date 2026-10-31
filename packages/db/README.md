@@ -25,6 +25,9 @@ de seguridad. Node puro: no importa `electron` y se prueba con Vitest. Especific
 - **Tablas de proyecto:** cada tabla nueva con `proyecto_id` se agrega a `TABLAS_DE_PROYECTO`, para que
   la purga por lápidas la alcance ([ADR 009](../../docs/decisiones/009-copias-y-borrado-criptografico.md)).
 
+- **Auditoría:** solo IDs y nombres de campos, con una lista cerrada de acciones
+  ([ADR 015](../../docs/decisiones/015-ajustes-a-la-especificacion-de-proyectos.md)). No se purga.
+
 ## Tests
 
 ```bash

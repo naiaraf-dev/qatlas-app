@@ -1,3 +1,4 @@
+import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { randomBytes } from 'node:crypto';
 import {
   existsSync,
@@ -34,6 +35,9 @@ import {
   serializarSellada,
   verificarArchivoCifrado,
   verificarIntegridad,
+  esquema,
+  MIGRACIONES,
+  TABLAS_DE_PROYECTO,
   VERSION_ESQUEMA,
   type BaseCifrada,
 } from './index';
@@ -125,11 +129,11 @@ describe('Migraciones', () => {
     migrar(base);
     migrar(base);
     const extra = [
-      { version: 1, sql: '' },
-      { version: 2, sql: 'CREATE TABLE extra (x);' },
+      ...MIGRACIONES,
+      { version: VERSION_ESQUEMA + 1, sql: 'CREATE TABLE extra (x);' },
     ];
     migrar(base, extra);
-    expect(base.pragma('user_version', { simple: true })).toBe(2);
+    expect(base.pragma('user_version', { simple: true })).toBe(VERSION_ESQUEMA + 1);
     expect(base.prepare('SELECT count(*) AS c FROM extra').get()).toEqual({ c: 0 });
   });
 
@@ -142,6 +146,39 @@ describe('Migraciones', () => {
     expect(base.prepare("SELECT count(*) AS c FROM sqlite_master WHERE name = 'a'").get()).toEqual({
       c: 0,
     });
+  });
+
+  it('las tablas de Drizzle tienen las mismas columnas que las migraciones', () => {
+    const base = abrir(path.join(carpeta, 'b.db'));
+    migrar(base);
+    for (const tabla of [
+      esquema.proyecto,
+      esquema.autorizacion,
+      esquema.credencial,
+      esquema.auditoria,
+    ]) {
+      const { name, columns } = getTableConfig(tabla);
+      const enBase = (base.pragma(`table_info(${name})`) as { name: string }[]).map((c) => c.name);
+      expect(enBase.sort()).toEqual(columns.map((c) => c.name).sort());
+    }
+  });
+
+  it('cada tabla con proyecto_id está en TABLAS_DE_PROYECTO (ADR 009)', () => {
+    const base = abrir(path.join(carpeta, 'b.db'));
+    migrar(base);
+    const tablas = base.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
+      name: string;
+    }[];
+    const conProyecto = tablas
+      .filter(({ name }) =>
+        (base.pragma(`table_info(${name})`) as { name: string }[]).some(
+          (c) => c.name === 'proyecto_id',
+        ),
+      )
+      .map(({ name }) => name)
+      // La lápida es lo que queda después de purgar.
+      .filter((name) => name !== 'proyecto_lapida');
+    expect(conProyecto.sort()).toEqual([...TABLAS_DE_PROYECTO].sort());
   });
 
   it('rechaza una base de una versión más nueva', () => {

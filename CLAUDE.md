@@ -21,11 +21,17 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   primer inicio, desbloqueo con freno, bloqueo, restauración, tema persistido; TS-02 y TS-09. Ver las
   ADR 006 a 010.
 - Por ahora solo se soporta Windows x64 (ver `docs/decisiones/005-argon2id.md`).
-- Próximo: semana 4, proyectos, autorización y credenciales cifradas; app de prueba. Cada tabla nueva
-  con `proyecto_id` va en `TABLAS_DE_PROYECTO`, y un canal IPC nuevo queda bloqueado con la bóveda
-  bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
+- Fase 1, semana 4 terminada: proyectos, autorización versionada, credenciales cifradas, auditoría, purga
+  por lápida y `apps/sandbox-site`. Ver las ADR 011 a 015.
+- Próximo: semana 5, runner aislado y proxy de salida (TS-03 a TS-05). El runner usa
+  `verificarAutorizacion` y `ServicioProyectos.usarSecreto`. El proxy limita loopback al puerto de la URL
+  base (ADR 011). `credenciales:probarLogin` se registra entonces.
+- Cada tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO` (un test lo verifica), y un canal IPC
+  nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
+- La auditoría guarda solo IDs y nombres de campos (ADR 015).
 - Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006) y
-  `asarUnpack` con verificación sobre el binario final (ADR 007).
+  `asarUnpack` con verificación sobre el binario final (ADR 007) y avisos de terceros del instalador, con
+  la MPL-2.0 de la Public Suffix List (ADR 011).
 
 ## Stack (no cambiar sin consultar)
 
@@ -34,7 +40,7 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Vitest para unitarios y seguridad; Playwright para E2E de la app.
 - Criptografía: `crypto` de Node (AES-256-GCM, HKDF) + `argon2` (versión exacta, ADR 005).
 - SQLite + SQLCipher (better-sqlite3-multiple-ciphers, versión exacta, ADR 006) + Drizzle, sin
-  drizzle-kit. Contraseñas: `@zxcvbn-ts` (ADR 008).
+  drizzle-kit. Contraseñas: `@zxcvbn-ts` (ADR 008). Dominios: `tldts` (ADR 011).
 - TypeScript 6 (no 7): typescript-eslint todavía no soporta TS 7. Ver `docs/decisiones/`.
 
 ## Reglas de seguridad (no negociables)

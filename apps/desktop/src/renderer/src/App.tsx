@@ -6,6 +6,7 @@ import { Boveda } from './pages/Boveda';
 import { Inicio } from './pages/Inicio';
 import { Privacidad } from './pages/Privacidad';
 import { Proximamente } from './pages/Proximamente';
+import { Proyectos, type VistaProyectos } from './pages/proyectos/Proyectos';
 import { applyTheme } from './theme';
 
 /**
@@ -62,6 +63,9 @@ function Principal({
   onThemeChange: (theme: ThemePreference) => void;
 }) {
   const [page, setPage] = useState<PageId>('inicio');
+  const [vistaInicial, setVistaInicial] = useState<VistaProyectos>({ tipo: 'lista' });
+  // Volver a tocar el menú abre la lista, aunque ya se esté en la página.
+  const [visita, setVisita] = useState(0);
   const [status, setStatus] = useState<SecurityStatus | null>(null);
   const [connections, setConnections] = useState<ConnectionEntry[]>([]);
 
@@ -97,6 +101,12 @@ function Principal({
     if (res.ok) onThemeChange(res.data.preference);
   };
 
+  const navegar = (destino: PageId) => {
+    setVistaInicial({ tipo: 'lista' });
+    setVisita((n) => n + 1);
+    setPage(destino);
+  };
+
   const protectionsOk =
     status === null
       ? null
@@ -105,18 +115,28 @@ function Principal({
   return (
     <Shell
       page={page}
-      onNavigate={setPage}
+      onNavigate={navegar}
       theme={theme}
       onThemeChange={(t) => void changeTheme(t)}
       onLock={() => void window.qatlas.vault.lock()}
       protectionsOk={protectionsOk}
     >
-      {page === 'inicio' && <Inicio onNavigate={setPage} />}
+      {page === 'inicio' && (
+        <Inicio
+          onNavigate={navegar}
+          onCrearProyecto={() => {
+            setVistaInicial({ tipo: 'nuevo' });
+            setVisita((n) => n + 1);
+            setPage('proyectos');
+          }}
+        />
+      )}
+      {page === 'proyectos' && <Proyectos key={visita} inicial={vistaInicial} />}
       {page === 'privacidad' && (
         <Privacidad status={status} connections={connections} onRefresh={refreshConnections} />
       )}
       {page === 'boveda' && <Boveda />}
-      {page !== 'inicio' && page !== 'privacidad' && page !== 'boveda' && (
+      {page !== 'inicio' && page !== 'proyectos' && page !== 'privacidad' && page !== 'boveda' && (
         <Proximamente page={page} />
       )}
     </Shell>

@@ -250,7 +250,7 @@ bloqueo automático.
 | SEG-04 | Modo solo lectura por defecto en escaneos: se bloquean POST, PUT, PATCH y DELETE excepto el login configurado.                                      | 1        |
 | SEG-05 | Lista de exclusión (logout, eliminar, borrar, delete, pagar, comprar, enviar…) que el crawler nunca visita ni clickea.                              | 1        |
 | SEG-06 | Verificación opcional de propiedad del dominio para sistemas públicos.                                                                              | 4        |
-| SEG-07 | Registro de auditoría local de todas las ejecuciones: qué, cuándo y contra qué URL.                                                                 | 1        |
+| SEG-07 | Registro de auditoría local: qué y cuándo, con solo IDs y nombres de campos. La URL de cada ejecución va en `ejecucion`, que se purga (ADR 015).    | 1        |
 
 ## 3.3 Principios de seguridad aplicados
 
@@ -747,9 +747,9 @@ campo. Los campos JSON se guardan como texto.
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | boveda_meta           | version_esquema, recordar_en_equipo (el salt, los parámetros de la KDF y la clave maestra envuelta van en `boveda.sellada`, ADR 010)                                                                                                               | 1        |
 | configuracion         | bloqueo_minutos, actualizaciones_activas, retencion_dias, idioma, tema                                                                                                                                                                             | 1        |
-| proyecto              | nombre, url_base, dominios_permitidos (JSON), max_rps, max_paginas, solo_lectura, exclusiones (JSON), modo_datos_sensibles, selectores_sensibles (JSON), clave_proyecto_cifrada                                                                    | 1        |
-| autorizacion          | proyecto_id, texto_aceptado, version_texto, fecha, verificacion_dominio                                                                                                                                                                            | 1        |
-| credencial            | proyecto_id, nombre, usuario, secreto (C), url_login, pasos_login (JSON)                                                                                                                                                                           | 1        |
+| proyecto              | nombre, nombre_normalizado (único, sin distinguir mayúsculas), descripcion, url_base, dominios_permitidos (JSON), max_rps, max_paginas, max_profundidad, timeout_pagina_segundos, solo_lectura, exclusiones (JSON), modo_datos_sensibles, selectores_sensibles (JSON), sistema_interno, permitir_login_http, clave_proyecto_cifrada | 1        |
+| autorizacion          | proyecto_id, texto_aceptado, version_texto, fecha, url_base_aceptada, dominios_aceptados (JSON), sistema_interno_aceptado, invalidada_en, verificacion_dominio | 1        |
+| credencial            | proyecto_id, nombre, usuario, secreto (C), secreto_actualizado_en, url_login, pasos_login (JSON: acciones tipadas, sin valores) | 1        |
 | ejecucion             | proyecto_id, tipo, objetivo_id, navegador, estado, inicio, fin, resumen (JSON), programacion_id                                                                                                                                                    | 1        |
 | pagina_visitada       | ejecucion_id, url, status_http, tiempo_carga_ms, profundidad                                                                                                                                                                                       | 1        |
 | hallazgo              | ejecucion_id, proyecto_id, tipo, severidad, titulo, descripcion, url, huella, estado, primera_vez_en, ultima_vez_en, caso_id, paso_indice                                                                                                          | 1        |
@@ -758,7 +758,7 @@ campo. Los campos JSON se guardan como texto.
 | reporte_hallazgo      | reporte_id, hallazgo_id                                                                                                                                                                                                                            | 1        |
 | exportacion           | reporte_id, formato, nivel, evidencias_incluidas (JSON), fecha, destino_sincronizado                                                                                                                                                               | 1        |
 | conexion              | fecha, proceso, destino, permitida, regla, ejecucion_id                                                                                                                                                                                            | 1        |
-| auditoria             | accion, entidad, entidad_id, detalle (JSON)                                                                                                                                                                                                        | 1        |
+| auditoria             | accion, entidad, entidad_id, detalle (JSON). Solo IDs y nombres de campos: nunca secretos, valores, nombres ni URLs (ADR 015) | 1        |
 | caso_prueba           | proyecto_id, codigo, codigo_externo, titulo, modulo, descripcion, precondiciones, prioridad, tags (JSON), tipo (manual, automatizado, mixto), uso (funcional, regresion, uat), origen (editor, excel, grabado, importado), requiere_login, version | 2        |
 | paso                  | caso_id, orden, descripcion, datos, resultado_esperado, accion, localizador (JSON), valor (C si es sensible), opciones (JSON), automatizado                                                                                                        | 2        |
 | plantilla_importacion | nombre, mapeo_columnas (JSON), formato (fila por paso o por caso), hoja, fila_encabezado, separador_pasos                                                                                                                                          | 2        |
@@ -866,8 +866,8 @@ Registro de cada sistema a probar, con sus límites de seguridad.
 
 - Aceptación obligatoria de la declaración de autorización (SEG-01).
 
-- Límites: requests por segundo, máximo de páginas, profundidad, timeout
-  por página.
+- Límites: requests por segundo (2), máximo de páginas (200), profundidad
+  (5), timeout por página (30 s). Entre paréntesis, el valor por defecto.
 
 - Modo solo lectura (activado por defecto) y lista de exclusiones.
 
@@ -876,7 +876,12 @@ Registro de cada sistema a probar, con sus límites de seguridad.
 - Credenciales de prueba cifradas, con definición del login y botón
   "Probar login".
 
-- Eliminar proyecto con borrado criptográfico.
+- Opciones relajables, desactivadas por defecto y registradas en la
+  auditoría: "Sistema interno" y "Permitir login sin cifrar (http)" (ADR
+  011).
+
+- Eliminar proyecto con borrado criptográfico, escribiendo su nombre para
+  confirmar. Se avisa que las copias anteriores todavía lo contienen.
 
 ### Reglas
 
@@ -884,14 +889,25 @@ Registro de cada sistema a probar, con sus límites de seguridad.
 
 - RN-PRY-02: la URL base debe pertenecer a un dominio permitido.
 
-- RN-PRY-03: cambiar la URL base o los dominios exige volver a aceptar
-  la autorización.
+- RN-PRY-03: cambiar la URL base, los dominios o la opción "Sistema
+  interno" exige volver a aceptar la autorización. Volver al alcance
+  anterior no la revive (ADR 014).
 
-- RN-PRY-04: el secreto de una credencial nunca se muestra completo;
-  solo se reemplaza.
+- RN-PRY-04: el secreto de una credencial nunca se muestra, ni como
+  indicio; solo se reemplaza (ADR 013).
 
 - RN-PRY-05: no se permiten comodines amplios en dominios (por ejemplo,
-  \*.com); sí subdominios de un dominio concreto (\*.lexora.test).
+  \*.com); sí subdominios de un dominio concreto (\*.lexora.test). Se
+  normalizan a minúsculas y punycode, sin puerto ni ruta. Solo http y
+  https. Se rechazan las IPs, salvo 127.0.0.1 y, con "Sistema interno",
+  las privadas (ADR 011).
+
+- RN-PRY-06: los nombres de proyecto son únicos, sin distinguir
+  mayúsculas.
+
+- RN-PRY-07: la URL de login pertenece a un dominio permitido. En http,
+  solo en localhost, 127.0.0.1 y .test, salvo con la opción explícita.
+  Una credencial que deja de cumplirlo no se puede usar hasta corregirla.
 
 ## 6.3 Escaneo automático (ESC)
 
@@ -1991,9 +2007,9 @@ y salida. El preload expone solo estas funciones.
 | **Canal**                                                                           | **Descripción**                                                  | **Fase** |
 |-------------------------------------------------------------------------------------|------------------------------------------------------------------|----------|
 | boveda:crear · desbloquear · bloquear · cambiarClave · respaldar · restaurar        | Gestión de la bóveda                                             | 1        |
-| proyectos:listar · crear · actualizar · eliminar                                    | Proyectos                                                        | 1        |
+| proyectos:listar · obtener · validar · crear · actualizar · eliminar                | Proyectos                                                        | 1        |
 | proyectos:aceptarAutorizacion                                                       | Declaración de autorización                                      | 1        |
-| credenciales:guardar · reemplazarSecreto · probarLogin                              | Credenciales (nunca devuelve el secreto)                         | 1        |
+| credenciales:guardar · reemplazarSecreto · eliminar · probarLogin                   | Credenciales (nunca devuelve el secreto)                         | 1        |
 | ejecuciones:lanzarEscaneo · cancelar · listar · detalle                             | Ejecuciones                                                      | 1        |
 | ejecuciones:progreso (evento)                                                       | Progreso en vivo, del principal a la interfaz                    | 1        |
 | hallazgos:listar · actualizar                                                       | Bandeja de hallazgos                                             | 1        |
@@ -2112,7 +2128,9 @@ puedan compartir sin exponer información.
 
 10. Semana 10: firma e instaladores, compilación de SQLCipher desde
     fuente para los instaladores (ADR 006), asarUnpack con verificación
-    sobre el binario final (ADR 007), documentación, demo y revisión con
+    sobre el binario final (ADR 007), avisos de terceros del instalador
+    (incluye la MPL-2.0 de la Public Suffix List, ADR 011), documentación,
+    demo y revisión con
     el checklist de Electron.
 
 ## 10.2 Fase 2 — Casos de prueba: Excel, manual, UAT y sin código

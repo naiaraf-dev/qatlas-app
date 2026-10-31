@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "descripcion": "Oráculo del escáner: cada problema plantado en sandbox-site. Las URLs son relativas a la URL base.",
+  "hallazgos": [
+    {
+      "id": "http-500",
+      "tipo": "error-http",
+      "url": "/error-500",
+      "severidad": "alta",
+      "detalle": "Responde 500"
+    },
+    {
+      "id": "js-excepcion",
+      "tipo": "error-javascript",
+      "url": "/excepcion-js",
+      "severidad": "alta",
+      "detalle": "Excepción sin capturar al cargar"
+    },
+    {
+      "id": "link-roto-1",
+      "tipo": "link-roto",
+      "url": "/no-existe-1",
+      "origen": "/links-rotos",
+      "severidad": "media",
+      "detalle": "Link interno que responde 404"
+    },
+    {
+      "id": "link-roto-2",
+      "tipo": "link-roto",
+      "url": "/carpeta/no-existe-2",
+      "origen": "/links-rotos",
+      "severidad": "media",
+      "detalle": "Link interno que responde 404"
+    },
+    {
+      "id": "consola-error",
+      "tipo": "console-error",
+      "url": "/consola",
+      "severidad": "media",
+      "detalle": "console.error al cargar"
+    },
+    {
+      "id": "a11y-imagen-sin-alt",
+      "tipo": "accesibilidad",
+      "url": "/accesibilidad",
+      "severidad": "alta",
+      "regla": "image-alt",
+      "detalle": "Imagen sin texto alternativo"
+    },
+    {
+      "id": "a11y-boton-sin-nombre",
+      "tipo": "accesibilidad",
+      "url": "/accesibilidad",
+      "severidad": "alta",
+      "regla": "button-name",
+      "detalle": "Botón sin nombre accesible"
+    },
+    {
+      "id": "a11y-campo-sin-etiqueta",
+      "tipo": "accesibilidad",
+      "url": "/accesibilidad",
+      "severidad": "alta",
+      "regla": "label",
+      "detalle": "Campo sin etiqueta"
+    },
+    {
+      "id": "a11y-contraste",
+      "tipo": "accesibilidad",
+      "url": "/accesibilidad",
+      "severidad": "media",
+      "regla": "color-contrast",
+      "detalle": "Texto con contraste insuficiente"
+    },
+    {
+      "id": "pagina-lenta",
+      "tipo": "rendimiento",
+      "url": "/lenta",
+      "severidad": "baja",
+      "detalle": "Tarda 3 segundos en responder"
+    },
+    {
+      "id": "cookie-insegura",
+      "tipo": "cookie-insegura",
+      "url": "/login",
+      "severidad": "alta",
+      "detalle": "Cookie de sesión sin Secure ni HttpOnly"
+    }
+  ],
+  "soloLectura": [
+    {
+      "id": "post-formulario",
+      "metodo": "POST",
+      "url": "/formulario/enviar",
+      "origen": "/formulario",
+      "detalle": "En modo solo lectura este POST debe bloquearse"
+    }
+  ],
+  "exclusiones": [
+    {
+      "id": "trampa-cerrar-sesion",
+      "texto": "Cerrar sesión",
+      "url": "/cerrar-sesion",
+      "origen": "/panel",
+      "detalle": "El crawler no debe visitarlo"
+    },
+    {
+      "id": "trampa-eliminar",
+      "texto": "Eliminar cuenta",
+      "url": "/eliminar-cuenta",
+      "origen": "/panel",
+      "detalle": "El crawler no debe visitarlo"
+    }
+  ],
+  "fugas": [
+    {
+      "id": "fuga-script",
+      "tipo": "script",
+      "origen": "/fuga",
+      "host": "analitica.fuga.test",
+      "detalle": "Script externo"
+    },
+    {
+      "id": "fuga-pixel",
+      "tipo": "pixel",
+      "origen": "/fuga",
+      "host": "pixel.fuga.example",
+      "detalle": "Imagen de seguimiento"
+    },
+    {
+      "id": "fuga-fetch",
+      "tipo": "fetch",
+      "origen": "/fuga",
+      "host": "api.fuga.invalid",
+      "detalle": "Envío de datos con fetch"
+    }
+  ]
+}

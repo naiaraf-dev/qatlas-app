@@ -25,10 +25,10 @@ export const CONFIGURACION_POR_DEFECTO: Readonly<Configuracion> = {
 };
 
 /**
- * Tablas con datos de un proyecto, en orden de borrado. Se completa al crear cada tabla, a partir
- * de la semana 4. Solo admite nombres fijos del código, nunca datos.
+ * Tablas con datos de un proyecto, en orden de borrado. Se completa al crear cada tabla. Solo admite
+ * nombres fijos del código, nunca datos. La fila de `proyecto`, con la clave, se borra al final.
  */
-export const TABLAS_DE_PROYECTO: readonly string[] = [];
+export const TABLAS_DE_PROYECTO: readonly string[] = ['credencial', 'autorizacion'];
 
 const orm = (base: BaseCifrada) => drizzle(base);
 
@@ -99,16 +99,35 @@ export function purgarConLapida(
   base: BaseCifrada,
   tablas: readonly string[] = TABLAS_DE_PROYECTO,
 ): void {
+  if (leerLapidas(base).length === 0) return;
+  borrarFilasConLapida(base, tablas);
+  base.exec('VACUUM');
+}
+
+/** Sin VACUUM, que no puede correr dentro de una transacción. */
+export function borrarFilasConLapida(
+  base: BaseCifrada,
+  tablas: readonly string[] = TABLAS_DE_PROYECTO,
+): void {
   const ids = leerLapidas(base).map((l) => l.proyectoId);
-  if (ids.length === 0 || tablas.length === 0) return;
   const purgar = base.transaction(() => {
     for (const tabla of tablas) {
       const borrar = base.prepare(`DELETE FROM "${tabla}" WHERE proyecto_id = ?`);
       for (const id of ids) borrar.run(id);
     }
+    const borrarProyecto = base.prepare('DELETE FROM proyecto WHERE id = ?');
+    for (const id of ids) borrarProyecto.run(id);
   });
   purgar();
-  base.exec('VACUUM');
+}
+
+/**
+ * Termina un borrado que se cortó: filas con lápida o páginas libres sin compactar (ADR 009). Se
+ * ejecuta al abrir la base.
+ */
+export function completarBorradosPendientes(base: BaseCifrada): void {
+  borrarFilasConLapida(base);
+  if ((base.pragma('freelist_count', { simple: true }) as number) > 0) base.exec('VACUUM');
 }
 
 export function verificarIntegridad(base: BaseCifrada): void {

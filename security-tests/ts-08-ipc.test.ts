@@ -5,7 +5,7 @@
  * rechazan, y un handler nunca puede devolver datos no declarados.
  */
 import { describe, expect, it } from 'vitest';
-import { ipcContract, type IpcChannel } from '@qatlas/shared';
+import { CANALES_SIN_BOVEDA, IPC_CHANNELS, ipcContract, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, makeSenderCheck } from '../apps/desktop/src/main/ipc/create-handler';
 
 const APP = 'app://qatlas';
@@ -246,6 +246,304 @@ describe('TS-08 · Canales de la bóveda', () => {
       ok: false,
       error: 'BOVEDA_BLOQUEADA',
     });
+  });
+});
+
+describe('TS-08 · Canales de proyectos y credenciales', () => {
+  const ID = '6f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b';
+  const OTRO_ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  const PROYECTO = {
+    nombre: 'Lexora',
+    descripcion: '',
+    urlBase: 'https://app.lexora.test/',
+    dominios: ['app.lexora.test'],
+    maxRps: 2,
+    maxPaginas: 200,
+    maxProfundidad: 5,
+    timeoutPaginaSegundos: 30,
+    soloLectura: true,
+    exclusiones: ['logout'],
+    modoDatosSensibles: false,
+    selectoresSensibles: [],
+    sistemaInterno: false,
+    permitirLoginHttp: false,
+  };
+  const ACEPTACION = { aceptada: true, version: 1, texto: 'x' };
+  const CREDENCIAL = {
+    proyectoId: ID,
+    nombre: 'Prueba',
+    usuario: 'ana@example.com',
+    urlLogin: 'https://app.lexora.test/login',
+    pasosLogin: [{ accion: 'click', selector: 'button' }],
+  };
+  const RESUMEN_CREDENCIAL = {
+    id: OTRO_ID,
+    nombre: 'Prueba',
+    usuario: 'ana@example.com',
+    urlLogin: 'https://app.lexora.test/login',
+    pasosLogin: [],
+    secretoConfigurado: true,
+    secretoActualizadoEn: '2026-10-30T12:00:00.000Z',
+    requiereRevision: false,
+  };
+  const DETALLE = {
+    ...PROYECTO,
+    id: ID,
+    autorizacion: { vigente: true },
+    aceptadaEn: '2026-10-30T12:00:00.000Z',
+    declaracion: { version: 1, texto: 'x' },
+    credenciales: [RESUMEN_CREDENCIAL],
+  };
+
+  const entrada = (canal: IpcChannel, datos: unknown) =>
+    ipcContract[canal].request.safeParse(datos).success;
+  const salida = (canal: IpcChannel, datos: unknown) =>
+    ipcContract[canal].response.safeParse(datos).success;
+
+  it.each<[string, IpcChannel, unknown]>([
+    ['listar', 'proyectos:listar', undefined],
+    ['obtener', 'proyectos:obtener', { id: ID }],
+    ['validar', 'proyectos:validar', { proyecto: PROYECTO }],
+    ['validar una edición', 'proyectos:validar', { proyecto: PROYECTO, id: ID }],
+    ['crear', 'proyectos:crear', { proyecto: PROYECTO, aceptacion: ACEPTACION }],
+    ['actualizar', 'proyectos:actualizar', { id: ID, proyecto: PROYECTO }],
+    ['eliminar', 'proyectos:eliminar', { id: ID, nombreConfirmacion: 'Lexora' }],
+    ['aceptar', 'proyectos:aceptarAutorizacion', { id: ID, aceptacion: ACEPTACION }],
+    ['credencial nueva', 'credenciales:guardar', { ...CREDENCIAL, secreto: 'x' }],
+    ['editar credencial', 'credenciales:guardar', { ...CREDENCIAL, credencialId: OTRO_ID }],
+    [
+      'reemplazar',
+      'credenciales:reemplazarSecreto',
+      { proyectoId: ID, credencialId: OTRO_ID, secreto: 'x' },
+    ],
+    ['eliminar credencial', 'credenciales:eliminar', { proyectoId: ID, credencialId: OTRO_ID }],
+  ])('acepta: %s', (_nombre, canal, datos) => {
+    expect(entrada(canal, datos)).toBe(true);
+  });
+
+  it.each<[string, IpcChannel, unknown]>([
+    ['listar con datos', 'proyectos:listar', { filtro: 'x' }],
+    ['obtener con un ID que no es UUID', 'proyectos:obtener', { id: "1' OR '1'='1" }],
+    ['obtener con una ruta', 'proyectos:obtener', { id: ID, ruta: 'C:\\x' }],
+    ['crear sin aceptación', 'proyectos:crear', { proyecto: PROYECTO }],
+    [
+      'crear con la aceptación en false',
+      'proyectos:crear',
+      { proyecto: PROYECTO, aceptacion: { ...ACEPTACION, aceptada: false } },
+    ],
+    [
+      'crear con un campo extra',
+      'proyectos:crear',
+      { proyecto: { ...PROYECTO, ruta: 'C:\\x' }, aceptacion: ACEPTACION },
+    ],
+    [
+      'crear con una clave de proyecto',
+      'proyectos:crear',
+      { proyecto: { ...PROYECTO, claveProyectoCifrada: 'x' }, aceptacion: ACEPTACION },
+    ],
+    ['nombre vacío', 'proyectos:validar', { proyecto: { ...PROYECTO, nombre: '   ' } }],
+    ['nombre enorme', 'proyectos:validar', { proyecto: { ...PROYECTO, nombre: 'x'.repeat(121) } }],
+    ['0 rps', 'proyectos:validar', { proyecto: { ...PROYECTO, maxRps: 0 } }],
+    ['demasiados rps', 'proyectos:validar', { proyecto: { ...PROYECTO, maxRps: 51 } }],
+    ['páginas no enteras', 'proyectos:validar', { proyecto: { ...PROYECTO, maxPaginas: 1.5 } }],
+    ['timeout de 0', 'proyectos:validar', { proyecto: { ...PROYECTO, timeoutPaginaSegundos: 0 } }],
+    [
+      'solo lectura de otro tipo',
+      'proyectos:validar',
+      { proyecto: { ...PROYECTO, soloLectura: 1 } },
+    ],
+    [
+      'demasiados dominios',
+      'proyectos:validar',
+      {
+        proyecto: { ...PROYECTO, dominios: Array<string>(51).fill('a.test') },
+      },
+    ],
+    ['eliminar sin confirmación', 'proyectos:eliminar', { id: ID }],
+    [
+      'aceptar sin versión',
+      'proyectos:aceptarAutorizacion',
+      {
+        id: ID,
+        aceptacion: { aceptada: true, texto: 'x' },
+      },
+    ],
+    ['credencial nueva sin secreto', 'credenciales:guardar', CREDENCIAL],
+    ['credencial con secreto vacío', 'credenciales:guardar', { ...CREDENCIAL, secreto: '' }],
+    [
+      'editar y mandar el secreto a la vez',
+      'credenciales:guardar',
+      { ...CREDENCIAL, credencialId: OTRO_ID, secreto: 'x' },
+    ],
+    [
+      'un paso con un valor escrito a mano',
+      'credenciales:guardar',
+      {
+        ...CREDENCIAL,
+        secreto: 'x',
+        pasosLogin: [{ accion: 'rellenar', selector: '#c', origen: 'secreto', valor: 'clave' }],
+      },
+    ],
+    [
+      'un paso con otra acción',
+      'credenciales:guardar',
+      { ...CREDENCIAL, secreto: 'x', pasosLogin: [{ accion: 'evaluar', selector: 'x' }] },
+    ],
+    [
+      'un paso con otro origen',
+      'credenciales:guardar',
+      {
+        ...CREDENCIAL,
+        secreto: 'x',
+        pasosLogin: [{ accion: 'rellenar', selector: '#c', origen: 'clave' }],
+      },
+    ],
+    [
+      'reemplazar sin secreto',
+      'credenciales:reemplazarSecreto',
+      {
+        proyectoId: ID,
+        credencialId: OTRO_ID,
+      },
+    ],
+    [
+      'reemplazar con un secreto enorme',
+      'credenciales:reemplazarSecreto',
+      { proyectoId: ID, credencialId: OTRO_ID, secreto: 'x'.repeat(4097) },
+    ],
+    [
+      'eliminar con un campo extra',
+      'credenciales:eliminar',
+      {
+        proyectoId: ID,
+        credencialId: OTRO_ID,
+        forzar: true,
+      },
+    ],
+  ])('rechaza: %s', (_nombre, canal, datos) => {
+    expect(entrada(canal, datos)).toBe(false);
+  });
+
+  it('el detalle válido pasa', () => {
+    expect(salida('proyectos:obtener', DETALLE)).toBe(true);
+    expect(salida('proyectos:obtener', null)).toBe(true);
+  });
+
+  it.each<[string, IpcChannel, unknown]>([
+    [
+      'detalle con la clave del proyecto',
+      'proyectos:obtener',
+      { ...DETALLE, claveProyectoCifrada: 'x' },
+    ],
+    [
+      'credencial con el secreto',
+      'proyectos:obtener',
+      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secreto: 'x' }] },
+    ],
+    [
+      'credencial con un indicio',
+      'proyectos:obtener',
+      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, ultimos4: '1234' }] },
+    ],
+    [
+      'credencial con secreto sin configurar',
+      'proyectos:obtener',
+      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secretoConfigurado: false }] },
+    ],
+    [
+      'resumen con un campo extra',
+      'proyectos:listar',
+      [
+        {
+          id: ID,
+          nombre: 'x',
+          urlBase: 'https://x.test/',
+          autorizacion: { vigente: true },
+          credenciales: 0,
+          clave: 'x',
+        },
+      ],
+    ],
+    [
+      'guardar con el secreto',
+      'credenciales:guardar',
+      {
+        resultado: 'guardada',
+        credencialId: ID,
+        secreto: 'x',
+      },
+    ],
+    [
+      'reemplazar con el secreto',
+      'credenciales:reemplazarSecreto',
+      {
+        resultado: 'reemplazado',
+        secreto: 'x',
+      },
+    ],
+    [
+      'rechazo con un detalle',
+      'proyectos:crear',
+      {
+        resultado: 'rechazado',
+        errores: [{ campo: 'nombre', motivo: 'nombre-repetido', valor: 'x' }],
+      },
+    ],
+  ])('la salida no deja pasar: %s', (_nombre, canal, datos) => {
+    expect(salida(canal, datos)).toBe(false);
+  });
+
+  it('un handler que filtra el secreto se bloquea', async () => {
+    const handler = createIpcHandler(
+      'proyectos:obtener',
+      () =>
+        ({
+          ...DETALLE,
+          credenciales: [{ ...RESUMEN_CREDENCIAL, secreto: 'CANARIO' }],
+        }) as never,
+      { isAllowedSender },
+    );
+    const res = await handler(fromApp, { id: ID });
+    expect(res).toEqual({ ok: false, error: 'ERROR_INTERNO' });
+    expect(JSON.stringify(res)).not.toContain('CANARIO');
+  });
+
+  it('todos los canales nuevos quedan bloqueados con la bóveda bloqueada', () => {
+    const nuevos = IPC_CHANNELS.filter(
+      (canal) => canal.startsWith('proyectos:') || canal.startsWith('credenciales:'),
+    );
+    expect(nuevos).toHaveLength(10);
+    for (const canal of nuevos) expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
+  });
+
+  it('con la bóveda bloqueada el handler no se ejecuta', async () => {
+    let ejecutado = false;
+    const handler = createIpcHandler(
+      'credenciales:reemplazarSecreto',
+      () => {
+        ejecutado = true;
+        return { resultado: 'reemplazado' };
+      },
+      { isAllowedSender, isVaultLocked: () => true },
+    );
+    const res = await handler(fromApp, { proyectoId: ID, credencialId: OTRO_ID, secreto: 'x' });
+    expect(res).toEqual({ ok: false, error: 'BOVEDA_BLOQUEADA' });
+    expect(ejecutado).toBe(false);
+  });
+
+  it('el rechazo se informa sin el secreto', async () => {
+    const rechazos: string[] = [];
+    const handler = createIpcHandler(
+      'credenciales:reemplazarSecreto',
+      () => ({ resultado: 'reemplazado' }),
+      { isAllowedSender, onRejected: (canal, codigo) => rechazos.push(`${canal}:${codigo}`) },
+    );
+    await handler(fromApp, { proyectoId: 'no', credencialId: OTRO_ID, secreto: 'CANARIO' });
+    expect(rechazos).toEqual(['credenciales:reemplazarSecreto:ENTRADA_INVALIDA']);
+  });
+
+  it('la prueba de login no tiene canal hasta la semana 5', () => {
+    expect(IPC_CHANNELS).not.toContain('credenciales:probarLogin');
   });
 });
 

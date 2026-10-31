@@ -3,6 +3,7 @@ import { IPC_CHANNELS, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, type HandlerOptions, type IpcImplementation } from './create-handler';
 import { elegirCopiaARestaurar, elegirDestinoDeCopia } from '../boveda/dialogos';
 import type { ServicioBoveda } from '../boveda/servicio';
+import type { ServicioProyectos } from '../proyectos/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
 
@@ -14,13 +15,14 @@ export interface IpcDependencies {
   cspActive: boolean;
   dataDirectorySynced: boolean;
   boveda: ServicioBoveda;
+  proyectos: ServicioProyectos;
   alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
-  const { boveda } = deps;
+  const { boveda, proyectos } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -93,6 +95,21 @@ function buildImplementations(deps: IpcDependencies): Implementations {
       if (!origen) return { resultado: 'cancelada' };
       return boveda.restaurar(origen, contrasena);
     },
+
+    'proyectos:listar': () => proyectos.listar(),
+    'proyectos:obtener': ({ id }) => proyectos.obtener(id),
+    'proyectos:validar': ({ proyecto, id }) => proyectos.validar(proyecto, id),
+    'proyectos:crear': ({ proyecto, aceptacion }) => proyectos.crear(proyecto, aceptacion),
+    'proyectos:actualizar': ({ id, proyecto }) => proyectos.actualizar(id, proyecto),
+    'proyectos:eliminar': ({ id, nombreConfirmacion }) =>
+      proyectos.eliminar(id, nombreConfirmacion),
+    'proyectos:aceptarAutorizacion': ({ id, aceptacion }) =>
+      proyectos.aceptarAutorizacion(id, aceptacion),
+    'credenciales:guardar': (solicitud) => proyectos.guardarCredencial(solicitud),
+    'credenciales:reemplazarSecreto': ({ proyectoId, credencialId, secreto }) =>
+      proyectos.reemplazarSecreto(proyectoId, credencialId, secreto),
+    'credenciales:eliminar': ({ proyectoId, credencialId }) =>
+      proyectos.eliminarCredencial(proyectoId, credencialId),
   };
 }
 

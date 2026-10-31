@@ -19,6 +19,8 @@ export {
 } from './almacen';
 export { crearCopia, leerCopia, TAMANO_MAXIMO_COPIA, type ContenidoCopia } from './copia';
 export {
+  borrarFilasConLapida,
+  completarBorradosPendientes,
   CONFIGURACION_POR_DEFECTO,
   guardarConfiguracion,
   inicializarDatos,
@@ -26,8 +28,34 @@ export {
   leerLapidas,
   purgarConLapida,
   registrarLapidas,
+  TABLAS_DE_PROYECTO,
   verificarIntegridad,
   type Configuracion,
   type Lapida,
   type Tema,
 } from './repositorio';
+export type { DetalleAuditoria } from './esquema';
+export {
+  agregarAutorizacion,
+  agregarCredencial,
+  borrarCredencial,
+  insertarProyecto,
+  invalidarAutorizacion,
+  leerAuditoria,
+  leerCredencial,
+  leerCredenciales,
+  leerProyecto,
+  leerProyectos,
+  nombreEnUso,
+  registrarAuditoria,
+  reemplazarSecretoCredencial,
+  actualizarCredencial,
+  actualizarProyecto,
+  ultimaAutorizacion,
+  type AccionAuditoria,
+  type FilaAutorizacion,
+  type FilaAuditoria,
+  type FilaCredencial,
+  type FilaProyecto,
+  type NuevoProyecto,
+} from './proyectos';

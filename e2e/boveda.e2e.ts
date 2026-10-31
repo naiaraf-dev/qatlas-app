@@ -39,6 +39,19 @@ test.afterAll(async () => {
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
 const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
 
+/** Escrita pero sin enviar: ningún atributo la refleja, aunque el campo la tenga. */
+async function verificarSinReflejo(
+  etiqueta: string,
+  valor: string,
+  autocompletar: 'current-password' | 'new-password',
+): Promise<void> {
+  await expect(entrada(etiqueta)).toHaveValue(valor);
+  await expect(entrada(etiqueta)).not.toHaveAttribute('value');
+  await expect(entrada(etiqueta)).toHaveAttribute('autocomplete', autocompletar);
+  await expect(entrada(etiqueta)).toHaveAttribute('spellcheck', 'false');
+  expect(await page.content()).not.toContain(valor);
+}
+
 async function desbloquear(contrasena = CONTRASENA): Promise<void> {
   await entrada('Contraseña maestra').fill(contrasena);
   await page.getByRole('button', { name: 'Desbloquear' }).click();
@@ -66,9 +79,11 @@ test('primer inicio: pide una contraseña fuerte y avisa que no hay recuperació
 
   await entrada('Contraseña maestra').fill(CONTRASENA);
   await expect(page.getByText(/Fortaleza: (Fuerte|Muy fuerte)/)).toBeVisible();
+  await verificarSinReflejo('Contraseña maestra', CONTRASENA, 'new-password');
   await entrada('Repetí la contraseña').fill(OTRA);
   await expect(page.getByText('no coinciden')).toBeVisible();
   await entrada('Repetí la contraseña').fill(CONTRASENA);
+  await verificarSinReflejo('Repetí la contraseña', CONTRASENA, 'new-password');
   await expect(crear).toBeDisabled();
 
   await page.getByRole('checkbox', { name: /no hay recuperación/ }).check();
@@ -259,8 +274,11 @@ test('los minutos de bloqueo se configuran, y una restauración vuelve a los de 
   await expect(page.getByText('Guardado.')).toBeVisible();
 
   await page.getByLabel('Contraseña de la copia').fill(OTRA);
+  await verificarSinReflejo('Contraseña de la copia', OTRA, 'current-password');
   await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
   await expect(page.getByText('no corresponde a la copia')).toBeVisible();
+  await expect(page.getByLabel('Contraseña de la copia')).toHaveValue('');
+  expect(await page.content()).not.toContain(OTRA);
   await expect(minutos).toHaveValue('30');
 
   await page.getByLabel('Contraseña de la copia').fill(CONTRASENA);
@@ -276,7 +294,26 @@ test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', as
   await minutos.fill('1');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();
-  await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 90_000 });
+  // La ventana está visible en el equipo: un movimiento del mouse encima o una tecla real
+  // reiniciarían el contador. setFocusable solo existe en Windows y macOS; en Linux el CI corre bajo
+  // xvfb, sin teclado real.
+  const enfocada = await app.evaluate(({ BrowserWindow }) => {
+    const ventana = BrowserWindow.getAllWindows()[0];
+    ventana?.setIgnoreMouseEvents(true);
+    if (process.platform !== 'linux') ventana?.setFocusable(false);
+    ventana?.blur();
+    return ventana?.isFocused();
+  });
+  if (process.platform === 'win32') expect(enfocada).toBe(false);
+  try {
+    await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 90_000 });
+  } finally {
+    await app.evaluate(({ BrowserWindow }) => {
+      const ventana = BrowserWindow.getAllWindows()[0];
+      ventana?.setIgnoreMouseEvents(false);
+      if (process.platform !== 'linux') ventana?.setFocusable(true);
+    });
+  }
 });
 
 test('la bóveda sigue bloqueada al reiniciar, y al cerrar no quedan archivos sueltos', async () => {
@@ -287,8 +324,18 @@ test('la bóveda sigue bloqueada al reiniciar, y al cerrar no quedan archivos su
   expect(readdirSync(datos).some((n) => n.includes('.nueva') || n.includes('.tmp-'))).toBe(false);
 });
 
+test('desbloqueo: la contraseña escrita no se refleja, y se vacía aunque falle', async () => {
+  await entrada('Contraseña maestra').fill(OTRA);
+  await verificarSinReflejo('Contraseña maestra', OTRA, 'current-password');
+  await page.getByRole('button', { name: 'Desbloquear' }).click();
+  await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
+  await expect(entrada('Contraseña maestra')).toHaveValue('');
+  expect(await page.content()).not.toContain(OTRA);
+});
+
 test('freno ante intentos repetidos: a los 5 fallos hay que esperar', async () => {
-  for (let i = 0; i < 5; i++) {
+  // Un intento ya se hizo en el test anterior.
+  for (let i = 0; i < 4; i++) {
     await desbloquear(OTRA);
     await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
     await expect(entrada('Contraseña maestra')).toHaveValue('');

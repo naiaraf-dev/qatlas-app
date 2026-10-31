@@ -26,6 +26,8 @@ const { status, error } = spawnSync(
     'security-tests/ts-02',
     'security-tests/ts-09',
     'security-tests/ts-10',
+    'security-tests/secreto-credenciales',
+    'apps/desktop/src/main/proyectos',
   ],
   {
     cwd: raiz,

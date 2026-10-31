@@ -1,0 +1,14 @@
+{
+  "name": "@qatlas/sandbox-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "App de prueba con problemas plantados. Nunca se empaqueta con QAtlas.",
+  "exports": {
+    ".": "./src/servidor.mjs",
+    "./hallazgos-esperados.json": "./hallazgos-esperados.json"
+  },
+  "scripts": {
+    "dev": "node src/iniciar.mjs"
+  }
+}
