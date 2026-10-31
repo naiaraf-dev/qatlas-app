@@ -1,12 +1,13 @@
 import { useEffect, useId, useState, type SyntheticEvent } from 'react';
 import { BLOQUEO_MINUTOS_MAX, BLOQUEO_MINUTOS_MIN } from '@qatlas/shared';
 import { Button, Card, PageHeader } from '../ui/components';
+import { EntradaSensible, useCampoSensible } from '../ui/EntradaSensible';
 
 export function Boveda() {
   const [minutos, setMinutos] = useState<number | null>(null);
   const [guardado, setGuardado] = useState(false);
   const [mensajeCopia, setMensajeCopia] = useState<string | null>(null);
-  const [contrasenaCopia, setContrasenaCopia] = useState('');
+  const campoCopia = useCampoSensible();
   const [mensajeRestaurar, setMensajeRestaurar] = useState<string | null>(null);
   const idMinutos = useId();
   const idContrasena = useId();
@@ -34,8 +35,7 @@ export function Boveda() {
   const restaurar = async (event: SyntheticEvent) => {
     event.preventDefault();
     setMensajeRestaurar(null);
-    const res = await window.qatlas.vault.restoreBackup({ contrasena: contrasenaCopia });
-    setContrasenaCopia('');
+    const res = await window.qatlas.vault.restoreBackup({ contrasena: campoCopia.tomar() });
     if (res.ok && res.data.resultado === 'restaurada') {
       // Recargar descarta el estado en memoria de la bóveda anterior.
       window.location.reload();
@@ -116,19 +116,9 @@ export function Boveda() {
             <label htmlFor={idContrasena} className="font-medium">
               Contraseña de la copia
             </label>
-            <input
-              id={idContrasena}
-              type="password"
-              value={contrasenaCopia}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                setContrasenaCopia(event.target.value);
-              }}
-              className="min-h-11 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
-            />
+            <EntradaSensible id={idContrasena} campo={campoCopia} />
           </div>
-          <Button type="submit" disabled={!contrasenaCopia}>
+          <Button type="submit" disabled={!campoCopia.tieneTexto}>
             Elegir copia y restaurar
           </Button>
         </form>

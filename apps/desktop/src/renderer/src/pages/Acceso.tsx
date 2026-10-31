@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 import type { VaultStatus } from '@qatlas/shared';
 import { Icon, Logo } from '../ui/Icon';
 import { Button, Card, cx } from '../ui/components';
+import { EntradaSensible, useCampoSensible, type CampoSensible } from '../ui/EntradaSensible';
 
 /** Pantallas previas al desbloqueo. No muestran ningún dato de la bóveda (RN-BOV-03). */
 
@@ -47,16 +48,14 @@ function PantallaAcceso({
 
 function CampoContrasena({
   etiqueta,
-  valor,
-  onChange,
+  campo,
+  alCambiar,
   autoFocus,
-  autoComplete,
 }: {
   etiqueta: string;
-  valor: string;
-  onChange: (valor: string) => void;
+  campo: CampoSensible;
+  alCambiar?: () => void;
   autoFocus?: boolean;
-  autoComplete: string;
 }) {
   const id = useId();
   return (
@@ -64,17 +63,11 @@ function CampoContrasena({
       <label htmlFor={id} className="font-medium">
         {etiqueta}
       </label>
-      <input
+      <EntradaSensible
         id={id}
-        type="password"
-        value={valor}
-        autoFocus={autoFocus}
-        autoComplete={autoComplete}
-        spellCheck={false}
-        onChange={(event) => {
-          onChange(event.target.value);
-        }}
-        className="min-h-11 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
+        campo={campo}
+        {...(alCambiar ? { alCambiar } : {})}
+        {...(autoFocus ? { autoFocus } : {})}
       />
     </div>
   );
@@ -123,10 +116,15 @@ function Medidor({ evaluacion }: { evaluacion: Evaluacion | null }) {
 }
 
 export function PrimerInicio({ onListo }: { onListo: () => void }) {
-  const [contrasena, setContrasena] = useState('');
-  const [confirmacion, setConfirmacion] = useState('');
+  const principal = useCampoSensible();
+  const repetida = useCampoSensible();
+  const { ref: refPrincipal } = principal;
   const [entiende, setEntiende] = useState(false);
-  const [evaluador, setEvaluador] = useState<Evaluador | null>(null);
+  // En una ref: lo que se escribe mientras se aplica un render no debe ver un evaluador viejo.
+  const evaluador = useRef<Evaluador | null>(null);
+  // Solo el resultado: ni el medidor ni la comparación guardan el texto.
+  const [evaluacion, setEvaluacion] = useState<Evaluacion | null>(null);
+  const [coinciden, setCoinciden] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [carpetaSincronizada, setCarpetaSincronizada] = useState(false);
@@ -134,13 +132,18 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
   // Los diccionarios se cargan recién acá: el resto de la app no los necesita.
   useEffect(() => {
     void import('@qatlas/shared/contrasena').then(({ evaluarContrasena }) => {
-      setEvaluador(() => evaluarContrasena);
+      evaluador.current = evaluarContrasena;
+      // Lo que se escribió mientras cargaban los diccionarios.
+      const texto = refPrincipal.current?.value;
+      if (texto) setEvaluacion(evaluarContrasena(texto));
     });
-  }, []);
-  const evaluacion = useMemo(
-    () => (contrasena && evaluador ? evaluador(contrasena) : null),
-    [contrasena, evaluador],
-  );
+  }, [refPrincipal]);
+
+  const reevaluar = () => {
+    const texto = principal.ref.current?.value ?? '';
+    setEvaluacion(texto && evaluador.current ? evaluador.current(texto) : null);
+    setCoinciden(texto === (repetida.ref.current?.value ?? ''));
+  };
 
   // CU-00, 5a: el aviso es parte de crear la bóveda, no algo para descubrir después.
   useEffect(() => {
@@ -149,15 +152,18 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
     });
   }, []);
 
-  const coinciden = contrasena === confirmacion;
   const puedeCrear =
-    evaluacion?.aceptable === true && confirmacion.length > 0 && coinciden && entiende && !ocupado;
+    evaluacion?.aceptable === true && repetida.tieneTexto && coinciden && entiende && !ocupado;
 
   const crear = async (event: SyntheticEvent) => {
     event.preventDefault();
     if (!puedeCrear) return;
     setOcupado(true);
     setError(null);
+    const contrasena = principal.tomar();
+    const confirmacion = repetida.tomar();
+    setEvaluacion(null);
+    setCoinciden(true);
     const res = await window.qatlas.vault.create({
       contrasena,
       confirmacion,
@@ -165,8 +171,6 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
     });
     setOcupado(false);
     if (res.ok && res.data.resultado === 'creada') {
-      setContrasena('');
-      setConfirmacion('');
       onListo();
     } else if (res.ok && res.data.resultado === 'rechazada') {
       setError(MOTIVOS[res.data.motivo]);
@@ -194,20 +198,14 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
         )}
         <CampoContrasena
           etiqueta="Contraseña maestra"
-          valor={contrasena}
-          onChange={setContrasena}
+          campo={principal}
+          alCambiar={reevaluar}
           autoFocus
-          autoComplete="new-password"
         />
         <Medidor evaluacion={evaluacion} />
         {evaluacion?.motivo && <Aviso tono="advertencia">{MOTIVOS[evaluacion.motivo]}</Aviso>}
-        <CampoContrasena
-          etiqueta="Repetí la contraseña"
-          valor={confirmacion}
-          onChange={setConfirmacion}
-          autoComplete="new-password"
-        />
-        {confirmacion.length > 0 && !coinciden && (
+        <CampoContrasena etiqueta="Repetí la contraseña" campo={repetida} alCambiar={reevaluar} />
+        {repetida.tieneTexto && !coinciden && (
           <Aviso tono="advertencia">{MOTIVOS['no-coincide']}</Aviso>
         )}
 
@@ -248,19 +246,18 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
 }
 
 function RestaurarCopia({ onListo }: { onListo: () => void }) {
-  const [contrasena, setContrasena] = useState('');
+  const campo = useCampoSensible();
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   const restaurar = async (event: SyntheticEvent) => {
     event.preventDefault();
-    if (!contrasena || ocupado) return;
+    if (!campo.tieneTexto || ocupado) return;
     setOcupado(true);
     setError(null);
-    const res = await window.qatlas.vault.restoreBackup({ contrasena });
+    const res = await window.qatlas.vault.restoreBackup({ contrasena: campo.tomar() });
     setOcupado(false);
     if (res.ok && res.data.resultado === 'restaurada') {
-      setContrasena('');
       onListo();
     } else if (!res.ok || res.data.resultado === 'rechazada') {
       setError('La contraseña no corresponde a la copia, o la copia no es válida.');
@@ -274,14 +271,9 @@ function RestaurarCopia({ onListo }: { onListo: () => void }) {
         void restaurar(event);
       }}
     >
-      <CampoContrasena
-        etiqueta="Contraseña de la copia"
-        valor={contrasena}
-        onChange={setContrasena}
-        autoComplete="current-password"
-      />
+      <CampoContrasena etiqueta="Contraseña de la copia" campo={campo} />
       {error && <Aviso tono="error">{error}</Aviso>}
-      <Button type="submit" disabled={!contrasena || ocupado}>
+      <Button type="submit" disabled={!campo.tieneTexto || ocupado}>
         {ocupado ? 'Restaurando…' : 'Elegir copia y restaurar'}
       </Button>
     </form>
@@ -311,7 +303,7 @@ export function BovedaDanada({ onListo }: { onListo: () => void }) {
 }
 
 export function Desbloqueo({ estado, onListo }: { estado: VaultStatus; onListo: () => void }) {
-  const [contrasena, setContrasena] = useState('');
+  const campo = useCampoSensible();
   const [error, setError] = useState<string | null>(null);
   const [espera, setEspera] = useState(estado.esperaSegundos);
   const [ocupado, setOcupado] = useState(false);
@@ -328,12 +320,11 @@ export function Desbloqueo({ estado, onListo }: { estado: VaultStatus; onListo: 
 
   const desbloquear = async (event: SyntheticEvent) => {
     event.preventDefault();
-    if (!contrasena || ocupado || espera > 0) return;
+    if (!campo.tieneTexto || ocupado || espera > 0) return;
     setOcupado(true);
     setError(null);
-    const res = await window.qatlas.vault.unlock({ contrasena });
+    const res = await window.qatlas.vault.unlock({ contrasena: campo.tomar() });
     setOcupado(false);
-    setContrasena('');
     if (res.ok && res.data.resultado === 'desbloqueada') {
       onListo();
     } else if (res.ok && res.data.resultado === 'rechazada') {
@@ -355,13 +346,7 @@ export function Desbloqueo({ estado, onListo }: { estado: VaultStatus; onListo: 
           void desbloquear(event);
         }}
       >
-        <CampoContrasena
-          etiqueta="Contraseña maestra"
-          valor={contrasena}
-          onChange={setContrasena}
-          autoFocus
-          autoComplete="current-password"
-        />
+        <CampoContrasena etiqueta="Contraseña maestra" campo={campo} autoFocus />
         {error && <Aviso tono="error">{error}</Aviso>}
         {espera > 0 && (
           <Aviso tono="advertencia">
@@ -372,7 +357,7 @@ export function Desbloqueo({ estado, onListo }: { estado: VaultStatus; onListo: 
           type="submit"
           variant="primary"
           icon="lock"
-          disabled={!contrasena || ocupado || espera > 0}
+          disabled={!campo.tieneTexto || ocupado || espera > 0}
         >
           {ocupado ? 'Desbloqueando…' : 'Desbloquear'}
         </Button>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CredencialResumen, ErrorValidacion, PasoLogin } from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
+import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
 
 const PASOS_POR_DEFECTO: PasoLogin[] = [
@@ -96,30 +97,10 @@ function EditorPasos({
   );
 }
 
-function CampoSecreto({
-  etiqueta,
-  valor,
-  onChange,
-}: {
-  etiqueta: string;
-  valor: string;
-  onChange: (valor: string) => void;
-}) {
+function CampoSecreto({ etiqueta, campo }: { etiqueta: string; campo: CampoSensible }) {
   return (
     <Campo etiqueta={etiqueta} ayuda="Se guarda cifrado y nunca se vuelve a mostrar.">
-      {(props) => (
-        <input
-          {...props}
-          type="password"
-          className={CLASE_ENTRADA}
-          value={valor}
-          autoComplete="new-password"
-          spellCheck={false}
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-        />
-      )}
+      {(props) => <EntradaSensible {...props} campo={campo} className="w-full" />}
     </Campo>
   );
 }
@@ -139,7 +120,7 @@ function FormularioCredencial({
   const [usuario, setUsuario] = useState(credencial?.usuario ?? '');
   const [urlLogin, setUrlLogin] = useState(credencial?.urlLogin ?? '');
   const [pasosLogin, setPasos] = useState<PasoLogin[]>(credencial?.pasosLogin ?? PASOS_POR_DEFECTO);
-  const [secreto, setSecreto] = useState('');
+  const campoSecreto = useCampoSensible();
   const [errores, setErrores] = useState<ErrorValidacion[]>([]);
   const [fallo, setFallo] = useState(false);
 
@@ -148,16 +129,17 @@ function FormularioCredencial({
     usuario &&
     urlLogin.trim() &&
     pasosLogin.every((p) => p.selector.trim()) &&
-    (credencial || secreto);
+    (credencial || campoSecreto.tieneTexto);
 
   const guardar = async () => {
     setErrores([]);
     setFallo(false);
     const comunes = { proyectoId, nombre, usuario, urlLogin, pasosLogin };
     const res = await window.qatlas.credenciales.guardar(
-      credencial ? { ...comunes, credencialId: credencial.id } : { ...comunes, secreto },
+      credencial
+        ? { ...comunes, credencialId: credencial.id }
+        : { ...comunes, secreto: campoSecreto.tomar() },
     );
-    setSecreto('');
     if (!res.ok) setFallo(true);
     else if (res.data.resultado === 'guardada') onListo();
     else setErrores(res.data.errores);
@@ -199,7 +181,7 @@ function FormularioCredencial({
           />
         )}
       </Campo>
-      {!credencial && <CampoSecreto etiqueta="Secreto" valor={secreto} onChange={setSecreto} />}
+      {!credencial && <CampoSecreto etiqueta="Secreto" campo={campoSecreto} />}
       <Campo etiqueta="URL de login" errores={erroresDe(errores, 'urlLogin')}>
         {(props) => (
           <input
@@ -238,7 +220,7 @@ function FilaCredencial({
   onCambio: () => void;
 }) {
   const [modo, setModo] = useState<'ver' | 'editar' | 'reemplazar'>('ver');
-  const [secreto, setSecreto] = useState('');
+  const campoSecreto = useCampoSensible();
   const [fallo, setFallo] = useState(false);
   const proximamenteId = `proximamente-login-${credencial.id}`;
 
@@ -247,9 +229,8 @@ function FilaCredencial({
     const res = await window.qatlas.credenciales.reemplazarSecreto({
       proyectoId,
       credencialId: credencial.id,
-      secreto,
+      secreto: campoSecreto.tomar(),
     });
-    setSecreto('');
     if (res.ok) {
       setModo('ver');
       onCambio();
@@ -291,10 +272,13 @@ function FilaCredencial({
         <p className="text-[13.5px] text-muted">
           {credencial.usuario} · {credencial.urlLogin}
         </p>
-        <p className="text-[13.5px]">
-          Secreto: configurado · reemplazado el{' '}
-          {new Date(credencial.secretoActualizadoEn).toLocaleDateString('es')}
-        </p>
+        {/* Solo fuera del reemplazo: mientras tanto, esta línea no confirmaría nada. */}
+        {modo === 'ver' && (
+          <p className="text-[13.5px]">
+            Secreto: Configurado · reemplazado el{' '}
+            {new Date(credencial.secretoActualizadoEn).toLocaleDateString('es')}
+          </p>
+        )}
       </div>
       {credencial.requiereRevision && (
         <Aviso>
@@ -311,18 +295,18 @@ function FilaCredencial({
             void reemplazar();
           }}
         >
-          <CampoSecreto etiqueta="Secreto nuevo" valor={secreto} onChange={setSecreto} />
+          <CampoSecreto etiqueta="Secreto nuevo" campo={campoSecreto} />
           <p className="text-[13px] text-muted">
             Las copias de seguridad anteriores conservan el secreto viejo.
           </p>
           <div className="flex flex-wrap gap-2.5">
-            <Button variant="primary" type="submit" disabled={!secreto}>
+            <Button variant="primary" type="submit" disabled={!campoSecreto.tieneTexto}>
               Guardar secreto
             </Button>
             <Button
               variant="ghost"
               onClick={() => {
-                setSecreto('');
+                campoSecreto.vaciar();
                 setModo('ver');
               }}
             >

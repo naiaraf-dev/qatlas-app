@@ -271,14 +271,14 @@ function Eliminar({
   proyecto: ProyectoDetalle;
   onEliminado: () => void;
 }) {
-  const [confirmacion, setConfirmacion] = useState('');
+  const [nombreEscrito, setNombreEscrito] = useState('');
   const [fallo, setFallo] = useState(false);
 
   const eliminar = async () => {
     setFallo(false);
     const res = await window.qatlas.proyectos.eliminar({
       id: proyecto.id,
-      nombreConfirmacion: confirmacion,
+      nombreConfirmacion: nombreEscrito,
     });
     if (res.ok && res.data.resultado === 'eliminado') onEliminado();
     else setFallo(true);
@@ -306,18 +306,18 @@ function Eliminar({
             <input
               {...props}
               className={CLASE_ENTRADA}
-              value={confirmacion}
+              value={nombreEscrito}
               autoComplete="off"
               spellCheck={false}
               onChange={(event) => {
-                setConfirmacion(event.target.value);
+                setNombreEscrito(event.target.value);
               }}
             />
           )}
         </Campo>
         {fallo && <Aviso tipo="peligro">No se pudo eliminar el proyecto.</Aviso>}
         <div>
-          <Button variant="primary" type="submit" disabled={confirmacion !== proyecto.nombre}>
+          <Button variant="primary" type="submit" disabled={nombreEscrito !== proyecto.nombre}>
             Eliminar definitivamente
           </Button>
         </div>

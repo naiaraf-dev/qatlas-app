@@ -119,22 +119,38 @@ test('un nombre repetido se rechaza sin distinguir mayúsculas', async () => {
   await page.getByRole('button', { name: /Lexora/ }).click();
 });
 
-test('credenciales: guarda el secreto, solo muestra "configurado" y exige una URL permitida', async () => {
+/** Escrito pero sin enviar: ningún atributo lo refleja, aunque el campo lo tenga. */
+async function verificarSinReflejo(etiqueta: string, valor: string): Promise<void> {
+  await expect(entrada(etiqueta)).toHaveValue(valor);
+  await expect(entrada(etiqueta)).not.toHaveAttribute('value');
+  expect(await page.content()).not.toContain(valor);
+}
+
+test('credenciales: el secreto escrito no se refleja, y se vacía aunque el envío falle', async () => {
   await boton('Agregar credencial').click();
   await entrada('Nombre de la credencial').fill('Usuario de prueba');
   await entrada('Usuario').fill('ana@example.com');
   await entrada('Secreto').fill(SECRETO);
+  await verificarSinReflejo('Secreto', SECRETO);
+  await expect(entrada('Secreto')).toHaveAttribute('type', 'password');
+  await expect(entrada('Secreto')).toHaveAttribute('autocomplete', 'new-password');
+  await expect(entrada('Secreto')).toHaveAttribute('spellcheck', 'false');
+
   await entrada('URL de login').fill('https://evil.example/login');
   await boton('Guardar credencial').click();
   await expect(page.getByText('dentro de los dominios permitidos')).toBeVisible();
+  await expect(entrada('Secreto')).toHaveValue('');
+  await expect(boton('Guardar credencial')).toBeDisabled();
+  expect(await page.content()).not.toContain(SECRETO);
+});
 
+test('credenciales: guarda el secreto y solo muestra "configurado"', async () => {
   await entrada('Secreto').fill(SECRETO);
   await entrada('URL de login').fill('https://app.lexora.test/login');
   await boton('Guardar credencial').click();
 
-  await expect(page.getByText(/Secreto: configurado/)).toBeVisible();
-  const pagina = await page.content();
-  expect(pagina).not.toContain(SECRETO);
+  await expect(page.getByText(/Configurado · reemplazado el/)).toBeVisible();
+  expect(await page.content()).not.toContain(SECRETO);
 });
 
 test('"Probar login" está visible y deshabilitado, con cuándo llega', async () => {
@@ -146,10 +162,39 @@ test('el secreto se puede reemplazar, nunca ver', async () => {
   await boton('Reemplazar secreto').click();
   await expect(entrada('Secreto nuevo')).toHaveValue('');
   await expect(page.getByText('conservan el secreto viejo')).toBeVisible();
+  // Durante el reemplazo no hay confirmación: si no, esperarla no esperaría nada.
+  await expect(page.getByText(/Configurado · reemplazado el/)).toBeHidden();
   await entrada('Secreto nuevo').fill(SECRETO_NUEVO);
+  await verificarSinReflejo('Secreto nuevo', SECRETO_NUEVO);
   await boton('Guardar secreto').click();
-  await expect(page.getByText(/Secreto: configurado/)).toBeVisible();
+  await expect(page.getByText(/Configurado · reemplazado el/)).toBeVisible();
+  await expect(entrada('Secreto nuevo')).toBeHidden();
   expect(await page.content()).not.toContain(SECRETO_NUEVO);
+});
+
+test('cancelar el reemplazo descarta lo escrito', async () => {
+  await boton('Reemplazar secreto').click();
+  await entrada('Secreto nuevo').fill(SECRETO_NUEVO);
+  await boton('Cancelar').click();
+  await boton('Reemplazar secreto').click();
+  await expect(entrada('Secreto nuevo')).toHaveValue('');
+  await boton('Cancelar').click();
+});
+
+test('un secreto a medio escribir se pierde al bloquear', async () => {
+  await boton('Reemplazar secreto').click();
+  await entrada('Secreto nuevo').fill(SECRETO_NUEVO);
+  await boton('Bloquear').click();
+  await expect(titulo('Bóveda bloqueada')).toBeVisible();
+  expect(await page.content()).not.toContain(SECRETO_NUEVO);
+
+  await entrada('Contraseña maestra').fill(CONTRASENA);
+  await boton('Desbloquear').click();
+  await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
+  await page.getByRole('button', { name: /Lexora/ }).click();
+  await boton('Reemplazar secreto').click();
+  await expect(entrada('Secreto nuevo')).toHaveValue('');
+  await boton('Cancelar').click();
 });
 
 test('el secreto no queda en ningún archivo de la carpeta de datos', () => {
