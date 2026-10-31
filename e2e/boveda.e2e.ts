@@ -276,6 +276,10 @@ test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', as
   await minutos.fill('1');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();
+  // La ventana está visible en el equipo: un movimiento real del mouse encima reiniciaría el contador.
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setIgnoreMouseEvents(true);
+  });
   await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 90_000 });
 });
 
