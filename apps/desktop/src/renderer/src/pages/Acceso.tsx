@@ -49,11 +49,13 @@ function PantallaAcceso({
 function CampoContrasena({
   etiqueta,
   campo,
+  autocompletar,
   alCambiar,
   autoFocus,
 }: {
   etiqueta: string;
   campo: CampoSensible;
+  autocompletar: 'current-password' | 'new-password';
   alCambiar?: () => void;
   autoFocus?: boolean;
 }) {
@@ -66,6 +68,7 @@ function CampoContrasena({
       <EntradaSensible
         id={id}
         campo={campo}
+        autocompletar={autocompletar}
         {...(alCambiar ? { alCambiar } : {})}
         {...(autoFocus ? { autoFocus } : {})}
       />
@@ -199,12 +202,18 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
         <CampoContrasena
           etiqueta="Contraseña maestra"
           campo={principal}
+          autocompletar="new-password"
           alCambiar={reevaluar}
           autoFocus
         />
         <Medidor evaluacion={evaluacion} />
         {evaluacion?.motivo && <Aviso tono="advertencia">{MOTIVOS[evaluacion.motivo]}</Aviso>}
-        <CampoContrasena etiqueta="Repetí la contraseña" campo={repetida} alCambiar={reevaluar} />
+        <CampoContrasena
+          etiqueta="Repetí la contraseña"
+          campo={repetida}
+          autocompletar="new-password"
+          alCambiar={reevaluar}
+        />
         {repetida.tieneTexto && !coinciden && (
           <Aviso tono="advertencia">{MOTIVOS['no-coincide']}</Aviso>
         )}
@@ -271,7 +280,11 @@ function RestaurarCopia({ onListo }: { onListo: () => void }) {
         void restaurar(event);
       }}
     >
-      <CampoContrasena etiqueta="Contraseña de la copia" campo={campo} />
+      <CampoContrasena
+        etiqueta="Contraseña de la copia"
+        campo={campo}
+        autocompletar="current-password"
+      />
       {error && <Aviso tono="error">{error}</Aviso>}
       <Button type="submit" disabled={!campo.tieneTexto || ocupado}>
         {ocupado ? 'Restaurando…' : 'Elegir copia y restaurar'}
@@ -346,7 +359,12 @@ export function Desbloqueo({ estado, onListo }: { estado: VaultStatus; onListo: 
           void desbloquear(event);
         }}
       >
-        <CampoContrasena etiqueta="Contraseña maestra" campo={campo} autoFocus />
+        <CampoContrasena
+          etiqueta="Contraseña maestra"
+          campo={campo}
+          autocompletar="current-password"
+          autoFocus
+        />
         {error && <Aviso tono="error">{error}</Aviso>}
         {espera > 0 && (
           <Aviso tono="advertencia">

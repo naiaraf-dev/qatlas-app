@@ -100,7 +100,9 @@ function EditorPasos({
 function CampoSecreto({ etiqueta, campo }: { etiqueta: string; campo: CampoSensible }) {
   return (
     <Campo etiqueta={etiqueta} ayuda="Se guarda cifrado y nunca se vuelve a mostrar.">
-      {(props) => <EntradaSensible {...props} campo={campo} className="w-full" />}
+      {(props) => (
+        <EntradaSensible {...props} campo={campo} autocompletar="new-password" className="w-full" />
+      )}
     </Campo>
   );
 }

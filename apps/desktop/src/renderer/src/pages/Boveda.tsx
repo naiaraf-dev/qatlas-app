@@ -116,7 +116,11 @@ export function Boveda() {
             <label htmlFor={idContrasena} className="font-medium">
               Contraseña de la copia
             </label>
-            <EntradaSensible id={idContrasena} campo={campoCopia} />
+            <EntradaSensible
+              id={idContrasena}
+              campo={campoCopia}
+              autocompletar="current-password"
+            />
           </div>
           <Button type="submit" disabled={!campoCopia.tieneTexto}>
             Elegir copia y restaurar

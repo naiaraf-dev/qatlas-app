@@ -41,6 +41,7 @@ export function EntradaSensible({
   campo,
   alCambiar,
   id,
+  autocompletar,
   className,
   autoFocus,
   ...aria
@@ -48,6 +49,8 @@ export function EntradaSensible({
   campo: CampoSensible;
   alCambiar?: () => void;
   id: string;
+  /** `current-password` si la contraseña ya existe; `new-password` si se está definiendo. */
+  autocompletar: 'current-password' | 'new-password';
   className?: string;
   autoFocus?: boolean;
   'aria-describedby'?: string;
@@ -73,7 +76,7 @@ export function EntradaSensible({
       ref={ref}
       id={id}
       type="password"
-      autoComplete="new-password"
+      autoComplete={autocompletar}
       spellCheck={false}
       autoFocus={autoFocus}
       onInput={() => {
