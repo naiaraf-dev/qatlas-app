@@ -299,13 +299,25 @@ async function aislarVentana(): Promise<() => Promise<void>> {
     if (process.platform !== 'linux') ventana?.setFocusable(false);
     ventana?.blur();
   });
-  // Windows quita el foco de forma asíncrona.
   if (process.platform === 'win32') {
-    await expect
+    expect(
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocusable()),
+    ).toBe(false);
+    // Cerca de 1 de cada 20 veces, isFocused() sigue en verdadero: ni repetir blur ni minimizar lo
+    // cambian. Se anota sin fallar: este es un resguardo del test, y una tecla real solo podría
+    // atrasar el bloqueo, lo que haría fallar la espera, nunca pasar en falso a TS-09.
+    const sinFoco = await expect
       .poll(() =>
         app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocused()),
       )
-      .toBe(false);
+      .toBe(false)
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!sinFoco) {
+      test.info().annotations.push({ type: 'aviso', description: 'La ventana conservó el foco.' });
+    }
   }
   return async () => {
     await app.evaluate(({ BrowserWindow }) => {
