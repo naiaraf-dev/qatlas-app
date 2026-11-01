@@ -28,7 +28,12 @@ export const CONFIGURACION_POR_DEFECTO: Readonly<Configuracion> = {
  * Tablas con datos de un proyecto, en orden de borrado. Se completa al crear cada tabla. Solo admite
  * nombres fijos del código, nunca datos. La fila de `proyecto`, con la clave, se borra al final.
  */
-export const TABLAS_DE_PROYECTO: readonly string[] = ['credencial', 'autorizacion'];
+export const TABLAS_DE_PROYECTO: readonly string[] = [
+  'conexion',
+  'ejecucion',
+  'credencial',
+  'autorizacion',
+];
 
 const orm = (base: BaseCifrada) => drizzle(base);
 

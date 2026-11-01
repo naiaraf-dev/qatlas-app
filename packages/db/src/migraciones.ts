@@ -97,6 +97,43 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX credencial_proyecto ON credencial(proyecto_id);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE proyecto ADD COLUMN puertos_locales TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE autorizacion ADD COLUMN puertos_aceptados TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE credencial ADD COLUMN indicador_exito TEXT;
+      CREATE TABLE ejecucion (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        tipo TEXT NOT NULL,
+        objetivo_id TEXT NOT NULL,
+        navegador TEXT NOT NULL,
+        estado TEXT NOT NULL,
+        inicio TEXT,
+        fin TEXT,
+        resumen TEXT NOT NULL,
+        programacion_id TEXT
+      );
+      CREATE TABLE conexion (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        ejecucion_id TEXT NOT NULL REFERENCES ejecucion(id),
+        fecha TEXT NOT NULL,
+        proceso TEXT NOT NULL,
+        destino TEXT NOT NULL,
+        permitida INTEGER NOT NULL,
+        regla TEXT NOT NULL
+      );
+      CREATE INDEX ejecucion_proyecto ON ejecucion(proyecto_id);
+      CREATE INDEX ejecucion_estado ON ejecucion(estado);
+      CREATE INDEX conexion_ejecucion ON conexion(ejecucion_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

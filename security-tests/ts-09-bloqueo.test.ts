@@ -113,7 +113,7 @@ describe('TS-09 · Bloqueo automático', () => {
     expect(fuente).toMatch(/powerMonitor\.on\('lock-screen', bloquear\)/);
     expect(fuente).toMatch(/app\.on\('before-quit'/);
     // La inactividad la mide el proceso principal: la interfaz no puede evitarla.
-    expect(fuente).toMatch(/webContents\.on\('input-event'/);
+    expect(fuente).toMatch(/conectarActividad\(window\.webContents, inactividad/);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import {
   EXCLUSIONES_POR_DEFECTO,
   LIMITES_PROYECTO,
@@ -27,6 +27,8 @@ export const MENSAJES: Record<MotivoValidacion, string> = {
   'requiere-sistema-interno': 'Para IPs privadas o nombres sin punto, activá «Sistema interno».',
   'sin-dominios': 'Agregá al menos un dominio.',
   'url-fuera-de-dominios': 'La URL base tiene que pertenecer a un dominio permitido.',
+  'puertos-sin-host-local':
+    'Para declarar puertos, agregá localhost, 127.0.0.1 o un dominio .test.',
   'nombre-repetido': 'Ya hay un proyecto con ese nombre.',
   'login-fuera-de-dominios': 'La URL de login tiene que estar dentro de los dominios permitidos.',
   'login-sin-cifrar':
@@ -41,6 +43,7 @@ export function proyectoNuevo(): ProyectoEntrada {
     descripcion: '',
     urlBase: '',
     dominios: [],
+    puertosLocales: [],
     exclusiones: [...EXCLUSIONES_POR_DEFECTO],
     selectoresSensibles: [],
   };
@@ -168,6 +171,50 @@ const CAMPOS_NUMERICOS = [
   { campo: 'timeoutPaginaSegundos', etiqueta: 'Timeout por página (segundos)' },
 ] as const;
 
+const esPuerto = (texto: string) =>
+  /^\d{1,5}$/.test(texto) && Number(texto) >= 1 && Number(texto) <= 65535;
+
+/** Lo inválido se muestra y no se manda: nunca se abre un puerto que no se entendió. */
+function CampoPuertos({
+  puertos,
+  onChange,
+  errores,
+}: {
+  puertos: readonly number[];
+  onChange: (puertos: number[]) => void;
+  errores: readonly string[];
+}) {
+  const [texto, setTexto] = useState(puertos.join(', '));
+  const partes = texto.split(/[\s,]+/).filter(Boolean);
+  const hayInvalidos = partes.some((parte) => !esPuerto(parte));
+  return (
+    <Campo
+      etiqueta="Puertos locales adicionales"
+      ayuda="Separados por coma, como una API en 3000. El puerto de la URL base ya está incluido. Cualquier otro puerto local se bloquea. Queda en la auditoría; si cambia, hay que aceptar la autorización de nuevo."
+      errores={hayInvalidos ? [...errores, 'Hay un puerto inválido: va de 1 a 65535.'] : errores}
+    >
+      {(props) => (
+        <input
+          {...props}
+          className={CLASE_ENTRADA}
+          value={texto}
+          spellCheck={false}
+          autoComplete="off"
+          onChange={(event) => {
+            setTexto(event.target.value);
+            onChange(
+              event.target.value
+                .split(/[\s,]+/)
+                .filter(esPuerto)
+                .map(Number),
+            );
+          }}
+        />
+      )}
+    </Campo>
+  );
+}
+
 /** Lo que el asistente y la edición comparten: el alcance. */
 export function CamposAlcance({
   valor,
@@ -225,6 +272,13 @@ export function CamposAlcance({
           />
         )}
       </Campo>
+      <CampoPuertos
+        puertos={valor.puertosLocales}
+        onChange={(puertosLocales) => {
+          onChange({ puertosLocales });
+        }}
+        errores={erroresDe(errores, 'puertosLocales')}
+      />
       <Casilla
         etiqueta="Sistema interno"
         ayuda="Habilita IPs privadas (10/8, 172.16/12, 192.168/16) y nombres sin punto, siempre como host exacto. Queda en la auditoría; si cambia, hay que aceptar la autorización de nuevo."

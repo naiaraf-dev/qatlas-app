@@ -36,6 +36,11 @@ export const PROYECTO_POR_DEFECTO = {
   permitirLoginHttp: false,
 } as const;
 
+/** Lo mínimo que tarda un escaneo si usa todas sus páginas. Sirve para avisar antes de lanzarlo. */
+export function minutosMinimosDeEjecucion(limites: { maxPaginas: number; maxRps: number }): number {
+  return limites.maxPaginas / limites.maxRps / 60;
+}
+
 /** Clave de unicidad del nombre: sin distinguir mayúsculas, también con acentos y eñes. */
 export function normalizarNombreProyecto(nombre: string): string {
   return nombre.trim().normalize('NFC').toLocaleLowerCase('es');

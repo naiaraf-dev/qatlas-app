@@ -19,7 +19,8 @@ export type MotivoDominio =
   | 'localhost-no-exacto'
   | 'requiere-sistema-interno';
 
-export type MotivoAlcance = MotivoDominio | 'sin-dominios' | 'url-fuera-de-dominios';
+export type MotivoAlcance =
+  MotivoDominio | 'sin-dominios' | 'url-fuera-de-dominios' | 'puertos-sin-host-local';
 export type MotivoLogin = MotivoDominio | 'login-fuera-de-dominios' | 'login-sin-cifrar';
 
 export interface OpcionesDominio {
@@ -33,15 +34,17 @@ export interface EntradaAlcance {
   urlBase: string;
   dominios: readonly string[];
   sistemaInterno: boolean;
+  puertosLocales: readonly number[];
 }
 
 export interface ErrorAlcance {
-  campo: 'urlBase' | 'dominios';
+  campo: 'urlBase' | 'dominios' | 'puertosLocales';
   motivo: MotivoAlcance;
 }
 
 export type ResultadoAlcance =
-  { ok: true; urlBase: string; dominios: string[] } | { ok: false; errores: ErrorAlcance[] };
+  | { ok: true; urlBase: string; dominios: string[]; puertosLocales: number[] }
+  | { ok: false; errores: ErrorAlcance[] };
 
 const LARGO_MAXIMO_HOST = 253;
 const LARGO_MAXIMO_ENTRADA = 2048;
@@ -55,6 +58,11 @@ const CARACTERES_PROHIBIDOS = /[\s\u0000-\u001f\u007f\\@]/;
 const LOOPBACK_IP = '127.0.0.1';
 const LOCALHOST = 'localhost';
 const ETIQUETAS_RESERVADAS = new Set(['example', 'invalid', 'local', 'localhost', 'onion', 'test']);
+
+/** Los únicos nombres que pueden llegar a loopback: localhost, 127.0.0.1 y `.test` mapeado. */
+export function esHostLocal(host: string): boolean {
+  return host === LOCALHOST || host === LOOPBACK_IP || host.endsWith('.test');
+}
 
 function esIpPrivada(ip: string): boolean {
   const [a = -1, b = -1] = ip.split('.').map(Number);
@@ -224,6 +232,7 @@ export function validarAlcance({
   urlBase,
   dominios,
   sistemaInterno,
+  puertosLocales,
 }: EntradaAlcance): ResultadoAlcance {
   const errores: ErrorAlcance[] = [];
   const url = validarUrlBase(urlBase, { sistemaInterno });
@@ -241,13 +250,18 @@ export function validarAlcance({
   if (url.ok && lista.length > 0 && !hostPertenece(url.host, lista)) {
     errores.push({ campo: 'urlBase', motivo: 'url-fuera-de-dominios' });
   }
+  // Un puerto local sin un host local en la lista no abriría nada: es un error de quien lo cargó.
+  if (puertosLocales.length > 0 && !lista.some((d) => !d.startsWith('*.') && esHostLocal(d))) {
+    errores.push({ campo: 'puertosLocales', motivo: 'puertos-sin-host-local' });
+  }
   return errores.length > 0 || !url.ok
     ? { ok: false, errores }
-    : { ok: true, urlBase: url.url, dominios: lista };
-}
-
-function loginHttpSiempreAdmitido(host: string): boolean {
-  return host === LOCALHOST || host === LOOPBACK_IP || host.endsWith('.test');
+    : {
+        ok: true,
+        urlBase: url.url,
+        dominios: lista,
+        puertosLocales: [...new Set(puertosLocales)].sort((a, b) => a - b),
+      };
 }
 
 /**
@@ -262,7 +276,7 @@ export function validarUrlLogin(
   if (!analisis.ok) return analisis;
   const { url, host } = analisis;
   if (!hostPertenece(host, dominios)) return { ok: false, motivo: 'login-fuera-de-dominios' };
-  if (url.protocol === 'http:' && !permitirLoginHttp && !loginHttpSiempreAdmitido(host)) {
+  if (url.protocol === 'http:' && !permitirLoginHttp && !esHostLocal(host)) {
     return { ok: false, motivo: 'login-sin-cifrar' };
   }
   url.hash = '';

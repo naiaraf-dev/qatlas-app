@@ -37,6 +37,14 @@ export {
 export type { DetalleAuditoria } from './esquema';
 export {
   agregarAutorizacion,
+  actualizarEjecucion,
+  agregarConexiones,
+  insertarEjecucion,
+  leerConexionesDeEjecucion,
+  leerEjecucion,
+  leerEjecuciones,
+  leerEjecucionesActivas,
+  leerUltimasConexiones,
   agregarCredencial,
   borrarCredencial,
   insertarProyecto,
@@ -55,7 +63,9 @@ export {
   type AccionAuditoria,
   type FilaAutorizacion,
   type FilaAuditoria,
+  type FilaConexion,
   type FilaCredencial,
+  type FilaEjecucion,
   type FilaProyecto,
   type NuevoProyecto,
 } from './proyectos';

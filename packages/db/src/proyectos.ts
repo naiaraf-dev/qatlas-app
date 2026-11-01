@@ -1,13 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BaseCifrada } from './conexion';
-import { auditoria, autorizacion, credencial, proyecto, type DetalleAuditoria } from './esquema';
+import {
+  auditoria,
+  autorizacion,
+  conexion,
+  credencial,
+  ejecucion,
+  proyecto,
+  type DetalleAuditoria,
+} from './esquema';
 
 export type FilaProyecto = typeof proyecto.$inferSelect;
 export type FilaAutorizacion = typeof autorizacion.$inferSelect;
 export type FilaCredencial = typeof credencial.$inferSelect;
 export type FilaAuditoria = typeof auditoria.$inferSelect;
+export type FilaEjecucion = typeof ejecucion.$inferSelect;
+export type FilaConexion = typeof conexion.$inferSelect;
 
 type Comunes = 'createdAt' | 'updatedAt';
 export type NuevoProyecto = Omit<FilaProyecto, Comunes>;
@@ -17,7 +27,10 @@ type NuevaAutorizacion = Omit<
   Comunes | 'id' | 'fecha' | 'verificacionDominio' | 'invalidadaEn'
 >;
 type NuevaCredencial = Omit<FilaCredencial, Comunes | 'secretoActualizadoEn'>;
-type DatosCredencial = Pick<FilaCredencial, 'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin'>;
+type DatosCredencial = Pick<
+  FilaCredencial,
+  'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin' | 'indicadorExito'
+>;
 
 /** Lista cerrada: un valor del usuario no puede terminar acá. */
 export type AccionAuditoria =
@@ -178,6 +191,83 @@ export function registrarAuditoria(
       detalle: entrada.detalle ?? {},
     })
     .run();
+}
+
+export function insertarEjecucion(
+  base: BaseCifrada,
+  fila: Omit<FilaEjecucion, Comunes | 'inicio' | 'fin' | 'programacionId'>,
+): void {
+  orm(base)
+    .insert(ejecucion)
+    .values({ ...fila, ...marcas(new Date().toISOString()) })
+    .run();
+}
+
+export function leerEjecucion(base: BaseCifrada, id: string): FilaEjecucion | undefined {
+  return orm(base).select().from(ejecucion).where(eq(ejecucion.id, id)).get();
+}
+
+export function leerEjecuciones(base: BaseCifrada, proyectoId: string): FilaEjecucion[] {
+  return orm(base)
+    .select()
+    .from(ejecucion)
+    .where(eq(ejecucion.proyectoId, proyectoId))
+    .orderBy(desc(ejecucion.createdAt), desc(sql`rowid`))
+    .limit(50)
+    .all();
+}
+
+/** Las que no terminaron, en orden de llegada. */
+export function leerEjecucionesActivas(base: BaseCifrada): FilaEjecucion[] {
+  return orm(base)
+    .select()
+    .from(ejecucion)
+    .where(inArray(ejecucion.estado, ['encolada', 'en-curso']))
+    .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
+    .all();
+}
+
+export function actualizarEjecucion(
+  base: BaseCifrada,
+  id: string,
+  cambios: Partial<Pick<FilaEjecucion, 'estado' | 'inicio' | 'fin' | 'resumen'>>,
+): void {
+  orm(base)
+    .update(ejecucion)
+    .set({ ...cambios, updatedAt: new Date().toISOString() })
+    .where(eq(ejecucion.id, id))
+    .run();
+}
+
+export function agregarConexiones(
+  base: BaseCifrada,
+  filas: readonly Omit<FilaConexion, Comunes | 'id'>[],
+): void {
+  if (filas.length === 0) return;
+  const ahora = new Date().toISOString();
+  orm(base)
+    .insert(conexion)
+    .values(filas.map((fila) => ({ ...fila, id: randomUUID(), ...marcas(ahora) })))
+    .run();
+}
+
+export function leerConexionesDeEjecucion(base: BaseCifrada, ejecucionId: string): FilaConexion[] {
+  return orm(base)
+    .select()
+    .from(conexion)
+    .where(eq(conexion.ejecucionId, ejecucionId))
+    .orderBy(asc(conexion.fecha), asc(sql`rowid`))
+    .limit(500)
+    .all();
+}
+
+export function leerUltimasConexiones(base: BaseCifrada, limite: number): FilaConexion[] {
+  return orm(base)
+    .select()
+    .from(conexion)
+    .orderBy(desc(sql`rowid`))
+    .limit(limite)
+    .all();
 }
 
 export function leerAuditoria(base: BaseCifrada): FilaAuditoria[] {
