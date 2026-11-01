@@ -303,21 +303,21 @@ async function aislarVentana(): Promise<() => Promise<void>> {
     expect(
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocusable()),
     ).toBe(false);
-    // Cerca de 1 de cada 20 veces, isFocused() sigue en verdadero: ni repetir blur ni minimizar lo
-    // cambian. Se anota sin fallar: este es un resguardo del test, y una tecla real solo podría
-    // atrasar el bloqueo, lo que haría fallar la espera, nunca pasar en falso a TS-09.
-    const sinFoco = await expect
-      .poll(() =>
-        app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocused()),
-      )
-      .toBe(false)
-      .then(
-        () => true,
-        () => false,
-      );
-    if (!sinFoco) {
-      test.info().annotations.push({ type: 'aviso', description: 'La ventana conservó el foco.' });
-    }
+  }
+  const sinFoco = await expect
+    .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocused()))
+    .toBe(false)
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!sinFoco) {
+    // En CI no hay entrada humana, así que no hay excusa: si la ventana sigue enfocada, algo cambió.
+    // En un equipo con gente, cerca de 1 de cada 20 veces isFocused() sigue en verdadero en Windows, y
+    // ni repetir blur ni minimizar lo cambian. Ahí solo se anota: una tecla real puede atrasar el
+    // bloqueo, lo que haría fallar la espera de TS-09, nunca pasarla en falso.
+    if (process.env.CI) throw new Error('En CI, la ventana no debería conservar el foco.');
+    test.info().annotations.push({ type: 'aviso', description: 'La ventana conservó el foco.' });
   }
   return async () => {
     await app.evaluate(({ BrowserWindow }) => {

@@ -62,9 +62,10 @@ cuenta en el sistema probado: la pantalla lo avisa antes.
   como un proxy que no arrancó, no llegó al sistema.
 - También cuentan los exitosos: el límite es simple y no depende de lo que el sistema haga con ellos.
 - Vive en la base (`intento_login`): sobrevive a reinicios y bloqueos. Reemplazar el secreto no lo reinicia.
-- **Límite:** es por credencial, y eliminarla y crearla de nuevo da una identidad nueva. Una restauración vuelve a los
-  intentos de la copia. Protege de un error, no de alguien decidido: es su propia cuenta de prueba. El reloj es el del
-  equipo.
+- **Qué protege:** al usuario de bloquear cuentas sin querer. **No protege de un atacante:** quien controla la app
+  puede esquivarlo, y nada le impide hablar con el sistema probado por otro lado.
+- **Eliminar y recrear la credencial reinicia el conteo:** la nueva tiene otro ID, y el sistema probado sigue contando
+  los intentos anteriores. Una restauración también vuelve a los intentos de la copia, y el reloj es el del equipo.
 
 **Límite:** un indicador mal elegido, que también aparezca en una pantalla de error distinta del login, puede dar verde.
 QAtlas no puede saberlo.
