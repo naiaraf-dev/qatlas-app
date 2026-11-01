@@ -45,7 +45,11 @@ La seguridad no se agrega al final: es lo primero que se construye y se verifica
 | Auditoría local, con solo IDs y nombres de campos                                                    | ✅          |
 | Integridad de los módulos nativos (completa con fuses y firma, semana 10)                            | ✅ parcial  |
 | Test de datos personales en el repositorio                                                           | ✅          |
-| Proxy de salida para el navegador de pruebas                                                         | ⏳ semana 5 |
+| Proxy de salida: solo dominios y puertos del proyecto, DNS rebinding, sin interceptar TLS            | ✅          |
+| Runner en su proceso, sin claves, con entorno cerrado (no es un sandbox del sistema operativo)       | ✅ parcial  |
+| Navegador de pruebas con su sandbox encendido, perfil en memoria y segunda capa de bloqueo           | ✅          |
+| Monitor de conexiones: cada una, permitida o bloqueada, con su regla, sin rutas                      | ✅          |
+| Solo lectura y exclusiones en el navegador (los botones se completan con el crawler, semana 6)       | ✅ parcial  |
 | Redacción y detector de secretos; test del secreto canario                                           | ⏳ semana 7 |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·

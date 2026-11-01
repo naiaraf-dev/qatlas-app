@@ -343,7 +343,7 @@ activó las actualizaciones. Todo lo demás está bloqueado.
 | Proceso runner       | Las conexiones de Node pasan por un agente HTTP que valida cada destino contra la lista permitida.                                                                                                                                                                                                      |
 | Integraciones        | Cada integración declara sus dominios exactos (por ejemplo, api.github.com), que se agregan a la lista solo mientras está activa.                                                                                                                                                                       |
 | Telemetría           | Ninguna. Sin analíticas, sin envío automático de errores, sin comprobaciones de licencia.                                                                                                                                                                                                               |
-| Puertos              | QAtlas no abre puertos de escucha. El proxy interno escucha solo en 127.0.0.1, en un puerto aleatorio y con autenticación de un solo uso por ejecución.                                                                                                                                                 |
+| Puertos              | QAtlas no abre puertos de escucha. El proxy interno escucha solo en 127.0.0.1, en un puerto aleatorio y con una credencial por ejecución (ADR 016). Loopback: solo los puertos declarados en el proyecto, con el de la URL base incluido. Hosts no locales: 80, 443 y el puerto explícito de la URL base.                  |
 
 ### Monitor de conexiones
 
@@ -383,8 +383,10 @@ verifica automáticamente en CI (sección 3.15).
   corresponde, el secreto descifrado de la credencial, que se borra de
   memoria al terminar.
 
-- Cada ejecución usa un **perfil de navegador efímero** en una carpeta
-  temporal cifrada o en memoria, que se elimina al terminar. No se
+- Cada ejecución usa un **perfil de navegador efímero** dentro de la
+  carpeta de datos, con cookies, almacenamiento y caché en memoria (ADR
+  018), que se elimina al terminar y, si la ejecución se cortó, al
+  arrancar. No se
   reutilizan cookies ni almacenamiento entre ejecuciones salvo el estado
   de sesión del login, que también se guarda cifrado.
 
@@ -396,9 +398,9 @@ verifica automáticamente en CI (sección 3.15).
   QAtlas**. Las evidencias se muestran como imágenes, y el visor de
   trazas corre en una ventana aislada sin red.
 
-- Los navegadores de Playwright se descargan solo durante la instalación
-  o actualización, verificando su integridad, y nunca durante una
-  ejecución.
+- Chromium viaja dentro del instalador firmado; los demás navegadores se
+  descargan solo por una acción explícita, verificando su integridad, y
+  nunca durante una ejecución (ADR 020).
 
 - Los tests importados (.spec.ts) corren en otro proceso aislado, con
   variables de entorno mínimas (sin claves), con el mismo proxy de
@@ -555,7 +557,7 @@ seguridad automatizada, obligatoria en CI:
 | TS-02  | Base cifrada                    | Abrir el archivo de la base sin clave falla, y el archivo no contiene texto legible de los datos cargados.                                                                                                                                                                                  |
 | TS-03  | Salida de red                   | Con un servidor de prueba que registra conexiones, se verifica que QAtlas no contacta ningún destino fuera de la lista permitida durante el uso completo de la app.                                                                                                                         |
 | TS-04  | Contención del crawler          | La app de prueba incluye links y redirecciones a otros dominios, WebSockets y service workers: ninguno llega a destino.                                                                                                                                                                     |
-| TS-05  | Modo solo lectura y exclusiones | El crawler no envía requests de escritura ni toca botones excluidos (servidor de prueba que registra métodos).                                                                                                                                                                              |
+| TS-05  | Modo solo lectura y exclusiones | El crawler no envía requests de escritura ni toca botones excluidos (servidor de prueba que registra métodos). Hasta la semana 6 cubre escrituras y links: el recorrido mínimo no hace clics.                                                                                               |
 | TS-06  | Login no grabado                | La contraseña no aparece en video (inspección de fotogramas OCR), traza ni HAR.                                                                                                                                                                                                             |
 | TS-07  | Configuración de Electron       | Análisis estático (Electronegativity) y verificación de fuses, CSP y opciones de ventana del build final.                                                                                                                                                                                   |
 | TS-08  | IPC                             | Mensajes malformados o desde orígenes no esperados se rechazan.                                                                                                                                                                                                                             |
@@ -2121,7 +2123,8 @@ puedan compartir sin exponer información.
 7.  Semana 7: redacción, detector de secretos, evidencias cifradas;
     TS-01 (canario).
 
-8.  Semana 8: hallazgos, huella y regresiones; monitor de conexiones.
+8.  Semana 8: hallazgos, huella y regresiones; filtros del monitor de
+    conexiones, que se adelantó a la semana 5 sin ellos.
 
 9.  Semana 9: reportes (PDF, Markdown, HTML, captura anotada, ZIP) y
     exportación guiada; TS-10 y TS-14.

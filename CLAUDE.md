@@ -23,21 +23,29 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Por ahora solo se soporta Windows x64 (ver `docs/decisiones/005-argon2id.md`).
 - Fase 1, semana 4 terminada: proyectos, autorización versionada, credenciales cifradas, auditoría, purga
   por lápida y `apps/sandbox-site`. Ver las ADR 011 a 015.
-- Próximo: semana 5, runner aislado y proxy de salida (TS-03 a TS-05). El runner usa
-  `verificarAutorizacion` y `ServicioProyectos.usarSecreto`. El proxy limita loopback al puerto de la URL
-  base (ADR 011). `credenciales:probarLogin` se registra entonces.
+- Fase 1, semana 5 terminada: `packages/runner` (proxy de salida en su `utilityProcess`, runner por
+  ejecución, agente de Node), ejecuciones con cola, `credenciales:probarLogin`, monitor de conexiones,
+  TS-03, TS-04 y TS-05. Ver las ADR 016 a 020.
+- Próximo: semana 6, crawler y chequeos; login sin grabación (TS-06). TS-05 sobre botones se completa ahí.
+- `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
 - Cada tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO` (un test lo verifica), y un canal IPC
   nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
 - La auditoría guarda solo IDs y nombres de campos (ADR 015).
-- Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006) y
-  `asarUnpack` con verificación sobre el binario final (ADR 007) y avisos de terceros del instalador, con
-  la MPL-2.0 de la Public Suffix List (ADR 011).
+- Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006),
+  `asarUnpack` con verificación sobre el binario final (ADR 007), avisos de terceros del instalador, con
+  la MPL-2.0 de la Public Suffix List (ADR 011), y empaquetar Chromium en `resources/navegadores`, firmado
+  (ADR 020).
+- Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a
+  nivel del sistema operativo (ADR 017).
+- Pendiente: correr el E2E del CI de Linux dentro de un network namespace sin salida, para probar a nivel
+  del sistema operativo que la app no abre conexiones no autorizadas (ADR 016).
 
 ## Stack (no cambiar sin consultar)
 
 - Electron + electron-vite. React 19 + TypeScript 6 + Vite 8 + Tailwind 4.
 - IPC solo por el contrato de `packages/shared/src/ipc-contract.ts` (Zod).
 - Vitest para unitarios y seguridad; Playwright para E2E de la app.
+- Motor de pruebas: `playwright-core` en versión exacta, con Chromium fijado por su hash (ADR 020).
 - Criptografía: `crypto` de Node (AES-256-GCM, HKDF) + `argon2` (versión exacta, ADR 005).
 - SQLite + SQLCipher (better-sqlite3-multiple-ciphers, versión exacta, ADR 006) + Drizzle, sin
   drizzle-kit. Contraseñas: `@zxcvbn-ts` (ADR 008). Dominios: `tldts` (ADR 011).
@@ -112,6 +120,7 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 
 ```bash
 npm run check                         # lint, tipos, tests, Electronegativity
+npm run navegador:instalar            # una vez, o al subir Playwright
 npm run build && npm run test:e2e     # E2E (en Linux sin pantalla: xvfb-run -a npm run test:e2e)
 ```
 
