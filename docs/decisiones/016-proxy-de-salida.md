@@ -65,6 +65,24 @@ Por eso la app no la pasa. Los tests la usan solo como **control positivo**: sin
 ese control, «no llegó nada» también podría querer decir que nunca iba a llegar. En el proxy, los dominios de prueba
 los resuelve un resolvedor inyectado.
 
+### Lo que el proxy no ve: UDP
+
+WebRTC y QUIC usan UDP, así que los frena el navegador, por argumento. Un receptor UDP del sandbox registra lo que llegue.
+
+- **`--webrtc-ip-handling-policy=disable_non_proxied_udp`:** sin paquetes y sin candidatos ICE. **La variante
+  `--force-webrtc-ip-handling-policy` no hace nada en esta versión, y sin decir nada:** con ella, el navegador mandaba
+  STUN igual. Se entregó así en la primera versión de esta semana, y lo mostró el control positivo. Un test prohíbe esa
+  variante, y el control va a mostrar si otra versión de Chromium cambia el flag.
+- **`--disable-quic`:** sin paquetes, aun forzando QUIC con `--origin-to-force-quic-on` y con un destino permitido. Con
+  proxy, Chromium tampoco usa QUIC aunque se le quite este flag, así que acá hay dos frenos y el test no los distingue.
+
+### HTTPS
+
+Un E2E pasa una sesión TLS completa por el túnel, con un certificado de prueba generado en el test: nada versionado.
+Un cliente con ese certificado como única autoridad lo verifica del otro lado y compara su huella: el proxy no lo
+reemplaza. Aceptar un certificado inválido es solo del test: un test estático verifica que la app no tenga esa opción, y
+otro, que el contexto de la app lo rechace.
+
 ### Ruido del propio Chromium
 
 Medido en la versión instalada: en cada navegación se conecta a su buscador por defecto (`PreconnectToSearch`), y al ver
@@ -77,10 +95,9 @@ inesperado. Una versión nueva de Chromium puede traer otro: el proxy lo va a bl
 - **Domain fronting:** dentro de un túnel permitido se puede hablar con otro host. Verlo exigiría interceptar TLS.
 - **TS-03 no es una captura del sistema:** observa los sockets del proceso principal y lo que recibe el servidor de
   prueba. **Pendiente:** correr el E2E del CI de Linux dentro de un network namespace sin salida.
-- **WebRTC y QUIC** se apagan por argumento, sin un test con navegador real que lo pruebe.
 - Con HTTPS, la regla decide si se abre el túnel, y nada más. Solo lectura lo controla la segunda capa, en el navegador.
 
 ## Verificación
 
-`packages/runner/src/red/*.test.ts`, sin DNS real ni internet. `e2e/contencion.e2e.ts`, en un navegador real contra el
+`packages/runner/src/red/*.test.ts`, sin DNS real ni internet. `e2e/fugas-udp-tls.e2e.ts` y `e2e/contencion.e2e.ts`, en un navegador real contra el
 sandbox, que confirma desde su lado que no le llegó ninguna fuga. `e2e/ejecuciones.e2e.ts`, en la app real.

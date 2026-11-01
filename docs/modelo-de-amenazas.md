@@ -109,24 +109,25 @@ principal y lo que le llega al servidor de prueba: no es una captura del sistema
 
 ### Amenazas de una ejecución
 
-| ID   | Amenaza                                                                | Categoría    | Mitigación                                                                       | Estado   |
-| ---- | ---------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- | -------- |
-| E-01 | Un sitio saca datos a otro dominio (script, imagen, fetch, WebSocket)  | Divulgación  | Proxy con lista permitida, y segunda capa. TS-04, con control positivo           | Mitigada |
-| E-02 | Una redirección saca el navegador del alcance                          | Elevación    | El proxy no sigue redirecciones: cada salto se decide                            | Mitigada |
-| E-03 | DNS rebinding: un dominio público apunta a la red interna o a loopback | Elevación    | Una sola resolución, todas las IPs validadas, conexión a la IP validada          | Mitigada |
-| E-04 | El sitio llega a otro servicio local del equipo                        | Elevación    | Solo los puertos locales declarados, que forman parte del alcance autorizado     | Mitigada |
-| E-05 | El sitio llega al servicio de metadatos de la nube                     | Divulgación  | 169.254/16 rechazada siempre, aun con Sistema interno                            | Mitigada |
-| E-06 | Otro programa del equipo usa el proxy                                  | Elevación    | Solo en 127.0.0.1, puerto aleatorio, credencial por ejecución                    | Mitigada |
-| E-07 | El proxy se cae y el navegador sale en directo                         | Divulgación  | Chromium no sale sin su proxy, y la ejecución se aborta. Probado matándolo       | Mitigada |
-| E-08 | Un service worker sale por su cuenta o sobrevive a la ejecución        | Divulgación  | Bloqueados; si uno se registrara, igual sale por el proxy. Perfil efímero        | Mitigada |
-| E-09 | Un exploit del renderer sale del navegador                             | Elevación    | Sandbox de Chromium encendido y verificado                                       | Mitigada |
-| E-10 | Datos del sitio quedan en disco sin cifrar                             | Divulgación  | Perfil en memoria, borrado al terminar y al arrancar. Ver la excepción, ADR 018  | Parcial  |
-| E-11 | El secreto queda en memoria del runner o de Chromium                   | Divulgación  | Un proceso por ejecución, que termina. Un string no se puede borrar (ADR 017)    | Parcial  |
-| E-12 | El contenido de la página vuelve a la app por la prueba de login       | Divulgación  | Esquema estricto: solo un resultado y un motivo de una lista cerrada             | Mitigada |
-| E-13 | Una contraseña mala se informa como buena                              | Manipulación | Indicador exigido, falso antes de enviar y verdadero después                     | Mitigada |
-| E-14 | Domain fronting: dentro de un túnel permitido se habla con otro host   | Divulgación  | **Sin mitigar:** decidir por el host del CONNECT no ve el SNI ni el Host interno | Aceptada |
-| E-15 | Tráfico UDP fuera del proxy (WebRTC, QUIC)                             | Divulgación  | Apagados por argumentos de Chromium. **Sin un test con navegador real**          | Parcial  |
-| E-16 | Navegador alterado en disco                                            | Manipulación | En desarrollo y CI, hash de la primera descarga. Instalador firmado, semana 10   | Parcial  |
+| ID   | Amenaza                                                                | Categoría    | Mitigación                                                                         | Estado   |
+| ---- | ---------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------- | -------- |
+| E-01 | Un sitio saca datos a otro dominio (script, imagen, fetch, WebSocket)  | Divulgación  | Proxy con lista permitida, y segunda capa. TS-04, con control positivo             | Mitigada |
+| E-02 | Una redirección saca el navegador del alcance                          | Elevación    | El proxy no sigue redirecciones: cada salto se decide                              | Mitigada |
+| E-03 | DNS rebinding: un dominio público apunta a la red interna o a loopback | Elevación    | Una sola resolución, todas las IPs validadas, conexión a la IP validada            | Mitigada |
+| E-04 | El sitio llega a otro servicio local del equipo                        | Elevación    | Solo los puertos locales declarados, que forman parte del alcance autorizado       | Mitigada |
+| E-05 | El sitio llega al servicio de metadatos de la nube                     | Divulgación  | 169.254/16 rechazada siempre, aun con Sistema interno                              | Mitigada |
+| E-06 | Otro programa del equipo usa el proxy                                  | Elevación    | Solo en 127.0.0.1, puerto aleatorio, credencial por ejecución                      | Mitigada |
+| E-07 | El proxy se cae y el navegador sale en directo                         | Divulgación  | Chromium no sale sin su proxy, y la ejecución se aborta. Probado matándolo         | Mitigada |
+| E-08 | Un service worker sale por su cuenta o sobrevive a la ejecución        | Divulgación  | Bloqueados; si uno se registrara, igual sale por el proxy. Perfil efímero          | Mitigada |
+| E-09 | Un exploit del renderer sale del navegador                             | Elevación    | Sandbox de Chromium encendido y verificado                                         | Mitigada |
+| E-10 | Datos del sitio quedan en disco sin cifrar                             | Divulgación  | Perfil en memoria, borrado al terminar y al arrancar. Ver la excepción, ADR 018    | Parcial  |
+| E-11 | El secreto queda en memoria del runner o de Chromium                   | Divulgación  | Un proceso por ejecución, que termina. Un string no se puede borrar (ADR 017)      | Parcial  |
+| E-12 | El contenido de la página vuelve a la app por la prueba de login       | Divulgación  | Esquema estricto: solo un resultado y un motivo de una lista cerrada               | Mitigada |
+| E-13 | Una contraseña mala se informa como buena                              | Manipulación | Indicador exigido, falso antes de enviar y verdadero después                       | Mitigada |
+| E-14 | Domain fronting: dentro de un túnel permitido se habla con otro host   | Divulgación  | **Sin mitigar:** decidir por el host del CONNECT no ve el SNI ni el Host interno   | Aceptada |
+| E-15 | Tráfico UDP fuera del proxy (WebRTC, QUIC), o una IP local expuesta    | Divulgación  | Apagados por argumento. E2E con receptor UDP y control positivo (ADR 016)          | Mitigada |
+| E-16 | Navegador alterado en disco                                            | Manipulación | En desarrollo y CI, hash de la primera descarga. Instalador firmado, semana 10     | Parcial  |
+| E-17 | Las pruebas de login bloquean la cuenta en el sistema probado          | Denegación   | Aviso antes de probar y hasta 3 intentos cada 15 minutos, por credencial (ADR 017) | Mitigada |
 
 ## Limitaciones aceptadas del paquete crypto
 

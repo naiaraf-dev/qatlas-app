@@ -911,6 +911,10 @@ Registro de cada sistema a probar, con sus límites de seguridad.
   solo en localhost, 127.0.0.1 y .test, salvo con la opción explícita.
   Una credencial que deja de cumplirlo no se puede usar hasta corregirla.
 
+- RN-PRY-08: "Probar login" exige un indicador de éxito y admite hasta 3
+  intentos cada 15 minutos por credencial. Antes de probar se avisa que
+  un intento fallido puede bloquear la cuenta en el sistema probado.
+
 ## 6.3 Escaneo automático (ESC)
 
 **Fase:** 1

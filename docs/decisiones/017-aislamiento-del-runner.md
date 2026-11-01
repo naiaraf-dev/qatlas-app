@@ -55,6 +55,17 @@ patrón, aparece un elemento o desaparece el formulario. Sin indicador, «Probar
 - **Sin video, traza ni capturas** (EVI-01). Devuelve solo un resultado y un motivo de una lista cerrada, nunca
   contenido de la página. Un error de Playwright puede traer texto de la página: se descarta entero.
 
+**Hasta 3 intentos cada 15 minutos, por credencial.** Cada prueba es un intento real, y uno fallido puede bloquear la
+cuenta en el sistema probado: la pantalla lo avisa antes.
+
+- Cuenta el intento recién cuando el secreto sale hacia el runner, y lo registra antes de mandarlo. Lo que falló antes,
+  como un proxy que no arrancó, no llegó al sistema.
+- También cuentan los exitosos: el límite es simple y no depende de lo que el sistema haga con ellos.
+- Vive en la base (`intento_login`): sobrevive a reinicios y bloqueos. Reemplazar el secreto no lo reinicia.
+- **Límite:** es por credencial, y eliminarla y crearla de nuevo da una identidad nueva. Una restauración vuelve a los
+  intentos de la copia. Protege de un error, no de alguien decidido: es su propia cuenta de prueba. El reloj es el del
+  equipo.
+
 **Límite:** un indicador mal elegido, que también aparezca en una pantalla de error distinta del login, puede dar verde.
 QAtlas no puede saberlo.
 

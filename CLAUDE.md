@@ -34,7 +34,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006),
   `asarUnpack` con verificación sobre el binario final (ADR 007), avisos de terceros del instalador, con
   la MPL-2.0 de la Public Suffix List (ADR 011), y empaquetar Chromium en `resources/navegadores`, firmado
-  (ADR 020).
+  (ADR 020). En Linux, el sandbox de Chromium necesita configuración (en CI se usa `sysctl`): si algún día
+  se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a
   nivel del sistema operativo (ADR 017).
 - Pendiente: correr el E2E del CI de Linux dentro de un network namespace sin salida, para probar a nivel
