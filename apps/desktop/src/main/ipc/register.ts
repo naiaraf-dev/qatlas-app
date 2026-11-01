@@ -3,6 +3,7 @@ import { IPC_CHANNELS, type IpcChannel } from '@qatlas/shared';
 import { createIpcHandler, type HandlerOptions, type IpcImplementation } from './create-handler';
 import { elegirCopiaARestaurar, elegirDestinoDeCopia } from '../boveda/dialogos';
 import type { ServicioBoveda } from '../boveda/servicio';
+import type { ServicioEjecuciones } from '../ejecuciones/servicio';
 import type { ServicioProyectos } from '../proyectos/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
@@ -16,13 +17,14 @@ export interface IpcDependencies {
   dataDirectorySynced: boolean;
   boveda: ServicioBoveda;
   proyectos: ServicioProyectos;
+  ejecuciones: ServicioEjecuciones;
   alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
-  const { boveda, proyectos } = deps;
+  const { boveda, proyectos, ejecuciones } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -49,7 +51,14 @@ function buildImplementations(deps: IpcDependencies): Implementations {
       };
     },
 
-    'privacy:listConnections': ({ limit }) => deps.connectionLog.list(limit),
+    // Las de la interfaz, en memoria, y las de las ejecuciones, en la base cifrada.
+    'privacy:listConnections': ({ limit }) => {
+      const todas = [...deps.connectionLog.list(limit), ...ejecuciones.conexionesRecientes(limit)];
+      return todas
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, limit)
+        .map((conexion, id) => ({ ...conexion, id }));
+    },
 
     // El tema lo decide nativeTheme: cambia la barra de título de la ventana y
     // la media query prefers-color-scheme de la interfaz al mismo tiempo.
@@ -100,9 +109,17 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     'proyectos:obtener': ({ id }) => proyectos.obtener(id),
     'proyectos:validar': ({ proyecto, id }) => proyectos.validar(proyecto, id),
     'proyectos:crear': ({ proyecto, aceptacion }) => proyectos.crear(proyecto, aceptacion),
-    'proyectos:actualizar': ({ id, proyecto }) => proyectos.actualizar(id, proyecto),
-    'proyectos:eliminar': ({ id, nombreConfirmacion }) =>
-      proyectos.eliminar(id, nombreConfirmacion),
+    'proyectos:actualizar': ({ id, proyecto }) => {
+      const respuesta = proyectos.actualizar(id, proyecto);
+      if (respuesta.resultado === 'actualizado' && !respuesta.autorizacion.vigente) {
+        ejecuciones.cortarDeProyecto(id);
+      }
+      return respuesta;
+    },
+    'proyectos:eliminar': ({ id, nombreConfirmacion }) => {
+      ejecuciones.cortarDeProyecto(id);
+      return proyectos.eliminar(id, nombreConfirmacion);
+    },
     'proyectos:aceptarAutorizacion': ({ id, aceptacion }) =>
       proyectos.aceptarAutorizacion(id, aceptacion),
     'credenciales:guardar': (solicitud) => proyectos.guardarCredencial(solicitud),
@@ -110,6 +127,12 @@ function buildImplementations(deps: IpcDependencies): Implementations {
       proyectos.reemplazarSecreto(proyectoId, credencialId, secreto),
     'credenciales:eliminar': ({ proyectoId, credencialId }) =>
       proyectos.eliminarCredencial(proyectoId, credencialId),
+    'credenciales:probarLogin': ({ proyectoId, credencialId }) =>
+      ejecuciones.probarLogin(proyectoId, credencialId),
+    'ejecuciones:lanzarEscaneo': ({ proyectoId }) => ejecuciones.lanzarEscaneo(proyectoId),
+    'ejecuciones:cancelar': ({ ejecucionId }) => ejecuciones.cancelar(ejecucionId),
+    'ejecuciones:listar': ({ proyectoId }) => ejecuciones.listar(proyectoId),
+    'ejecuciones:detalle': ({ ejecucionId }) => ejecuciones.detalle(ejecucionId),
   };
 }
 
