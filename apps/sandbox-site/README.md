@@ -27,18 +27,25 @@ Credenciales inventadas, que no sirven para nada fuera de este sitio:
 `hallazgos-esperados.json` es el oráculo: cada problema, con su tipo, URL y severidad esperada. Un test
 comprueba que el manifiesto y el sitio coinciden.
 
-| Página           | Problema                                                          |
-| ---------------- | ----------------------------------------------------------------- |
-| `/error-500`     | Responde 500                                                      |
-| `/excepcion-js`  | Excepción de JavaScript sin capturar                              |
-| `/links-rotos`   | Dos links internos que responden 404                              |
-| `/consola`       | `console.error`                                                   |
-| `/accesibilidad` | Imagen sin `alt`, botón sin nombre, campo sin etiqueta, contraste |
-| `/lenta`         | Tarda 3 segundos                                                  |
-| `/login`         | Cookie de sesión sin `Secure` ni `HttpOnly`                       |
-| `/formulario`    | POST que el modo solo lectura debe bloquear                       |
-| `/panel`         | Trampas «Cerrar sesión» y «Eliminar cuenta» (exclusiones)         |
-| `/fuga`          | Script, pixel y `fetch` a dominios externos ficticios             |
+| Página                 | Problema                                                          |
+| ---------------------- | ----------------------------------------------------------------- |
+| `/error-500`           | Responde 500                                                      |
+| `/excepcion-js`        | Excepción de JavaScript sin capturar                              |
+| `/links-rotos`         | Dos links internos que responden 404                              |
+| `/consola`             | `console.error`                                                   |
+| `/accesibilidad`       | Imagen sin `alt`, botón sin nombre, campo sin etiqueta, contraste |
+| `/lenta`               | Tarda 3 segundos                                                  |
+| `/login`               | Cookie de sesión sin `Secure` ni `HttpOnly`                       |
+| `/formulario`          | POST que el modo solo lectura debe bloquear                       |
+| `/panel`               | Trampas «Cerrar sesión» y «Eliminar cuenta» (exclusiones)         |
+| `/`                    | Las mismas trampas, para el recorrido mínimo de la semana 5       |
+| `/redirige-afuera`     | Redirección 302 a un dominio de fuga                              |
+| `/websocket-externo`   | WebSocket a un dominio de fuga                                    |
+| `/service-worker`      | Un service worker que intenta salir por su cuenta                 |
+| `/auto-post`           | POST que se dispara solo al cargar                                |
+| `/api-en-otro-puerto`  | API en un segundo puerto local, como un backend en 3000           |
+| `/puerto-no-declarado` | Otro servicio local, que nunca debe recibir nada                  |
+| `/fuga`                | Script, pixel y `fetch` a dominios externos ficticios             |
 
 ## Dominios sin tocar el archivo hosts
 

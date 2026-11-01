@@ -107,7 +107,7 @@ afterAll(async () => {
 
 describe('Intentos de fuga: nunca a un dominio real', () => {
   it('cada dominio de fuga del manifiesto es reservado', () => {
-    expect(manifiesto.fugas.length).toBeGreaterThanOrEqual(3);
+    expect(manifiesto.fugas.length).toBeGreaterThanOrEqual(6);
     for (const { host } of manifiesto.fugas) expect(host).toMatch(RESERVADOS);
   });
 
@@ -140,15 +140,36 @@ describe('Intentos de fuga: nunca a un dominio real', () => {
       '/accesibilidad',
       '/formulario',
       '/fuga',
+      '/redirige-afuera',
+      '/websocket-externo',
+      '/service-worker',
+      '/sw.js',
+      '/auto-post',
       ...manifiesto.hallazgos.map((h) => h.url),
     ];
     const html = await Promise.all(rutas.map((r) => pedir(r).then((res) => res.cuerpo)));
     const panel = await pedir('/panel', { cookie: 'sesion=sesion-de-prueba-inventada' });
     const hosts = [
-      ...[...html, panel.cuerpo].join('\n').matchAll(/https?:\/\/([^/:"'\s<>]+)/g),
+      ...[...html, panel.cuerpo].join('\n').matchAll(/(?:https?|wss?):\/\/([^/:"'\s<>]+)/g),
     ].map((m) => m[1] as string);
     expect(hosts.length).toBeGreaterThanOrEqual(3);
     for (const host of hosts) expect(host).toMatch(RESERVADOS);
+  });
+
+  it('la redirección, el WebSocket y el service worker apuntan a dominios de fuga', async () => {
+    const redireccion = await pedir('/redirige-afuera');
+    expect(redireccion.estado).toBe(302);
+    expect(redireccion.encabezados.location).toContain('redireccion.fuga.test');
+    expect((await pedir('/websocket-externo')).cuerpo).toContain('ws://ws.fuga.example');
+    expect((await pedir('/sw.js')).cuerpo).toContain('sw.fuga.invalid');
+    expect((await pedir('/service-worker')).cuerpo).toContain("register('/sw.js')");
+  });
+
+  it('la API y la trampa escuchan en otros puertos de 127.0.0.1', async () => {
+    expect(sitio.puertoApi).not.toBe(sitio.puerto);
+    expect(sitio.puertoTrampa).not.toBe(sitio.puertoApi);
+    expect((await pedir('/api-en-otro-puerto')).cuerpo).toContain(String(sitio.puertoApi));
+    expect((await pedir('/puerto-no-declarado')).cuerpo).toContain(String(sitio.puertoTrampa));
   });
 
   it('la página de fuga intenta llegar a los tres dominios', async () => {

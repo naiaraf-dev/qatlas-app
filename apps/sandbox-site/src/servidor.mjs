@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 
 /**
@@ -18,7 +19,17 @@ export const CREDENCIALES_DE_PRUEBA = { usuario: 'ana@example.com', clave: 'Sand
 const FUGA_SCRIPT = 'analitica.fuga.test';
 const FUGA_PIXEL = 'pixel.fuga.example';
 const FUGA_FETCH = 'api.fuga.invalid';
-export const HOSTS_DE_FUGA = [FUGA_SCRIPT, FUGA_PIXEL, FUGA_FETCH];
+const FUGA_REDIRECCION = 'redireccion.fuga.test';
+const FUGA_WEBSOCKET = 'ws.fuga.example';
+const FUGA_SERVICE_WORKER = 'sw.fuga.invalid';
+export const HOSTS_DE_FUGA = [
+  FUGA_SCRIPT,
+  FUGA_PIXEL,
+  FUGA_FETCH,
+  FUGA_REDIRECCION,
+  FUGA_WEBSOCKET,
+  FUGA_SERVICE_WORKER,
+];
 
 /**
  * Cómo un navegador de prueba resuelve estos dominios sin tocar el archivo hosts: todo a 127.0.0.1.
@@ -30,6 +41,9 @@ export const MAPA_DE_HOSTS = Object.freeze({
   [FUGA_SCRIPT]: HOST_ESCUCHA,
   [FUGA_PIXEL]: HOST_ESCUCHA,
   [FUGA_FETCH]: HOST_ESCUCHA,
+  [FUGA_REDIRECCION]: HOST_ESCUCHA,
+  [FUGA_WEBSOCKET]: HOST_ESCUCHA,
+  [FUGA_SERVICE_WORKER]: HOST_ESCUCHA,
 });
 
 export const REGLAS_RESOLVER = Object.entries(MAPA_DE_HOSTS)
@@ -65,6 +79,14 @@ const INICIO = pagina(
   <li><a href="/lenta">Página lenta</a></li>
   <li><a href="/formulario">Formulario</a></li>
   <li><a href="/fuga">Intentos de fuga</a></li>
+  <li><a href="/redirige-afuera">Redirección a otro dominio</a></li>
+  <li><a href="/websocket-externo">WebSocket externo</a></li>
+  <li><a href="/service-worker">Service worker</a></li>
+  <li><a href="/api-en-otro-puerto">API en otro puerto</a></li>
+  <li><a href="/puerto-no-declarado">Puerto no declarado</a></li>
+  <li><a href="/auto-post">Envío automático</a></li>
+  <li><a href="/cerrar-sesion">Cerrar sesión</a></li>
+  <li><a href="/eliminar-cuenta">Eliminar cuenta</a></li>
 </ul>`,
 );
 
@@ -130,6 +152,57 @@ const fuga = (puerto) =>
 </script>`,
   );
 
+const websocketExterno = (puerto) =>
+  pagina(
+    'WebSocket externo',
+    `<script>
+  window.resultadoWs = new Promise((listo) => {
+    const ws = new WebSocket('ws://${FUGA_WEBSOCKET}:${puerto}/canal');
+    ws.onopen = () => listo('abierto');
+    ws.onerror = () => listo('error');
+    ws.onclose = () => listo('cerrado');
+  });
+</script>`,
+  );
+
+const SERVICE_WORKER = pagina(
+  'Service worker',
+  `<script>
+  window.resultadoSw = navigator.serviceWorker
+    ? navigator.serviceWorker.register('/sw.js').then(() => 'registrado', () => 'rechazado')
+    : Promise.resolve('sin-soporte');
+</script>`,
+);
+
+const swJs = (puerto) =>
+  `fetch('http://${FUGA_SERVICE_WORKER}:${puerto}/datos', { mode: 'no-cors' }).catch(() => {});`;
+
+const apiEnOtroPuerto = (puertoApi) =>
+  pagina(
+    'API en otro puerto',
+    `<script>
+  window.resultadoApi = fetch('http://${HOST_ESCUCHA}:${puertoApi}/datos', { mode: 'cors' })
+    .then((r) => r.json()).then((j) => j.origen, () => 'error');
+</script>`,
+  );
+
+const puertoNoDeclarado = (puertoTrampa) =>
+  pagina(
+    'Puerto no declarado',
+    `<script>
+  window.resultadoTrampa = fetch('http://${HOST_ESCUCHA}:${puertoTrampa}/datos', { mode: 'no-cors' })
+    .then(() => 'llego', () => 'error');
+</script>`,
+  );
+
+// Se dispara sola al cargar: el modo solo lectura la tiene que frenar sin que nadie haga clic.
+const AUTO_POST = pagina(
+  'Envío automático',
+  `<script>
+  fetch('/formulario/enviar', { method: 'POST', body: 'mensaje=automatico' }).catch(() => {});
+</script>`,
+);
+
 const IMAGEN = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>';
 
 function responder(res, estado, cuerpo, encabezados = {}) {
@@ -169,11 +242,23 @@ export function iniciarSandbox({
   puerto = PUERTO_POR_DEFECTO,
   demoraLentaMs = DEMORA_LENTA_MS,
 } = {}) {
-  const registro = { fugas: [], trampas: [], posts: [] };
+  const registro = {
+    fugas: [],
+    trampas: [],
+    posts: [],
+    api: [],
+    puertoNoDeclarado: [],
+    websockets: [],
+    serviceWorkers: [],
+    hosts: [],
+  };
   let puertoReal = puerto;
+  let puertoApi = 0;
+  let puertoTrampa = 0;
 
   const atender = async (req, res) => {
     const nombreHost = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
+    registro.hosts.push(nombreHost);
 
     if (HOSTS_DE_FUGA.includes(nombreHost)) {
       // Si esto se registra, el proxy dejó salir una conexión que debía bloquear.
@@ -257,6 +342,31 @@ export function iniciarSandbox({
       case 'GET /fuga':
         responder(res, 200, fuga(puertoReal));
         return;
+      case 'GET /redirige-afuera':
+        responder(res, 302, '', { location: `http://${FUGA_REDIRECCION}:${puertoReal}/destino` });
+        return;
+      case 'GET /redirige-adentro':
+        responder(res, 302, '', { location: '/' });
+        return;
+      case 'GET /websocket-externo':
+        responder(res, 200, websocketExterno(puertoReal));
+        return;
+      case 'GET /service-worker':
+        responder(res, 200, SERVICE_WORKER);
+        return;
+      case 'GET /sw.js':
+        registro.serviceWorkers.push(pathname);
+        responder(res, 200, swJs(puertoReal), { 'content-type': 'text/javascript' });
+        return;
+      case 'GET /api-en-otro-puerto':
+        responder(res, 200, apiEnOtroPuerto(puertoApi));
+        return;
+      case 'GET /puerto-no-declarado':
+        responder(res, 200, puertoNoDeclarado(puertoTrampa));
+        return;
+      case 'GET /auto-post':
+        responder(res, 200, AUTO_POST);
+        return;
       default:
         responder(res, 404, pagina('No encontrada', '<p>No existe esta página.</p>'));
     }
@@ -269,24 +379,83 @@ export function iniciarSandbox({
     });
   });
 
-  return new Promise((resolver, rechazar) => {
-    servidor.once('error', rechazar);
-    servidor.listen(puerto, HOST_ESCUCHA, () => {
-      const direccion = servidor.address();
-      puertoReal = direccion.port;
-      resolver({
-        puerto: puertoReal,
-        direccion: direccion.address,
-        url: `http://${HOST_ESCUCHA}:${puertoReal}`,
-        registro,
-        cerrar: () =>
-          new Promise((listo) => {
-            servidor.close(() => {
-              listo();
-            });
-            servidor.closeAllConnections();
-          }),
+  // Un WebSocket a un dominio de fuga queda registrado aunque nunca se complete el saludo.
+  // `closeAllConnections` no ve un socket que ya se actualizó: hay que cerrarlos a mano.
+  const websocketsAbiertos = new Set();
+  servidor.on('upgrade', (req, socket) => {
+    websocketsAbiertos.add(socket);
+    socket.on('close', () => {
+      websocketsAbiertos.delete(socket);
+    });
+    socket.on('error', () => {});
+    const nombreHost = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
+    registro.hosts.push(nombreHost);
+    if (HOSTS_DE_FUGA.includes(nombreHost)) {
+      registro.fugas.push(nombreHost);
+      socket.destroy();
+      return;
+    }
+    registro.websockets.push(nombreHost);
+    const aceptar = createHash('sha1')
+      .update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest('base64');
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${aceptar}\r\n\r\n`,
+    );
+  });
+
+  // Una API en otro puerto: el caso de un frontend en 5173 y su backend en 3000.
+  const servidorApi = createServer((req, res) => {
+    registro.api.push(req.url ?? '/');
+    res.writeHead(200, {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*',
+    });
+    res.end(JSON.stringify({ origen: 'api' }));
+  });
+
+  // Otro servicio local, no declarado en el proyecto: si algo llega acá, el proxy falló.
+  const servidorTrampa = createServer((req, res) => {
+    registro.puertoNoDeclarado.push(req.url ?? '/');
+    res.writeHead(204);
+    res.end();
+  });
+
+  const escuchar = (servidorX, puertoX) =>
+    new Promise((listo, rechazar) => {
+      servidorX.once('error', rechazar);
+      servidorX.listen(puertoX, HOST_ESCUCHA, () => {
+        listo(servidorX.address());
       });
     });
-  });
+  const cerrarUno = (servidorX) =>
+    new Promise((listo) => {
+      servidorX.close(() => {
+        listo();
+      });
+      servidorX.closeAllConnections();
+    });
+
+  return (async () => {
+    const direccion = await escuchar(servidor, puerto);
+    puertoReal = direccion.port;
+    puertoApi = (await escuchar(servidorApi, 0)).port;
+    puertoTrampa = (await escuchar(servidorTrampa, 0)).port;
+    return {
+      puerto: puertoReal,
+      puertoApi,
+      puertoTrampa,
+      direccion: direccion.address,
+      url: `http://${HOST_ESCUCHA}:${puertoReal}`,
+      registro,
+      cerrar: () => {
+        for (const socket of websocketsAbiertos) socket.destroy();
+        return Promise.all([
+          cerrarUno(servidor),
+          cerrarUno(servidorApi),
+          cerrarUno(servidorTrampa),
+        ]).then(() => undefined);
+      },
+    };
+  })();
 }

@@ -8,9 +8,22 @@ export const REGLAS_RESOLVER: string;
 
 export interface SandboxActivo {
   puerto: number;
+  /** Una API en otro puerto: llega si el proyecto lo declara. */
+  puertoApi: number;
+  /** Otro servicio local, no declarado: si algo llega acá, el proxy falló. */
+  puertoTrampa: number;
   direccion: string;
   url: string;
-  registro: { fugas: string[]; trampas: string[]; posts: string[] };
+  registro: {
+    fugas: string[];
+    trampas: string[];
+    posts: string[];
+    api: string[];
+    puertoNoDeclarado: string[];
+    websockets: string[];
+    serviceWorkers: string[];
+    hosts: string[];
+  };
   cerrar(): Promise<void>;
 }
 
