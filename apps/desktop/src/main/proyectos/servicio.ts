@@ -37,6 +37,7 @@ import {
   type CredencialResumen,
   type ErrorValidacion,
   type EstadoAutorizacion as EstadoAutorizacionContrato,
+  type IndicadorExito,
   type IpcRequest,
   type IpcResponse,
   type PasoLogin,
@@ -46,6 +47,18 @@ import {
 } from '@qatlas/shared';
 import { proponerDominio, validarAlcance, validarUrlLogin } from '@qatlas/shared/dominios';
 import type { ServicioBoveda } from '../boveda/servicio';
+
+export interface DatosDeEjecucion {
+  urlBase: string;
+  dominios: string[];
+  sistemaInterno: boolean;
+  puertosLocales: number[];
+  maxRps: number;
+  maxPaginas: number;
+  timeoutPaginaSegundos: number;
+  soloLectura: boolean;
+  exclusiones: string[];
+}
 
 export interface Aceptacion {
   aceptada: true;
@@ -81,6 +94,7 @@ const CAMPOS_EDITABLES = [
   'descripcion',
   'urlBase',
   'dominios',
+  'puertosLocales',
   'maxRps',
   'maxPaginas',
   'maxProfundidad',
@@ -108,6 +122,7 @@ function aEntrada(fila: FilaProyecto): ProyectoEntrada {
     descripcion: fila.descripcion,
     urlBase: fila.urlBase,
     dominios: fila.dominiosPermitidos,
+    puertosLocales: fila.puertosLocales,
     maxRps: fila.maxRps,
     maxPaginas: fila.maxPaginas,
     maxProfundidad: fila.maxProfundidad,
@@ -121,13 +136,19 @@ function aEntrada(fila: FilaProyecto): ProyectoEntrada {
   };
 }
 
-function aColumnas(entrada: ProyectoEntrada, urlBase: string, dominios: string[]) {
+function aColumnas(
+  entrada: ProyectoEntrada,
+  urlBase: string,
+  dominios: string[],
+  puertosLocales: number[],
+) {
   return {
     nombre: entrada.nombre,
     nombreNormalizado: normalizarNombreProyecto(entrada.nombre),
     descripcion: entrada.descripcion,
     urlBase,
     dominiosPermitidos: dominios,
+    puertosLocales,
     maxRps: entrada.maxRps,
     maxPaginas: entrada.maxPaginas,
     maxProfundidad: entrada.maxProfundidad,
@@ -150,11 +171,13 @@ function estadoDe(base: BaseCifrada, fila: FilaProyecto) {
       urlBase: fila.urlBase,
       dominios: fila.dominiosPermitidos,
       sistemaInterno: fila.sistemaInterno,
+      puertosLocales: fila.puertosLocales,
     },
     aceptada && {
       urlBase: aceptada.urlBaseAceptada,
       dominios: aceptada.dominiosAceptados,
       sistemaInterno: aceptada.sistemaInternoAceptado,
+      puertosLocales: aceptada.puertosAceptados,
       version: aceptada.versionTexto,
       invalidada: aceptada.invalidadaEn !== null,
     },
@@ -176,6 +199,7 @@ function aResumenCredencial(proyecto: FilaProyecto, fila: FilaCredencial): Crede
     usuario: fila.usuario,
     urlLogin: fila.urlLogin,
     pasosLogin: fila.pasosLogin as PasoLogin[],
+    indicadorExito: (fila.indicadorExito ?? null) as IndicadorExito | null,
     secretoConfigurado: true,
     secretoActualizadoEn: fila.secretoActualizadoEn,
     requiereRevision: !loginValido(proyecto, fila.urlLogin),
@@ -218,6 +242,7 @@ export class ServicioProyectos {
           texto: renderizarDeclaracion({
             urlBase: fila.urlBase,
             dominios: fila.dominiosPermitidos,
+            puertosLocales: fila.puertosLocales,
           }),
         },
         credenciales: leerCredenciales(base, id).map((c) => aResumenCredencial(fila, c)),
@@ -266,13 +291,14 @@ export class ServicioProyectos {
       base.transaction(() => {
         insertarProyecto(base, {
           id,
-          ...aColumnas(entrada, alcance.urlBase, alcance.dominios),
+          ...aColumnas(entrada, alcance.urlBase, alcance.dominios, alcance.puertosLocales),
           claveProyectoCifrada: envuelta,
         });
         this.registrarAceptacion(base, id, texto, {
           urlBase: alcance.urlBase,
           dominios: alcance.dominios,
           sistemaInterno: entrada.sistemaInterno,
+          puertosLocales: alcance.puertosLocales,
         });
         registrarAuditoria(base, { accion: 'proyecto.crear', entidad: 'proyecto', entidadId: id });
       })();
@@ -291,15 +317,22 @@ export class ServicioProyectos {
         ...entrada,
         urlBase: alcance.urlBase,
         dominios: alcance.dominios,
+        puertosLocales: alcance.puertosLocales,
       };
       const cambio = (campo: keyof ProyectoEntrada) => !iguales(anterior[campo], nueva[campo]);
       const campos = CAMPOS_EDITABLES.filter(cambio);
       const opciones = OPCIONES.filter(cambio);
       // RN-PRY-03. "Sistema interno" cambia a qué se puede llegar; el login en http, no.
-      const camposDeAlcance = (['urlBase', 'dominios', 'sistemaInterno'] as const).filter(cambio);
+      const camposDeAlcance = (
+        ['urlBase', 'dominios', 'sistemaInterno', 'puertosLocales'] as const
+      ).filter(cambio);
 
       base.transaction(() => {
-        actualizarProyecto(base, id, aColumnas(entrada, alcance.urlBase, alcance.dominios));
+        actualizarProyecto(
+          base,
+          id,
+          aColumnas(entrada, alcance.urlBase, alcance.dominios, alcance.puertosLocales),
+        );
         if (campos.length > 0) {
           registrarAuditoria(base, {
             accion: 'proyecto.editar',
@@ -369,6 +402,7 @@ export class ServicioProyectos {
       const texto = renderizarDeclaracion({
         urlBase: fila.urlBase,
         dominios: fila.dominiosPermitidos,
+        puertosLocales: fila.puertosLocales,
       });
       if (!this.aceptacionValida(aceptacion, texto)) return { resultado: 'declaracion-distinta' };
       base.transaction(() => {
@@ -376,6 +410,7 @@ export class ServicioProyectos {
           urlBase: fila.urlBase,
           dominios: fila.dominiosPermitidos,
           sistemaInterno: fila.sistemaInterno,
+          puertosLocales: fila.puertosLocales,
         });
       })();
       return { resultado: 'aceptada' };
@@ -391,7 +426,12 @@ export class ServicioProyectos {
     base: BaseCifrada,
     proyectoId: string,
     texto: string,
-    alcance: { urlBase: string; dominios: string[]; sistemaInterno: boolean },
+    alcance: {
+      urlBase: string;
+      dominios: string[];
+      sistemaInterno: boolean;
+      puertosLocales: number[];
+    },
   ): void {
     agregarAutorizacion(base, {
       proyectoId,
@@ -400,6 +440,7 @@ export class ServicioProyectos {
       urlBaseAceptada: alcance.urlBase,
       dominiosAceptados: alcance.dominios,
       sistemaInternoAceptado: alcance.sistemaInterno,
+      puertosAceptados: alcance.puertosLocales,
     });
     registrarAuditoria(base, {
       accion: 'autorizacion.aceptar',
@@ -426,6 +467,7 @@ export class ServicioProyectos {
   ): IpcResponse<'credenciales:guardar'> {
     return this.boveda.conAcceso((base, maestra) => {
       const { proyectoId, nombre, usuario, urlLogin, pasosLogin } = solicitud;
+      const indicadorExito = solicitud.indicadorExito ?? null;
       const proyecto = this.proyectoExistente(base, proyectoId);
       const login = validarUrlLogin(urlLogin, {
         dominios: proyecto.dominiosPermitidos,
@@ -434,7 +476,13 @@ export class ServicioProyectos {
       if (!login.ok) {
         return { resultado: 'rechazado', errores: [{ campo: 'urlLogin', motivo: login.motivo }] };
       }
-      const datos = { nombre: nombre.trim(), usuario, urlLogin: login.url, pasosLogin };
+      const datos = {
+        nombre: nombre.trim(),
+        usuario,
+        urlLogin: login.url,
+        pasosLogin,
+        indicadorExito,
+      };
 
       if ('secreto' in solicitud) {
         const id = randomUUID();
@@ -489,7 +537,7 @@ export class ServicioProyectos {
 
   /**
    * El único lugar donde se descifra un secreto, y ningún canal IPC llega acá. Lo usa el runner en
-   * el momento del login (semana 6). Exige autorización vigente y una URL de login admitida.
+   * el momento del login. Exige autorización vigente y una URL de login admitida.
    */
   async usarSecreto<T>(
     proyectoId: string,
@@ -515,6 +563,34 @@ export class ServicioProyectos {
     } finally {
       borrar(secreto);
     }
+  }
+
+  /** Lo que una ejecución necesita saber del proyecto. Nada de claves ni secretos. */
+  datosDeEjecucion(id: string): DatosDeEjecucion | null {
+    return this.boveda.conAcceso((base) => {
+      const fila = leerProyecto(base, id);
+      if (!fila) return null;
+      return {
+        urlBase: fila.urlBase,
+        dominios: fila.dominiosPermitidos,
+        sistemaInterno: fila.sistemaInterno,
+        puertosLocales: fila.puertosLocales,
+        maxRps: fila.maxRps,
+        maxPaginas: fila.maxPaginas,
+        timeoutPaginaSegundos: fila.timeoutPaginaSegundos,
+        soloLectura: fila.soloLectura,
+        exclusiones: fila.exclusiones,
+      };
+    });
+  }
+
+  /** Lo que una prueba de login necesita de la credencial, sin el secreto. */
+  datosDeLogin(proyectoId: string, credencialId: string): CredencialResumen | null {
+    return this.boveda.conAcceso((base) => {
+      const proyecto = leerProyecto(base, proyectoId);
+      const fila = leerCredencial(base, proyectoId, credencialId);
+      return proyecto && fila ? aResumenCredencial(proyecto, fila) : null;
+    });
   }
 
   private cifrarSecreto(

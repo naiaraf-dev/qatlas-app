@@ -11,6 +11,7 @@ const ALCANCE = {
   urlBase: 'https://app.lexora.test/',
   dominios: ['app.lexora.test', '*.lexora.test'],
   sistemaInterno: false,
+  puertosLocales: [] as number[],
 };
 const ACEPTADA = { ...ALCANCE, version: VERSION_DECLARACION, invalidada: false };
 
@@ -31,12 +32,29 @@ describe('Declaración de autorización', () => {
   });
 
   it('un $ en la URL no se interpreta como patrón de reemplazo', () => {
-    const texto = renderizarDeclaracion({ urlBase: "https://x.test/$'$&", dominios: ['x.test'] });
+    const texto = renderizarDeclaracion({
+      puertosLocales: [],
+      urlBase: "https://x.test/$'$&",
+      dominios: ['x.test'],
+    });
     expect(texto).toContain("https://x.test/$'$&");
   });
 });
 
 describe('verificarAutorizacion (RN-PRY-01 y RN-PRY-03)', () => {
+  it('cambiar los puertos locales cambia el alcance', () => {
+    expect(verificarAutorizacion({ ...ALCANCE, puertosLocales: [3000] }, ACEPTADA)).toEqual({
+      vigente: false,
+      motivo: 'alcance-cambiado',
+    });
+    expect(
+      verificarAutorizacion(
+        { ...ALCANCE, puertosLocales: [3000, 8080] },
+        { ...ACEPTADA, puertosLocales: [8080, 3000] },
+      ),
+    ).toEqual({ vigente: true });
+  });
+
   it('vigente con la misma versión y el mismo alcance', () => {
     expect(verificarAutorizacion(ALCANCE, ACEPTADA)).toEqual({ vigente: true });
   });

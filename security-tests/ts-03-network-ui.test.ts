@@ -1,9 +1,9 @@
 /**
  * TS-03 (parcial, interfaz) — Salida de red de la ventana de QAtlas.
  *
- * Verifica la segunda capa de la política "denegar por defecto". La prueba
- * completa de TS-03 (servidor que registra conexiones durante el uso de toda
- * la app, incluido el runner) se agrega en la semana 5 junto con el proxy.
+ * Verifica la segunda capa de la política "denegar por defecto". El resto de
+ * TS-03, con la app y un navegador reales, está en `e2e/contencion.e2e.ts` y
+ * `e2e/ejecuciones.e2e.ts`.
  */
 import { describe, expect, it } from 'vitest';
 import {

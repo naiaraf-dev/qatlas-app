@@ -298,19 +298,27 @@ describe('validarAlcance (RN-PRY-02)', () => {
   it('normaliza la URL y los dominios y quita los repetidos', () => {
     expect(
       validarAlcance({
+        puertosLocales: [],
         ...base,
         urlBase: 'HTTPS://APP.lexora.test',
         dominios: ['APP.lexora.test', 'app.lexora.test.', 'https://app.lexora.test/x'],
       }),
-    ).toEqual({ ok: true, urlBase: 'https://app.lexora.test/', dominios: ['app.lexora.test'] });
+    ).toEqual({
+      ok: true,
+      urlBase: 'https://app.lexora.test/',
+      dominios: ['app.lexora.test'],
+      puertosLocales: [],
+    });
   });
 
   it('acepta una URL cubierta por un comodín', () => {
-    expect(validarAlcance({ ...base, dominios: ['*.lexora.test'] }).ok).toBe(true);
+    expect(validarAlcance({ puertosLocales: [], ...base, dominios: ['*.lexora.test'] }).ok).toBe(
+      true,
+    );
   });
 
   it('rechaza una URL fuera de los dominios', () => {
-    expect(validarAlcance({ ...base, dominios: ['lexora.test'] })).toEqual({
+    expect(validarAlcance({ puertosLocales: [], ...base, dominios: ['lexora.test'] })).toEqual({
       ok: false,
       errores: [{ campo: 'urlBase', motivo: 'url-fuera-de-dominios' }],
     });
@@ -319,6 +327,7 @@ describe('validarAlcance (RN-PRY-02)', () => {
   it('rechaza un dominio parecido', () => {
     expect(
       validarAlcance({
+        puertosLocales: [],
         urlBase: 'https://lexora.test.evil.com/',
         dominios: ['lexora.test'],
         sistemaInterno: false,
@@ -327,7 +336,7 @@ describe('validarAlcance (RN-PRY-02)', () => {
   });
 
   it('rechaza una lista vacía', () => {
-    expect(validarAlcance({ ...base, dominios: [] })).toEqual({
+    expect(validarAlcance({ puertosLocales: [], ...base, dominios: [] })).toEqual({
       ok: false,
       errores: [{ campo: 'dominios', motivo: 'sin-dominios' }],
     });
@@ -335,7 +344,12 @@ describe('validarAlcance (RN-PRY-02)', () => {
 
   it('informa todos los errores juntos', () => {
     expect(
-      validarAlcance({ urlBase: 'ftp://x.test', dominios: ['*.com'], sistemaInterno: false }),
+      validarAlcance({
+        puertosLocales: [],
+        urlBase: 'ftp://x.test',
+        dominios: ['*.com'],
+        sistemaInterno: false,
+      }),
     ).toEqual({
       ok: false,
       errores: [
@@ -347,8 +361,10 @@ describe('validarAlcance (RN-PRY-02)', () => {
 
   it('la opción Sistema interno decide si una IP privada entra', () => {
     const interno = { urlBase: 'http://10.0.0.5/', dominios: ['10.0.0.5'] };
-    expect(validarAlcance({ ...interno, sistemaInterno: false }).ok).toBe(false);
-    expect(validarAlcance({ ...interno, sistemaInterno: true }).ok).toBe(true);
+    expect(validarAlcance({ puertosLocales: [], ...interno, sistemaInterno: false }).ok).toBe(
+      false,
+    );
+    expect(validarAlcance({ puertosLocales: [], ...interno, sistemaInterno: true }).ok).toBe(true);
   });
 });
 
@@ -405,5 +421,50 @@ describe('validarUrlLogin', () => {
     expect(
       validarUrlLogin('http://evil.example/', { ...publico, permitirLoginHttp: true }),
     ).toEqual({ ok: false, motivo: 'login-fuera-de-dominios' });
+  });
+});
+
+describe('Puertos locales en el alcance', () => {
+  const local = {
+    urlBase: 'http://localhost:5173/',
+    dominios: ['localhost'],
+    sistemaInterno: false,
+  };
+
+  it('se ordenan y se quitan los repetidos', () => {
+    expect(validarAlcance({ ...local, puertosLocales: [8080, 3000, 8080] })).toMatchObject({
+      ok: true,
+      puertosLocales: [3000, 8080],
+    });
+  });
+
+  it.each(['localhost', '127.0.0.1', 'lexora.test'])('valen con %s en la lista', (dominio) => {
+    const urlBase = `http://${dominio}:5173/`;
+    expect(
+      validarAlcance({ ...local, urlBase, dominios: [dominio], puertosLocales: [3000] }).ok,
+    ).toBe(true);
+  });
+
+  it('sin un host local en la lista, se rechazan', () => {
+    const resultado = validarAlcance({
+      urlBase: 'https://app.example.com/',
+      dominios: ['app.example.com'],
+      sistemaInterno: false,
+      puertosLocales: [3000],
+    });
+    expect(resultado).toEqual({
+      ok: false,
+      errores: [{ campo: 'puertosLocales', motivo: 'puertos-sin-host-local' }],
+    });
+  });
+
+  it('un comodín .test no cuenta como host local: no apuntaría a un host concreto', () => {
+    const resultado = validarAlcance({
+      urlBase: 'http://app.lexora.test:5173/',
+      dominios: ['*.lexora.test'],
+      sistemaInterno: false,
+      puertosLocales: [3000],
+    });
+    expect(resultado.ok).toBe(false);
   });
 });

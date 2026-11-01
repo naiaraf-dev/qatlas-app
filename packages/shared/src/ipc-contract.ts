@@ -49,7 +49,7 @@ export const ConnectionEntry = z
   .object({
     id: z.number().int().nonnegative(),
     timestamp: z.string(),
-    origin: z.enum(['interfaz', 'runner', 'integracion', 'actualizaciones']),
+    origin: z.enum(['interfaz', 'runner', 'proxy', 'navegador', 'integracion', 'actualizaciones']),
     destination: z.string().max(2048),
     allowed: z.boolean(),
     rule: z.string(),
@@ -106,6 +106,7 @@ export const MotivoValidacion = z.enum([
   'requiere-sistema-interno',
   'sin-dominios',
   'url-fuera-de-dominios',
+  'puertos-sin-host-local',
   'nombre-repetido',
   'login-fuera-de-dominios',
   'login-sin-cifrar',
@@ -115,7 +116,7 @@ export type MotivoValidacion = z.infer<typeof MotivoValidacion>;
 
 export const ErrorValidacion = z
   .object({
-    campo: z.enum(['nombre', 'urlBase', 'dominios', 'urlLogin', 'declaracion']),
+    campo: z.enum(['nombre', 'urlBase', 'dominios', 'puertosLocales', 'urlLogin', 'declaracion']),
     motivo: MotivoValidacion,
   })
   .strict();
@@ -129,6 +130,8 @@ export const ProyectoEntrada = z
     descripcion: z.string().max(2000),
     urlBase: z.string().max(2048),
     dominios: z.array(z.string().max(300)).max(50),
+    // Además del puerto de la URL base. Cambia el alcance: invalida la autorización.
+    puertosLocales: z.array(z.number().int().min(1).max(65535)).max(20),
     maxRps: entero(LIMITES_PROYECTO.maxRps),
     maxPaginas: entero(LIMITES_PROYECTO.maxPaginas),
     maxProfundidad: entero(LIMITES_PROYECTO.maxProfundidad),
@@ -194,12 +197,21 @@ export const PasoLogin = z.discriminatedUnion('accion', [
 ]);
 export type PasoLogin = z.infer<typeof PasoLogin>;
 
+// Sin indicador no hay forma de saber si el login funcionó: "Probar login" no se habilita.
+export const IndicadorExito = z.discriminatedUnion('tipo', [
+  z.object({ tipo: z.literal('url'), patron: z.string().trim().min(1).max(500) }).strict(),
+  z.object({ tipo: z.literal('aparece'), selector: Selector }).strict(),
+  z.object({ tipo: z.literal('desaparece'), selector: Selector }).strict(),
+]);
+export type IndicadorExito = z.infer<typeof IndicadorExito>;
+
 const DatosCredencial = {
   proyectoId: IdEntidad,
   nombre: z.string().trim().min(1).max(120),
   usuario: z.string().min(1).max(320),
   urlLogin: z.string().max(2048),
   pasosLogin: z.array(PasoLogin).max(30),
+  indicadorExito: IndicadorExito.nullable().default(null),
 };
 // El secreto solo viaja de la interfaz al proceso principal. Ningún esquema de salida lo incluye.
 const Secreto = z.string().min(1).max(4096);
@@ -211,6 +223,7 @@ export const CredencialResumen = z
     usuario: z.string(),
     urlLogin: z.string(),
     pasosLogin: z.array(PasoLogin),
+    indicadorExito: IndicadorExito.nullable(),
     // RN-PRY-04: sin indicios (ADR 013). Solo "configurado" y cuándo se reemplazó.
     secretoConfigurado: z.literal(true),
     secretoActualizadoEn: z.string(),
@@ -229,6 +242,62 @@ export const ProyectoDetalle = ProyectoEntrada.extend({
   credenciales: z.array(CredencialResumen),
 }).strict();
 export type ProyectoDetalle = z.infer<typeof ProyectoDetalle>;
+
+export const EstadoEjecucion = z.enum([
+  'encolada',
+  'en-curso',
+  'finalizada',
+  'fallida',
+  'cancelada',
+]);
+export type EstadoEjecucion = z.infer<typeof EstadoEjecucion>;
+
+export const MotivoFinEjecucion = z.enum([
+  'proxy-no-inicio',
+  'proxy-caido',
+  'runner-caido',
+  'navegador-no-disponible',
+  'autorizacion-no-vigente',
+  'bloqueo',
+  'interrumpida',
+  'usuario',
+]);
+export type MotivoFinEjecucion = z.infer<typeof MotivoFinEjecucion>;
+
+export const ResumenEjecucion = z
+  .object({
+    paginasVisitadas: z.number().int().nonnegative(),
+    linksExcluidos: z.number().int().nonnegative(),
+    conexionesPermitidas: z.number().int().nonnegative(),
+    conexionesBloqueadas: z.number().int().nonnegative(),
+    motivo: MotivoFinEjecucion.nullable(),
+  })
+  .strict();
+export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
+
+export const EjecucionResumen = z
+  .object({
+    id: IdEntidad,
+    tipo: z.enum(['escaneo', 'prueba-login']),
+    estado: EstadoEjecucion,
+    inicio: z.string().nullable(),
+    fin: z.string().nullable(),
+    resumen: ResumenEjecucion,
+  })
+  .strict();
+export type EjecucionResumen = z.infer<typeof EjecucionResumen>;
+
+export const ConexionEjecucion = z
+  .object({
+    fecha: z.string(),
+    proceso: z.enum(['proxy', 'navegador', 'runner']),
+    // Solo host y puerto: una ruta o una query pueden tener tokens.
+    destino: z.string().max(300),
+    permitida: z.boolean(),
+    regla: z.string().max(60),
+  })
+  .strict();
+export type ConexionEjecucion = z.infer<typeof ConexionEjecucion>;
 
 const respuestaConErrores = <T extends z.ZodObject>(exito: T) =>
   z.union([
@@ -348,6 +417,57 @@ export const ipcContract = {
   'credenciales:eliminar': {
     request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad }).strict(),
     response: z.object({ resultado: z.literal('eliminada') }).strict(),
+  },
+  // Devuelve solo el resultado y un motivo genérico: nunca contenido de la página (EVI-01).
+  'credenciales:probarLogin': {
+    request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad }).strict(),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('funciono') }).strict(),
+      // No se hizo ningún intento: se llegó al límite (LIMITE_PRUEBAS_LOGIN).
+      z
+        .object({ resultado: z.literal('limite'), esperaSegundos: z.number().int().positive() })
+        .strict(),
+      z
+        .object({
+          resultado: z.literal('fallo'),
+          motivo: z.enum([
+            'no-confirmado',
+            'sin-indicador',
+            'credencial-a-revisar',
+            'sin-autorizacion',
+            'ocupado',
+            'no-se-pudo-ejecutar',
+          ]),
+        })
+        .strict(),
+    ]),
+  },
+  'ejecuciones:lanzarEscaneo': {
+    request: z.object({ proyectoId: IdEntidad }).strict(),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('encolada'), ejecucionId: IdEntidad }).strict(),
+      z
+        .object({
+          resultado: z.literal('rechazada'),
+          motivo: z.enum(['ya-en-curso', 'sin-autorizacion']),
+        })
+        .strict(),
+    ]),
+  },
+  'ejecuciones:cancelar': {
+    request: z.object({ ejecucionId: IdEntidad }).strict(),
+    response: z.object({ resultado: z.enum(['cancelada', 'ya-terminada']) }).strict(),
+  },
+  'ejecuciones:listar': {
+    request: z.object({ proyectoId: IdEntidad }).strict(),
+    response: z.array(EjecucionResumen),
+  },
+  'ejecuciones:detalle': {
+    request: z.object({ ejecucionId: IdEntidad }).strict(),
+    response: z
+      .object({ ejecucion: EjecucionResumen, conexiones: z.array(ConexionEjecucion) })
+      .strict()
+      .nullable(),
   },
 } as const;
 

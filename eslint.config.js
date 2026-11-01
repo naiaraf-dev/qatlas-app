@@ -78,12 +78,13 @@ export default tseslint.config(
       'apps/desktop/src/preload/**/*.ts',
       'scripts/**',
       'apps/sandbox-site/**',
+      'e2e/fixtures/**',
       '**/*.config.{js,ts,mjs}',
     ],
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['**/*.{js,mjs}'],
+    files: ['**/*.{js,mjs,cjs}'],
     ...tseslint.configs.disableTypeChecked,
   },
 );

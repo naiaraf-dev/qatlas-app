@@ -20,6 +20,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { diferenciasDeEntorno, restaurarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
@@ -67,7 +68,16 @@ test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
     require: 'undefined',
     process: 'undefined',
     module: 'undefined',
-    apiKeys: ['app', 'appearance', 'credenciales', 'privacy', 'proyectos', 'security', 'vault'],
+    apiKeys: [
+      'app',
+      'appearance',
+      'credenciales',
+      'ejecuciones',
+      'privacy',
+      'proyectos',
+      'security',
+      'vault',
+    ],
     apiFrozen: true,
   });
 });
@@ -125,4 +135,17 @@ test('la app no muestra ventanas nuevas aunque la página lo intente', async () 
   await page.waitForTimeout(500);
   expect(app.windows()).toHaveLength(1);
   await expect(nav()).toBeVisible();
+});
+
+test('la vigilancia del entorno detecta lo que cambió, y solo nombra la variable', () => {
+  expect(diferenciasDeEntorno({ A: '1', B: '2' }, { A: '1', B: '2' })).toEqual([]);
+  expect(diferenciasDeEntorno({ A: 'valor' }, { A: 'otro' })).toEqual(['A']);
+  expect(diferenciasDeEntorno({}, { TMPDIR: 'undefined' })).toEqual(['TMPDIR']);
+  expect(diferenciasDeEntorno({ TMPDIR: 'x' }, {})).toEqual(['TMPDIR']);
+});
+
+test('restaurar una variable que no existía la borra, no guarda el texto "undefined"', () => {
+  process.env.QATLAS_PRUEBA_ENTORNO = 'x';
+  restaurarEntorno({ QATLAS_PRUEBA_ENTORNO: undefined });
+  expect('QATLAS_PRUEBA_ENTORNO' in process.env).toBe(false);
 });

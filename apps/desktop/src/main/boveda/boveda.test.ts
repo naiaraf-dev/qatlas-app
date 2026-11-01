@@ -157,7 +157,10 @@ describe('Desbloqueo', () => {
     const alDesbloquear = vi.fn();
     const boveda = servicio({ alDesbloquear });
     await boveda.crear(CONTRASENA, false);
-    expect(alDesbloquear).toHaveBeenCalledWith(expect.objectContaining({ tema: 'system' }));
+    expect(alDesbloquear).toHaveBeenCalledWith(
+      expect.objectContaining({ tema: 'system' }),
+      expect.anything(),
+    );
   });
 
   it('rechaza una contraseña incorrecta sin detalles', async () => {

@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import type { CredencialResumen, ErrorValidacion, PasoLogin } from '@qatlas/shared';
+import type {
+  CredencialResumen,
+  ErrorValidacion,
+  IndicadorExito,
+  IpcResponse,
+  PasoLogin,
+} from '@qatlas/shared';
+import { LIMITE_PRUEBAS_LOGIN } from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
@@ -97,6 +104,77 @@ function EditorPasos({
   );
 }
 
+const TIPOS_DE_INDICADOR = [
+  { valor: '', texto: 'Sin indicador', ayuda: 'Sin indicador, «Probar login» no está disponible.' },
+  {
+    valor: 'url',
+    texto: 'La URL coincide con un patrón',
+    ayuda: 'URL sin query, con * como comodín. Ejemplo: https://app.lexora.test/panel*',
+  },
+  {
+    valor: 'aparece',
+    texto: 'Aparece un elemento',
+    ayuda: 'Un selector que no esté en la pantalla de login, como #menu-usuario.',
+  },
+  {
+    valor: 'desaparece',
+    texto: 'Desaparece el formulario de login',
+    ayuda: 'Un selector del formulario, como form[action="/login"].',
+  },
+] as const;
+
+/** Una contraseña mala nunca puede dar verde: sin esto no hay forma de confirmar el ingreso. */
+function EditorIndicador({
+  indicador,
+  onChange,
+}: {
+  indicador: IndicadorExito | null;
+  onChange: (indicador: IndicadorExito | null) => void;
+}) {
+  const tipo = indicador?.tipo ?? '';
+  const texto = indicador ? (indicador.tipo === 'url' ? indicador.patron : indicador.selector) : '';
+  const aIndicador = (nuevoTipo: string, valor: string): IndicadorExito | null => {
+    if (nuevoTipo === 'url') return { tipo: 'url', patron: valor };
+    if (nuevoTipo === 'aparece' || nuevoTipo === 'desaparece') {
+      return { tipo: nuevoTipo, selector: valor };
+    }
+    return null;
+  };
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 font-medium">Indicador de éxito</legend>
+      <select
+        aria-label="Tipo de indicador"
+        className={`${CLASE_ENTRADA} w-auto`}
+        value={tipo}
+        onChange={(event) => {
+          onChange(aIndicador(event.target.value, texto));
+        }}
+      >
+        {TIPOS_DE_INDICADOR.map(({ valor, texto: etiqueta }) => (
+          <option key={valor} value={valor}>
+            {etiqueta}
+          </option>
+        ))}
+      </select>
+      {tipo !== '' && (
+        <input
+          aria-label="Valor del indicador"
+          className={CLASE_ENTRADA}
+          value={texto}
+          spellCheck={false}
+          onChange={(event) => {
+            onChange(aIndicador(tipo, event.target.value));
+          }}
+        />
+      )}
+      <p className="text-[13px] text-muted">
+        {TIPOS_DE_INDICADOR.find(({ valor }) => valor === tipo)?.ayuda}
+      </p>
+    </fieldset>
+  );
+}
+
 function CampoSecreto({ etiqueta, campo }: { etiqueta: string; campo: CampoSensible }) {
   return (
     <Campo etiqueta={etiqueta} ayuda="Se guarda cifrado y nunca se vuelve a mostrar.">
@@ -122,6 +200,9 @@ function FormularioCredencial({
   const [usuario, setUsuario] = useState(credencial?.usuario ?? '');
   const [urlLogin, setUrlLogin] = useState(credencial?.urlLogin ?? '');
   const [pasosLogin, setPasos] = useState<PasoLogin[]>(credencial?.pasosLogin ?? PASOS_POR_DEFECTO);
+  const [indicadorExito, setIndicador] = useState<IndicadorExito | null>(
+    credencial?.indicadorExito ?? null,
+  );
   const campoSecreto = useCampoSensible();
   const [errores, setErrores] = useState<ErrorValidacion[]>([]);
   const [fallo, setFallo] = useState(false);
@@ -131,12 +212,14 @@ function FormularioCredencial({
     usuario &&
     urlLogin.trim() &&
     pasosLogin.every((p) => p.selector.trim()) &&
+    (!indicadorExito ||
+      (indicadorExito.tipo === 'url' ? indicadorExito.patron : indicadorExito.selector).trim()) &&
     (credencial || campoSecreto.tieneTexto);
 
   const guardar = async () => {
     setErrores([]);
     setFallo(false);
-    const comunes = { proyectoId, nombre, usuario, urlLogin, pasosLogin };
+    const comunes = { proyectoId, nombre, usuario, urlLogin, pasosLogin, indicadorExito };
     const res = await window.qatlas.credenciales.guardar(
       credencial
         ? { ...comunes, credencialId: credencial.id }
@@ -199,6 +282,7 @@ function FormularioCredencial({
         )}
       </Campo>
       <EditorPasos pasos={pasosLogin} onChange={setPasos} />
+      <EditorIndicador indicador={indicadorExito} onChange={setIndicador} />
       {fallo && <Aviso tipo="peligro">No se pudo guardar. Revisá los datos.</Aviso>}
       <div className="flex flex-wrap gap-2.5">
         <Button variant="primary" type="submit" disabled={!completa}>
@@ -212,6 +296,16 @@ function FormularioCredencial({
   );
 }
 
+const MOTIVOS_FALLO_LOGIN = {
+  'no-confirmado': 'El login falló: no se cumplió el indicador de éxito.',
+  'sin-indicador': 'El login no se probó: falta el indicador de éxito.',
+  'credencial-a-revisar': 'El login no se probó: hay que corregir la URL de login.',
+  'sin-autorizacion': 'El login no se probó: el proyecto no tiene una autorización vigente.',
+  ocupado: 'El login no se probó: hay otra ejecución en curso.',
+  'no-se-pudo-ejecutar':
+    'El login no se probó: no se pudo abrir el navegador de pruebas o el proxy.',
+} as const;
+
 function FilaCredencial({
   proyectoId,
   credencial,
@@ -224,7 +318,20 @@ function FilaCredencial({
   const [modo, setModo] = useState<'ver' | 'editar' | 'reemplazar'>('ver');
   const campoSecreto = useCampoSensible();
   const [fallo, setFallo] = useState(false);
-  const proximamenteId = `proximamente-login-${credencial.id}`;
+  const ayudaLoginId = `ayuda-login-${credencial.id}`;
+  const [probando, setProbando] = useState(false);
+  const [prueba, setPrueba] = useState<IpcResponse<'credenciales:probarLogin'> | null>(null);
+
+  const probarLogin = async () => {
+    setProbando(true);
+    setPrueba(null);
+    const res = await window.qatlas.credenciales.probarLogin({
+      proyectoId,
+      credencialId: credencial.id,
+    });
+    setProbando(false);
+    setPrueba(res.ok ? res.data : { resultado: 'fallo', motivo: 'no-se-pudo-ejecutar' });
+  };
 
   const reemplazar = async () => {
     setFallo(false);
@@ -318,6 +425,12 @@ function FilaCredencial({
         </form>
       )}
       {fallo && <Aviso tipo="peligro">No se pudo completar la operación.</Aviso>}
+      {modo === 'ver' && credencial.indicadorExito && (
+        <Aviso>
+          «Probar login» hace un intento real contra el sistema, sin grabarlo. Un intento fallido
+          puede bloquear la cuenta en el sistema probado.
+        </Aviso>
+      )}
       {modo === 'ver' && (
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
@@ -337,13 +450,34 @@ function FilaCredencial({
           <Button variant="ghost" onClick={() => void eliminar()}>
             Eliminar credencial
           </Button>
-          <Button disabled aria-describedby={proximamenteId}>
-            Probar login
+          <Button
+            disabled={!credencial.indicadorExito || credencial.requiereRevision || probando}
+            aria-describedby={ayudaLoginId}
+            onClick={() => void probarLogin()}
+          >
+            {probando ? 'Probando…' : 'Probar login'}
           </Button>
-          <span id={proximamenteId} className="text-[13px] text-muted">
-            Llega en: semana 5
+          <span id={ayudaLoginId} className="text-[13px] text-muted">
+            {credencial.indicadorExito
+              ? `Máximo ${LIMITE_PRUEBAS_LOGIN.intentos} intentos cada ${LIMITE_PRUEBAS_LOGIN.ventanaMinutos} minutos.`
+              : 'Configurá un indicador de éxito para poder probarlo.'}
           </span>
         </div>
+      )}
+      {prueba?.resultado === 'funciono' && (
+        <p role="status" className="rounded-lg bg-ok-bg p-3 text-[13.5px] font-medium text-ok-text">
+          El login funcionó.
+        </p>
+      )}
+      {prueba?.resultado === 'limite' && (
+        <Aviso tipo="peligro">
+          No se hizo ningún intento: llegaste al máximo de {LIMITE_PRUEBAS_LOGIN.intentos} cada{' '}
+          {LIMITE_PRUEBAS_LOGIN.ventanaMinutos} minutos. Podés volver a probar en{' '}
+          {Math.ceil(prueba.esperaSegundos / 60)} min.
+        </Aviso>
+      )}
+      {prueba?.resultado === 'fallo' && (
+        <Aviso tipo="peligro">{MOTIVOS_FALLO_LOGIN[prueba.motivo]}</Aviso>
       )}
     </li>
   );

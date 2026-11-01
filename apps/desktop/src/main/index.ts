@@ -2,8 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, protocol } from 'electron';
-import { DetectorInactividad } from './boveda/inactividad';
+import { conectarActividad, DetectorInactividad } from './boveda/inactividad';
 import type { ServicioBoveda } from './boveda/servicio';
+import type { ServicioEjecuciones } from './ejecuciones/servicio';
+import { limpiarPerfilesHuerfanos } from './ejecuciones/perfiles';
+import { crearLanzador } from './ejecuciones/procesos';
 import type { ServicioProyectos } from './proyectos/servicio';
 import { applyHardening } from './hardening';
 import { registerIpc } from './ipc/register';
@@ -127,10 +130,7 @@ function createMainWindow(): BrowserWindow {
     nativeTheme.off('updated', onThemeChange);
   });
 
-  // Lo escucha el proceso principal, no la interfaz: un XSS no puede evitar el bloqueo.
-  window.webContents.on('input-event', () => {
-    inactividad.registrarActividad(performance.now());
-  });
+  conectarActividad(window.webContents, inactividad, () => performance.now());
 
   window.once('ready-to-show', () => {
     window.show();
@@ -168,6 +168,7 @@ app.on('second-instance', () => {
 async function cargarServicios(): Promise<{
   boveda: ServicioBoveda;
   proyectos: ServicioProyectos;
+  ejecuciones: ServicioEjecuciones;
 } | null> {
   const carpetaDelPaquete = (paquete: string): string =>
     path.dirname(requerir.resolve(`${paquete}/package.json`));
@@ -175,21 +176,42 @@ async function cargarServicios(): Promise<{
 
   const { ServicioBoveda: Servicio } = await import('./boveda/servicio');
   const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
+  const { ServicioEjecuciones: Ejecuciones } = await import('./ejecuciones/servicio');
+  // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
+  const dependientes: { ejecuciones?: ServicioEjecuciones } = {};
   const boveda = new Servicio({
     carpeta: dataDirectory,
+    antesDeBloquear: (base) => {
+      dependientes.ejecuciones?.alBloquearse(base);
+    },
     alBloquear: () => {
       // Las pantallas previas al desbloqueo siguen al sistema: la preferencia está cifrada.
       nativeTheme.themeSource = 'system';
       // Recargar descarta todo el estado de la interfaz: vuelve al desbloqueo sin datos.
       if (!saliendo) mainWindow?.webContents.reload();
     },
-    alDesbloquear: ({ tema, bloqueoMinutos }) => {
+    alDesbloquear: ({ tema, bloqueoMinutos }, base) => {
+      dependientes.ejecuciones?.recuperar(base);
       nativeTheme.themeSource = tema;
       inactividad.cambiarLimite(bloqueoMinutos * MS_POR_MINUTO);
       inactividad.registrarActividad(performance.now());
     },
   });
-  return { boveda, proyectos: new Proyectos(boveda) };
+  const proyectos = new Proyectos(boveda);
+  const ejecuciones = new Ejecuciones(
+    boveda,
+    proyectos,
+    crearLanzador({
+      carpetaDatos: dataDirectory,
+      carpetaCompilada: import.meta.dirname,
+      // Empaquetado, el navegador viaja en el instalador (semana 10). Nunca se descarga solo.
+      rutaNavegadores: app.isPackaged
+        ? path.join(process.resourcesPath, 'navegadores')
+        : process.env.PLAYWRIGHT_BROWSERS_PATH,
+    }),
+  );
+  dependientes.ejecuciones = ejecuciones;
+  return { boveda, proyectos, ejecuciones };
 }
 
 function vigilarBloqueo(boveda: ServicioBoveda): void {
@@ -219,8 +241,9 @@ void app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  const { boveda, proyectos } = servicios;
+  const { boveda, proyectos, ejecuciones } = servicios;
   vigilarBloqueo(boveda);
+  limpiarPerfilesHuerfanos(dataDirectory);
 
   applyHardening({
     devServerOrigin,
@@ -237,6 +260,7 @@ void app.whenReady().then(async () => {
       dataDirectorySynced,
       boveda,
       proyectos,
+      ejecuciones,
       alCambiarBloqueoMinutos: (minutos) => {
         inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
       },

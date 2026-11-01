@@ -49,6 +49,7 @@ export const proyecto = sqliteTable('proyecto', {
   modoDatosSensibles: integer('modo_datos_sensibles', { mode: 'boolean' }).notNull(),
   selectoresSensibles: text('selectores_sensibles', { mode: 'json' }).$type<string[]>().notNull(),
   sistemaInterno: integer('sistema_interno', { mode: 'boolean' }).notNull(),
+  puertosLocales: text('puertos_locales', { mode: 'json' }).$type<number[]>().notNull(),
   permitirLoginHttp: integer('permitir_login_http', { mode: 'boolean' }).notNull(),
   claveProyectoCifrada: blob('clave_proyecto_cifrada', { mode: 'buffer' }).notNull(),
 });
@@ -65,6 +66,7 @@ export const autorizacion = sqliteTable('autorizacion', {
   urlBaseAceptada: text('url_base_aceptada').notNull(),
   dominiosAceptados: text('dominios_aceptados', { mode: 'json' }).$type<string[]>().notNull(),
   sistemaInternoAceptado: integer('sistema_interno_aceptado', { mode: 'boolean' }).notNull(),
+  puertosAceptados: text('puertos_aceptados', { mode: 'json' }).$type<number[]>().notNull(),
   invalidadaEn: text('invalidada_en'),
   // SEG-06, fase 4.
   verificacionDominio: text('verificacion_dominio'),
@@ -82,6 +84,52 @@ export const credencial = sqliteTable('credencial', {
   secretoActualizadoEn: text('secreto_actualizado_en').notNull(),
   urlLogin: text('url_login').notNull(),
   pasosLogin: text('pasos_login', { mode: 'json' }).$type<unknown[]>().notNull(),
+  indicadorExito: text('indicador_exito', { mode: 'json' }).$type<unknown>(),
+});
+
+/** Sin referencia a la credencial: eliminarla no borra el rastro de los intentos ya hechos. */
+export const intentoLogin = sqliteTable('intento_login', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  credencialId: text('credencial_id').notNull(),
+  fecha: text('fecha').notNull(),
+});
+
+/** La cola local: lo que no terminó al cerrar la app se marca fallido al desbloquear. */
+export const ejecucion = sqliteTable('ejecucion', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  tipo: text('tipo', { enum: ['escaneo', 'prueba-login'] }).notNull(),
+  // RN-EJE-01: en la fase 1, el objetivo de una ejecución es su proyecto.
+  objetivoId: text('objetivo_id').notNull(),
+  navegador: text('navegador').notNull(),
+  estado: text('estado', {
+    enum: ['encolada', 'en-curso', 'finalizada', 'fallida', 'cancelada'],
+  }).notNull(),
+  inicio: text('inicio'),
+  fin: text('fin'),
+  resumen: text('resumen', { mode: 'json' }).$type<unknown>().notNull(),
+  programacionId: text('programacion_id'),
+});
+
+/** Solo host y puerto: una ruta o una query pueden tener tokens. Se purga con su proyecto. */
+export const conexion = sqliteTable('conexion', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  ejecucionId: text('ejecucion_id')
+    .notNull()
+    .references(() => ejecucion.id),
+  fecha: text('fecha').notNull(),
+  proceso: text('proceso', { enum: ['proxy', 'navegador', 'runner'] }).notNull(),
+  destino: text('destino').notNull(),
+  permitida: integer('permitida', { mode: 'boolean' }).notNull(),
+  regla: text('regla').notNull(),
 });
 
 /**

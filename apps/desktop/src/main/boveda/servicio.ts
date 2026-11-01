@@ -59,8 +59,10 @@ export interface OpcionesServicio {
   carpeta: string;
   /** Se ejecuta después de cada bloqueo, con las claves ya borradas. */
   alBloquear?: () => void;
+  /** Se ejecuta antes de cerrar la base: lo último que se puede guardar. */
+  antesDeBloquear?: (base: BaseCifrada) => void;
   /** Se ejecuta después de abrir la base, con su configuración. */
-  alDesbloquear?: (configuracion: Configuracion) => void;
+  alDesbloquear?: (configuracion: Configuracion, base: BaseCifrada) => void;
   ahora?: () => number;
   /** Solo para tests: tablas de proyecto a purgar. */
   tablasDeProyecto?: readonly string[];
@@ -145,7 +147,7 @@ export class ServicioBoveda {
       migrar(base);
       verificarIntegridad(base);
       completarBorradosPendientes(base);
-      this.opciones.alDesbloquear?.(leerConfiguracion(base));
+      this.opciones.alDesbloquear?.(leerConfiguracion(base), base);
     } catch (error) {
       base.close();
       throw error;
@@ -247,6 +249,12 @@ export class ServicioBoveda {
   bloquear(): void {
     this.generacion += 1;
     const estabaAbierta = this.base !== null;
+    try {
+      // Un fallo acá no puede impedir el bloqueo.
+      if (this.base) this.opciones.antesDeBloquear?.(this.base);
+    } catch {
+      // Lo que no se llegó a guardar se marca como interrumpido al desbloquear.
+    }
     try {
       this.base?.close();
     } finally {

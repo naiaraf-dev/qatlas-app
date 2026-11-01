@@ -49,6 +49,13 @@ const api: QatlasApi = {
     guardar: (req) => invoke('credenciales:guardar', req),
     reemplazarSecreto: (req) => invoke('credenciales:reemplazarSecreto', req),
     eliminar: (req) => invoke('credenciales:eliminar', req),
+    probarLogin: (req) => invoke('credenciales:probarLogin', req),
+  },
+  ejecuciones: {
+    lanzarEscaneo: (req) => invoke('ejecuciones:lanzarEscaneo', req),
+    cancelar: (req) => invoke('ejecuciones:cancelar', req),
+    listar: (req) => invoke('ejecuciones:listar', req),
+    detalle: (req) => invoke('ejecuciones:detalle', req),
   },
 };
 

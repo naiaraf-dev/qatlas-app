@@ -22,6 +22,7 @@ import {
   numerosValidos,
 } from './comunes';
 import { Credenciales } from './Credenciales';
+import { Ejecuciones } from './Ejecuciones';
 
 export type VistaProyectos =
   | { tipo: 'lista' }
@@ -190,6 +191,9 @@ function Detalle({
         <dl className="flex flex-col gap-3">
           <Dato etiqueta="URL base">{proyecto.urlBase}</Dato>
           <Dato etiqueta="Dominios permitidos">{aLineas(proyecto.dominios)}</Dato>
+          <Dato etiqueta="Puertos locales adicionales">
+            {proyecto.puertosLocales.length > 0 ? proyecto.puertosLocales.join(', ') : 'Ninguno'}
+          </Dato>
           <Dato etiqueta="Sistema interno">{siNo(proyecto.sistemaInterno)}</Dato>
           <Dato etiqueta="Permitir login sin cifrar (http)">
             {siNo(proyecto.permitirLoginHttp)}
@@ -207,6 +211,8 @@ function Detalle({
           <Dato etiqueta="Modo datos sensibles">{siNo(proyecto.modoDatosSensibles)}</Dato>
         </dl>
       </Card>
+
+      <Ejecuciones proyecto={proyecto} />
 
       <Credenciales
         proyectoId={proyecto.id}
@@ -332,6 +338,7 @@ function aEntrada(detalle: ProyectoDetalle): ProyectoEntrada {
     descripcion: detalle.descripcion,
     urlBase: detalle.urlBase,
     dominios: detalle.dominios,
+    puertosLocales: detalle.puertosLocales,
     maxRps: detalle.maxRps,
     maxPaginas: detalle.maxPaginas,
     maxProfundidad: detalle.maxProfundidad,
@@ -373,7 +380,8 @@ function Edicion({ id, onListo }: { id: string; onListo: () => void }) {
   const alcanceCambiado =
     valor.urlBase !== original.urlBase ||
     dominiosTexto !== aLineas(original.dominios) ||
-    valor.sistemaInterno !== original.sistemaInterno;
+    valor.sistemaInterno !== original.sistemaInterno ||
+    valor.puertosLocales.join() !== original.puertosLocales.join();
 
   const guardar = async () => {
     setFallo(false);

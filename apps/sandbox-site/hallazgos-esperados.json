@@ -93,6 +93,13 @@
       "url": "/formulario/enviar",
       "origen": "/formulario",
       "detalle": "En modo solo lectura este POST debe bloquearse"
+    },
+    {
+      "id": "post-automatico",
+      "metodo": "POST",
+      "url": "/formulario/enviar",
+      "origen": "/auto-post",
+      "detalle": "Un fetch POST que se dispara solo al cargar: debe bloquearse"
     }
   ],
   "exclusiones": [
@@ -109,6 +116,20 @@
       "url": "/eliminar-cuenta",
       "origen": "/panel",
       "detalle": "El crawler no debe visitarlo"
+    },
+    {
+      "id": "trampa-inicio-cerrar-sesion",
+      "texto": "Cerrar sesión",
+      "url": "/cerrar-sesion",
+      "origen": "/",
+      "detalle": "También en la página de inicio, para el recorrido de la semana 5"
+    },
+    {
+      "id": "trampa-inicio-eliminar",
+      "texto": "Eliminar cuenta",
+      "url": "/eliminar-cuenta",
+      "origen": "/",
+      "detalle": "También en la página de inicio, para el recorrido de la semana 5"
     }
   ],
   "fugas": [
@@ -132,6 +153,55 @@
       "origen": "/fuga",
       "host": "api.fuga.invalid",
       "detalle": "Envío de datos con fetch"
+    },
+    {
+      "id": "fuga-redireccion",
+      "tipo": "redireccion",
+      "origen": "/redirige-afuera",
+      "host": "redireccion.fuga.test",
+      "detalle": "Redirección 302 a otro dominio"
+    },
+    {
+      "id": "fuga-websocket",
+      "tipo": "websocket",
+      "origen": "/websocket-externo",
+      "host": "ws.fuga.example",
+      "detalle": "WebSocket a un dominio externo"
+    },
+    {
+      "id": "fuga-service-worker",
+      "tipo": "service-worker",
+      "origen": "/service-worker",
+      "host": "sw.fuga.invalid",
+      "detalle": "Un service worker que intenta salir por su cuenta"
+    }
+  ],
+  "puertosLocales": [
+    {
+      "id": "api-segundo-puerto",
+      "origen": "/api-en-otro-puerto",
+      "detalle": "API en un segundo puerto local: llega solo si está declarado"
+    },
+    {
+      "id": "puerto-no-declarado",
+      "origen": "/puerto-no-declarado",
+      "detalle": "Otro servicio local: nunca debe recibir nada"
+    }
+  ],
+  "fugasUdp": [
+    {
+      "id": "fuga-webrtc",
+      "tipo": "webrtc",
+      "origen": "/webrtc",
+      "host": "stun.fuga.test",
+      "detalle": "STUN/ICE por UDP, hacia el receptor del sandbox. Tampoco debe exponer una IP local"
+    },
+    {
+      "id": "fuga-quic",
+      "tipo": "quic",
+      "origen": "/quic",
+      "host": "quic.fuga.test",
+      "detalle": "HTTP3 sobre UDP, hacia el receptor del sandbox"
     }
   ]
 }

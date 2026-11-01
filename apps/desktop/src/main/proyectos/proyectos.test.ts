@@ -28,6 +28,7 @@ const ENTRADA: ProyectoEntrada = {
   descripcion: 'Entorno de prueba',
   urlBase: 'https://app.lexora.test/',
   dominios: ['app.lexora.test'],
+  puertosLocales: [],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
 };
@@ -332,6 +333,7 @@ describe('Credenciales (RN-PRY-04)', () => {
       usuario: 'ana@example.com',
       urlLogin: 'https://app.lexora.test/login',
       pasosLogin: CREDENCIAL.pasosLogin,
+      indicadorExito: null,
       secretoConfigurado: true,
       secretoActualizadoEn: expect.any(String) as string,
       requiereRevision: false,
@@ -605,5 +607,89 @@ describe('Bóveda bloqueada (RN-BOV-03)', () => {
     await expect(proyectos.usarSecreto(id, credencialId, () => 'x')).rejects.toThrow(
       BovedaBloqueada,
     );
+  });
+});
+
+describe('Puertos locales (ajuste de la semana 5)', () => {
+  const LOCAL: ProyectoEntrada = {
+    ...ENTRADA,
+    urlBase: 'http://localhost:5173/',
+    dominios: ['localhost'],
+  };
+
+  it('se normalizan y quedan en el alcance aceptado', () => {
+    const id = crear({ ...LOCAL, puertosLocales: [8080, 3000, 3000] });
+    expect(detalle(id).puertosLocales).toEqual([3000, 8080]);
+    expect(detalle(id).declaracion.texto).toContain('(puertos locales: 3000, 8080)');
+    expect(proyectos.estadoAutorizacion(id)).toEqual({ vigente: true });
+  });
+
+  it('agregar uno invalida la autorización y queda en la auditoría', () => {
+    const id = crear(LOCAL);
+    const res = proyectos.actualizar(id, { ...LOCAL, puertosLocales: [3000] });
+    expect(res).toMatchObject({
+      resultado: 'actualizado',
+      autorizacion: { vigente: false, motivo: 'alcance-cambiado' },
+    });
+    expect(acciones()).toContainEqual(['proyecto.editar', ['puertosLocales']]);
+    expect(acciones()).toContainEqual(['autorizacion.invalidar', ['puertosLocales']]);
+    expect(reaceptar(id)).toEqual({ resultado: 'aceptada' });
+    expect(proyectos.estadoAutorizacion(id)).toEqual({ vigente: true });
+  });
+
+  it('la auditoría guarda el campo, no los números', () => {
+    const id = crear(LOCAL);
+    proyectos.actualizar(id, { ...LOCAL, puertosLocales: [39417] });
+    expect(JSON.stringify(acceso((base) => leerAuditoria(base)))).not.toContain('39417');
+  });
+
+  it('sin un host local en la lista, se rechazan', () => {
+    const declaracion = proyectos.validar({
+      ...ENTRADA,
+      urlBase: 'https://app.example.com/',
+      dominios: ['app.example.com'],
+      puertosLocales: [3000],
+    });
+    expect(declaracion.errores).toEqual([
+      { campo: 'puertosLocales', motivo: 'puertos-sin-host-local' },
+    ]);
+  });
+
+  it('sin puertos extra, el texto de la declaración no cambia', () => {
+    const id = crear(LOCAL);
+    expect(detalle(id).declaracion.texto).not.toContain('puertos locales');
+  });
+});
+
+describe('Indicador de éxito', () => {
+  it('se guarda, se edita y llega al resumen', () => {
+    const id = crear();
+    const res = proyectos.guardarCredencial({
+      proyectoId: id,
+      ...CREDENCIAL,
+      secreto: SECRETO,
+      indicadorExito: { tipo: 'url', patron: 'https://app.lexora.test/panel*' },
+    });
+    if (res.resultado !== 'guardada') throw new Error('No se guardó');
+    expect(detalle(id).credenciales[0]?.indicadorExito).toEqual({
+      tipo: 'url',
+      patron: 'https://app.lexora.test/panel*',
+    });
+    proyectos.guardarCredencial({
+      proyectoId: id,
+      credencialId: res.credencialId,
+      ...CREDENCIAL,
+      indicadorExito: { tipo: 'desaparece', selector: 'form' },
+    });
+    expect(detalle(id).credenciales[0]?.indicadorExito).toEqual({
+      tipo: 'desaparece',
+      selector: 'form',
+    });
+  });
+
+  it('una credencial sin indicador queda en null', () => {
+    const id = crear();
+    guardarCredencial(id);
+    expect(detalle(id).credenciales[0]?.indicadorExito).toBeNull();
   });
 });

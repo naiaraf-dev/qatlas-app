@@ -266,6 +266,7 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     modoDatosSensibles: false,
     selectoresSensibles: [],
     sistemaInterno: false,
+    puertosLocales: [],
     permitirLoginHttp: false,
   };
   const ACEPTACION = { aceptada: true, version: 1, texto: 'x' };
@@ -282,6 +283,7 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [],
+    indicadorExito: null,
     secretoConfigurado: true,
     secretoActualizadoEn: '2026-10-30T12:00:00.000Z',
     requiereRevision: false,
@@ -512,7 +514,7 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     const nuevos = IPC_CHANNELS.filter(
       (canal) => canal.startsWith('proyectos:') || canal.startsWith('credenciales:'),
     );
-    expect(nuevos).toHaveLength(10);
+    expect(nuevos).toHaveLength(11);
     for (const canal of nuevos) expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
   });
 
@@ -541,10 +543,6 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     await handler(fromApp, { proyectoId: 'no', credencialId: OTRO_ID, secreto: 'CANARIO' });
     expect(rechazos).toEqual(['credenciales:reemplazarSecreto:ENTRADA_INVALIDA']);
   });
-
-  it('la prueba de login no tiene canal hasta la semana 5', () => {
-    expect(IPC_CHANNELS).not.toContain('credenciales:probarLogin');
-  });
 });
 
 describe('TS-08 · Canal de apariencia', () => {
@@ -566,5 +564,131 @@ describe('TS-08 · Canal de apariencia', () => {
     ['tipo incorrecto', { preference: 1 }],
   ])('rechaza: %s', async (_label, payload) => {
     expect(await handler(fromApp, payload)).toEqual({ ok: false, error: 'ENTRADA_INVALIDA' });
+  });
+});
+
+describe('TS-08 · Ejecuciones y prueba de login', () => {
+  const ID_VALIDO = '00000000-0000-4000-8000-000000000001';
+  const entrada = (canal: IpcChannel) => ipcContract[canal].request;
+
+  it.each([
+    'credenciales:probarLogin',
+    'ejecuciones:lanzarEscaneo',
+    'ejecuciones:cancelar',
+    'ejecuciones:listar',
+    'ejecuciones:detalle',
+  ] as const)('%s queda bloqueado con la bóveda bloqueada', (canal) => {
+    expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
+  });
+
+  it('ningún canal acepta una ruta ni una URL de destino', () => {
+    expect(
+      entrada('ejecuciones:lanzarEscaneo').safeParse({
+        proyectoId: ID_VALIDO,
+        urlBase: 'https://evil.example/',
+      }).success,
+    ).toBe(false);
+    expect(
+      entrada('credenciales:probarLogin').safeParse({
+        proyectoId: ID_VALIDO,
+        credencialId: ID_VALIDO,
+        secreto: 'x',
+      }).success,
+    ).toBe(false);
+    expect(entrada('ejecuciones:cancelar').safeParse({ ejecucionId: 'no-uuid' }).success).toBe(
+      false,
+    );
+  });
+
+  it('probar login devuelve solo un resultado: ningún contenido de la página', () => {
+    const salida = ipcContract['credenciales:probarLogin'].response;
+    expect(salida.safeParse({ resultado: 'funciono' }).success).toBe(true);
+    expect(salida.safeParse({ resultado: 'fallo', motivo: 'no-confirmado' }).success).toBe(true);
+    expect(salida.safeParse({ resultado: 'limite', esperaSegundos: 60 }).success).toBe(true);
+    expect(salida.safeParse({ resultado: 'limite', esperaSegundos: 0 }).success).toBe(false);
+    expect(salida.safeParse({ resultado: 'funciono', titulo: 'Panel' }).success).toBe(false);
+    expect(salida.safeParse({ resultado: 'fallo', motivo: 'la página decía esto' }).success).toBe(
+      false,
+    );
+    expect(
+      salida.safeParse({ resultado: 'fallo', motivo: 'no-confirmado', html: '<p>' }).success,
+    ).toBe(false);
+  });
+
+  it('una conexión en el detalle no lleva más que host y puerto: no hay campo de ruta', () => {
+    const salida = ipcContract['ejecuciones:detalle'].response;
+    const ejecucion = {
+      id: ID_VALIDO,
+      tipo: 'escaneo',
+      estado: 'finalizada',
+      inicio: null,
+      fin: null,
+      resumen: {
+        paginasVisitadas: 0,
+        linksExcluidos: 0,
+        conexionesPermitidas: 0,
+        conexionesBloqueadas: 0,
+        motivo: null,
+      },
+    };
+    const conexion = {
+      fecha: 'x',
+      proceso: 'proxy',
+      destino: 'evil.example:443',
+      permitida: false,
+      regla: 'fuera-de-dominios',
+    };
+    expect(salida.safeParse({ ejecucion, conexiones: [conexion] }).success).toBe(true);
+    expect(
+      salida.safeParse({ ejecucion, conexiones: [{ ...conexion, ruta: '/x?token=abc' }] }).success,
+    ).toBe(false);
+  });
+
+  it('el indicador de éxito es una de tres formas, sin código', () => {
+    const guardar = entrada('credenciales:guardar');
+    const base = {
+      proyectoId: ID_VALIDO,
+      nombre: 'Prueba',
+      usuario: 'ana@example.com',
+      urlLogin: 'https://app.lexora.test/login',
+      pasosLogin: [],
+      secreto: 'x',
+    };
+    expect(
+      guardar.safeParse({ ...base, indicadorExito: { tipo: 'aparece', selector: '#a' } }).success,
+    ).toBe(true);
+    expect(guardar.safeParse(base).success).toBe(true);
+    expect(
+      guardar.safeParse({ ...base, indicadorExito: { tipo: 'evaluar', codigo: 'x' } }).success,
+    ).toBe(false);
+    expect(
+      guardar.safeParse({ ...base, indicadorExito: { tipo: 'url', patron: '' } }).success,
+    ).toBe(false);
+  });
+
+  it('los puertos locales son enteros de 1 a 65535', () => {
+    const validar = entrada('proyectos:validar');
+    const proyecto = {
+      nombre: 'x',
+      descripcion: '',
+      urlBase: 'http://localhost:1/',
+      dominios: ['localhost'],
+      maxRps: 2,
+      maxPaginas: 1,
+      maxProfundidad: 1,
+      timeoutPaginaSegundos: 1,
+      soloLectura: true,
+      exclusiones: [],
+      modoDatosSensibles: false,
+      selectoresSensibles: [],
+      sistemaInterno: false,
+      permitirLoginHttp: false,
+    };
+    expect(validar.safeParse({ proyecto: { ...proyecto, puertosLocales: [3000] } }).success).toBe(
+      true,
+    );
+    for (const puertosLocales of [[0], [65536], [1.5], ['3000'], [-1]]) {
+      expect(validar.safeParse({ proyecto: { ...proyecto, puertosLocales } }).success).toBe(false);
+    }
   });
 });

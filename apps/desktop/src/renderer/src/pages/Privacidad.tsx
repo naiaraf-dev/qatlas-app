@@ -136,7 +136,7 @@ function ConnectionsTable({
 }) {
   return (
     <Card
-      title="Conexiones registradas por el proceso principal"
+      title="Conexiones registradas"
       action={
         <Button variant="ghost" icon="refresh" onClick={() => void onRefresh()}>
           Actualizar
@@ -154,6 +154,7 @@ function ConnectionsTable({
             <thead className="text-muted">
               <tr>
                 <th className="py-2 pr-3 font-medium">Hora</th>
+                <th className="px-3 py-2 font-medium">Proceso</th>
                 <th className="px-3 py-2 font-medium">Destino</th>
                 <th className="px-3 py-2 font-medium">Estado</th>
                 <th className="px-3 py-2 font-medium">Regla</th>
@@ -165,6 +166,7 @@ function ConnectionsTable({
                   <td className="py-2.5 pr-3 text-text-2">
                     {new Date(c.timestamp).toLocaleTimeString('es-AR')}
                   </td>
+                  <td className="px-3 py-2.5 text-text-2">{c.origin}</td>
                   <td className="px-3 py-2.5 font-mono text-[12.5px] break-all">{c.destination}</td>
                   <td
                     className={cx(

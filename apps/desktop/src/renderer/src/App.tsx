@@ -70,7 +70,7 @@ function Principal({
   const [connections, setConnections] = useState<ConnectionEntry[]>([]);
 
   const refreshConnections = useCallback(async () => {
-    const res = await window.qatlas.privacy.listConnections({ limit: 50 });
+    const res = await window.qatlas.privacy.listConnections({ limit: 200 });
     if (res.ok) setConnections(res.data);
   }, []);
 

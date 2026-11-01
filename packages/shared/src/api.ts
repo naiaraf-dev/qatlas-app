@@ -65,5 +65,22 @@ export interface QatlasApi {
     eliminar(
       req: IpcRequest<'credenciales:eliminar'>,
     ): Promise<IpcResult<IpcResponse<'credenciales:eliminar'>>>;
+    probarLogin(
+      req: IpcRequest<'credenciales:probarLogin'>,
+    ): Promise<IpcResult<IpcResponse<'credenciales:probarLogin'>>>;
+  };
+  ejecuciones: {
+    lanzarEscaneo(
+      req: IpcRequest<'ejecuciones:lanzarEscaneo'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:lanzarEscaneo'>>>;
+    cancelar(
+      req: IpcRequest<'ejecuciones:cancelar'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:cancelar'>>>;
+    listar(
+      req: IpcRequest<'ejecuciones:listar'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:listar'>>>;
+    detalle(
+      req: IpcRequest<'ejecuciones:detalle'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:detalle'>>>;
   };
 }

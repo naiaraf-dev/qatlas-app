@@ -27,6 +27,7 @@ const ENTRADA: ProyectoEntrada = {
   descripcion: '',
   urlBase: 'https://app.lexora.test/',
   dominios: ['app.lexora.test'],
+  puertosLocales: [],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
 };

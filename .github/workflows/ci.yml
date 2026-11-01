@@ -84,6 +84,13 @@ jobs:
       - name: Scripts de instalación permitidos (binario de Electron)
         run: npm run setup:native
       - run: npm run build
+      # Versión exacta de Playwright, y el hash se compara con la primera descarga (ADR 020).
+      - name: Navegador de pruebas
+        run: npx playwright install --with-deps --no-shell chromium
+      # Ubuntu 24.04 restringe los espacios de nombres sin privilegios, y el sandbox de Chromium los
+      # necesita. El navegador de pruebas nunca corre con --no-sandbox (ADR 017).
+      - name: Sandbox de Chromium
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Tests E2E
         run: xvfb-run -a npm run test:e2e
       # El repo es público y estos artifacts también: cualquiera puede descargarlos mientras duran.

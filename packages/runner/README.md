@@ -1,10 +1,15 @@
-# Motor de pruebas
+# Motor de pruebas y proxy de salida
 
-> **Pendiente:** Fase 1, semanas 5 y 6. Esta carpeta se reserva para mantener la estructura del monorepo.
+- `src/red`: las reglas de salida, el proxy y el agente de Node. El proxy corre en su propio
+  `utilityProcess`, sin claves ni base.
+- `src/motor`: el navegador de pruebas y lo que hace con él. Corre en un `utilityProcess` por ejecución.
+  No importa red, `child_process` ni `electron`: `security-tests/runner-aislamiento.test.ts` lo verifica.
+- `src/protocolo.ts`: lo que estos procesos y el principal se mandan, con esquemas estrictos.
 
-Playwright en un utilityProcess aislado, proxy de salida con lista permitida, crawler y chequeos del escaneo.
+El crawler y los chequeos del escaneo llegan en la semana 6. Por ahora, una ejecución abre la URL base y
+sigue los links de esa página.
 
-Especificación: `docs/especificacion-qatlas.md`, sección 3.5, 3.7 y 6.3.
-
-Cuando se implemente, este paquete necesita `package.json`, `tsconfig.json`, tests unitarios y,
-si corresponde, su test en `security-tests/`.
+Decisiones: [ADR 016](../../docs/decisiones/016-proxy-de-salida.md),
+[017](../../docs/decisiones/017-aislamiento-del-runner.md),
+[018](../../docs/decisiones/018-perfil-del-navegador.md) y
+[020](../../docs/decisiones/020-navegador-de-pruebas.md).
