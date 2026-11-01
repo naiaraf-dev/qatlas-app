@@ -67,7 +67,16 @@ test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
     require: 'undefined',
     process: 'undefined',
     module: 'undefined',
-    apiKeys: ['app', 'appearance', 'credenciales', 'privacy', 'proyectos', 'security', 'vault'],
+    apiKeys: [
+      'app',
+      'appearance',
+      'credenciales',
+      'ejecuciones',
+      'privacy',
+      'proyectos',
+      'security',
+      'vault',
+    ],
     apiFrozen: true,
   });
 });

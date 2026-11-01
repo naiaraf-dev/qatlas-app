@@ -288,31 +288,66 @@ test('los minutos de bloqueo se configuran, y una restauración vuelve a los de 
   await expect(page.getByLabel('Minutos sin actividad')).toHaveValue('15');
 });
 
+/** Aísla la ventana del mouse y del teclado reales del equipo, solo durante una espera. */
+async function aislarVentana(): Promise<() => Promise<void>> {
+  // La ventana está visible en el equipo: un movimiento del mouse encima o una tecla real
+  // reiniciarían el contador. setFocusable solo existe en Windows y macOS; en Linux el CI corre bajo
+  // xvfb, sin teclado real.
+  await app.evaluate(({ BrowserWindow }) => {
+    const ventana = BrowserWindow.getAllWindows()[0];
+    ventana?.setIgnoreMouseEvents(true);
+    if (process.platform !== 'linux') ventana?.setFocusable(false);
+    ventana?.blur();
+  });
+  // Windows quita el foco de forma asíncrona.
+  if (process.platform === 'win32') {
+    await expect
+      .poll(() =>
+        app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocused()),
+      )
+      .toBe(false);
+  }
+  return async () => {
+    await app.evaluate(({ BrowserWindow }) => {
+      const ventana = BrowserWindow.getAllWindows()[0];
+      ventana?.setIgnoreMouseEvents(false);
+      if (process.platform !== 'linux') ventana?.setFocusable(true);
+    });
+  };
+}
+
 test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', async () => {
   test.setTimeout(120_000);
   const minutos = page.getByLabel('Minutos sin actividad');
   await minutos.fill('1');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();
-  // La ventana está visible en el equipo: un movimiento del mouse encima o una tecla real
-  // reiniciarían el contador. setFocusable solo existe en Windows y macOS; en Linux el CI corre bajo
-  // xvfb, sin teclado real.
-  const enfocada = await app.evaluate(({ BrowserWindow }) => {
-    const ventana = BrowserWindow.getAllWindows()[0];
-    ventana?.setIgnoreMouseEvents(true);
-    if (process.platform !== 'linux') ventana?.setFocusable(false);
-    ventana?.blur();
-    return ventana?.isFocused();
-  });
-  if (process.platform === 'win32') expect(enfocada).toBe(false);
+  const restaurar = await aislarVentana();
   try {
     await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 90_000 });
   } finally {
-    await app.evaluate(({ BrowserWindow }) => {
-      const ventana = BrowserWindow.getAllWindows()[0];
-      ventana?.setIgnoreMouseEvents(false);
-      if (process.platform !== 'linux') ventana?.setFocusable(true);
-    });
+    await restaurar();
+  }
+});
+
+test('la actividad reinicia el contador: una tecla a los 40 s la deja abierta a los 70 s', async () => {
+  test.setTimeout(180_000);
+  await desbloquear();
+  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+  const inicio = Date.now();
+  const hasta = (segundos: number) => page.waitForTimeout(segundos * 1000 - (Date.now() - inicio));
+  const restaurar = await aislarVentana();
+  try {
+    await hasta(40);
+    await page.keyboard.press('Shift');
+    await hasta(70);
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+    await expect(titulo('Bóveda bloqueada')).toHaveCount(0);
+    // 60 s después de la tecla, más el intervalo de 5 s con el que se revisa.
+    await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 45_000 });
+    expect(Date.now() - inicio).toBeGreaterThanOrEqual(99_000);
+  } finally {
+    await restaurar();
   }
 });
 

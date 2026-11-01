@@ -153,9 +153,9 @@ test('credenciales: guarda el secreto y solo muestra "configurado"', async () =>
   expect(await page.content()).not.toContain(SECRETO);
 });
 
-test('"Probar login" está visible y deshabilitado, con cuándo llega', async () => {
+test('sin indicador de éxito, "Probar login" no está disponible y dice por qué', async () => {
   await expect(boton('Probar login')).toBeDisabled();
-  await expect(page.getByText('Llega en: semana 5')).toBeVisible();
+  await expect(page.getByText('Configurá un indicador de éxito')).toBeVisible();
 });
 
 test('el secreto se puede reemplazar, nunca ver', async () => {
