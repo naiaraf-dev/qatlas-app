@@ -229,7 +229,9 @@ describe('Archivos · nonces', () => {
       vistos.add((await cifrar(Buffer.alloc(1))).toString('hex', 5, CABECERA));
     }
     expect(vistos.size).toBe(archivos);
-  });
+    // Mide unicidad, no velocidad. Tarda 0,7 s solo y 3 s con la suite en paralelo: 5 s no alcanzan con
+    // algo más de carga en el equipo.
+  }, 60_000);
 
   it('el último bloque nunca usa el nonce de uno intermedio', () => {
     const prefijo = Buffer.alloc(7, 1);
