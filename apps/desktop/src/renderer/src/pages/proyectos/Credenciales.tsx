@@ -6,6 +6,7 @@ import type {
   IpcResponse,
   PasoLogin,
 } from '@qatlas/shared';
+import { LIMITE_PRUEBAS_LOGIN } from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
@@ -424,6 +425,12 @@ function FilaCredencial({
         </form>
       )}
       {fallo && <Aviso tipo="peligro">No se pudo completar la operación.</Aviso>}
+      {modo === 'ver' && credencial.indicadorExito && (
+        <Aviso>
+          «Probar login» hace un intento real contra el sistema, sin grabarlo. Un intento fallido
+          puede bloquear la cuenta en el sistema probado.
+        </Aviso>
+      )}
       {modo === 'ver' && (
         <div className="flex flex-wrap items-center gap-2.5">
           <Button
@@ -452,7 +459,7 @@ function FilaCredencial({
           </Button>
           <span id={ayudaLoginId} className="text-[13px] text-muted">
             {credencial.indicadorExito
-              ? 'Hace un intento real de login, sin grabarlo.'
+              ? `Máximo ${LIMITE_PRUEBAS_LOGIN.intentos} intentos cada ${LIMITE_PRUEBAS_LOGIN.ventanaMinutos} minutos.`
               : 'Configurá un indicador de éxito para poder probarlo.'}
           </span>
         </div>
@@ -461,6 +468,13 @@ function FilaCredencial({
         <p role="status" className="rounded-lg bg-ok-bg p-3 text-[13.5px] font-medium text-ok-text">
           El login funcionó.
         </p>
+      )}
+      {prueba?.resultado === 'limite' && (
+        <Aviso tipo="peligro">
+          No se hizo ningún intento: llegaste al máximo de {LIMITE_PRUEBAS_LOGIN.intentos} cada{' '}
+          {LIMITE_PRUEBAS_LOGIN.ventanaMinutos} minutos. Podés volver a probar en{' '}
+          {Math.ceil(prueba.esperaSegundos / 60)} min.
+        </Aviso>
       )}
       {prueba?.resultado === 'fallo' && (
         <Aviso tipo="peligro">{MOTIVOS_FALLO_LOGIN[prueba.motivo]}</Aviso>

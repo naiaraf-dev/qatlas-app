@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BaseCifrada } from './conexion';
 import {
@@ -8,6 +8,7 @@ import {
   conexion,
   credencial,
   ejecucion,
+  intentoLogin,
   proyecto,
   type DetalleAuditoria,
 } from './esquema';
@@ -268,6 +269,31 @@ export function leerUltimasConexiones(base: BaseCifrada, limite: number): FilaCo
     .orderBy(desc(sql`rowid`))
     .limit(limite)
     .all();
+}
+
+export function registrarIntentoLogin(
+  base: BaseCifrada,
+  fila: { proyectoId: string; credencialId: string; fecha: string },
+): void {
+  orm(base)
+    .insert(intentoLogin)
+    .values({ ...fila, id: randomUUID(), ...marcas(fila.fecha) })
+    .run();
+}
+
+/** Las fechas de los intentos desde `desde`, de la más vieja a la más nueva. */
+export function leerIntentosLogin(
+  base: BaseCifrada,
+  credencialId: string,
+  desde: string,
+): string[] {
+  return orm(base)
+    .select({ fecha: intentoLogin.fecha })
+    .from(intentoLogin)
+    .where(and(eq(intentoLogin.credencialId, credencialId), gte(intentoLogin.fecha, desde)))
+    .orderBy(asc(intentoLogin.fecha))
+    .all()
+    .map(({ fecha }) => fecha);
 }
 
 export function leerAuditoria(base: BaseCifrada): FilaAuditoria[] {

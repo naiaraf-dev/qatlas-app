@@ -87,6 +87,16 @@ export const credencial = sqliteTable('credencial', {
   indicadorExito: text('indicador_exito', { mode: 'json' }).$type<unknown>(),
 });
 
+/** Sin referencia a la credencial: eliminarla no borra el rastro de los intentos ya hechos. */
+export const intentoLogin = sqliteTable('intento_login', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  credencialId: text('credencial_id').notNull(),
+  fecha: text('fecha').notNull(),
+});
+
 /** La cola local: lo que no terminó al cerrar la app se marca fallido al desbloquear. */
 export const ejecucion = sqliteTable('ejecucion', {
   ...comunes,

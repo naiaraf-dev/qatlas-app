@@ -45,6 +45,8 @@ export {
   leerEjecuciones,
   leerEjecucionesActivas,
   leerUltimasConexiones,
+  leerIntentosLogin,
+  registrarIntentoLogin,
   agregarCredencial,
   borrarCredencial,
   insertarProyecto,

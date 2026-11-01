@@ -29,6 +29,7 @@ export const CONFIGURACION_POR_DEFECTO: Readonly<Configuracion> = {
  * nombres fijos del código, nunca datos. La fila de `proyecto`, con la clave, se borra al final.
  */
 export const TABLAS_DE_PROYECTO: readonly string[] = [
+  'intento_login',
   'conexion',
   'ejecucion',
   'credencial',

@@ -134,6 +134,20 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX conexion_ejecucion ON conexion(ejecucion_id);
     `,
   },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE intento_login (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        credencial_id TEXT NOT NULL,
+        fecha TEXT NOT NULL
+      );
+      CREATE INDEX intento_login_credencial ON intento_login(credencial_id, fecha);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

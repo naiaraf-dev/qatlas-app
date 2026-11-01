@@ -153,6 +153,8 @@ test('una ejecución abre la URL base, sigue los links y no deja salir nada', as
   expect(sitio.registro.fugas).toEqual([]);
   expect(sitio.registro.puertoNoDeclarado).toEqual([]);
   expect(sitio.registro.serviceWorkers).toEqual([]);
+  // Pasó por /webrtc: nada salió por UDP, en la app real.
+  expect(sitio.registro.udp).toEqual([]);
   // TS-05: el recorrido no visitó las trampas ni dejó pasar el POST automático.
   expect(sitio.registro.trampas).toEqual([]);
   expect(sitio.registro.posts).toEqual([]);
@@ -407,6 +409,33 @@ test.describe('Probar login', () => {
     ).toContainText('El login falló: no se cumplió el indicador de éxito.', { timeout: 60_000 });
     await expect(credencial.getByRole('status')).toHaveCount(0);
     await expect(credencial).not.toContainText('Iniciar sesión');
+  });
+
+  test('el aviso se ve antes de probar: un intento fallido puede bloquear la cuenta', async () => {
+    const credencial = fila('Mala');
+    await expect(credencial).toContainText('puede bloquear la cuenta en el sistema probado');
+    await expect(credencial).toContainText('Máximo 3 intentos cada 15 minutos');
+  });
+
+  test('el cuarto intento no llega al sistema probado, y lo dice', async () => {
+    test.setTimeout(90_000);
+    const credencial = fila('Mala');
+    const boton = credencial.getByRole('button', { name: 'Probar login' });
+    const antes = sitio.registro.intentosLogin.length;
+    for (let i = 0; i < 2; i++) {
+      await boton.click();
+      // Mientras prueba, el botón se llama «Probando…»: este localizador lo encuentra de nuevo al terminar.
+      await expect.poll(() => sitio.registro.intentosLogin.length).toBe(antes + i + 1);
+      await expect(boton).toBeEnabled({ timeout: 30_000 });
+      await expect(credencial).toContainText('El login falló');
+    }
+    expect(sitio.registro.intentosLogin.length).toBe(antes + 2);
+    await boton.click();
+    await expect(credencial).toContainText('No se hizo ningún intento', { timeout: 30_000 });
+    await expect(credencial).toContainText(/Podés volver a probar en \d+ min/);
+    expect(sitio.registro.intentosLogin.length).toBe(antes + 2);
+    // Otra credencial del mismo proyecto no se ve afectada.
+    await expect(fila('Buena').getByRole('button', { name: 'Probar login' })).toBeEnabled();
   });
 
   test('el secreto no queda en ningún archivo, ni en el perfil ni en los datos', async () => {

@@ -604,6 +604,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     const salida = ipcContract['credenciales:probarLogin'].response;
     expect(salida.safeParse({ resultado: 'funciono' }).success).toBe(true);
     expect(salida.safeParse({ resultado: 'fallo', motivo: 'no-confirmado' }).success).toBe(true);
+    expect(salida.safeParse({ resultado: 'limite', esperaSegundos: 60 }).success).toBe(true);
+    expect(salida.safeParse({ resultado: 'limite', esperaSegundos: 0 }).success).toBe(false);
     expect(salida.safeParse({ resultado: 'funciono', titulo: 'Panel' }).success).toBe(false);
     expect(salida.safeParse({ resultado: 'fallo', motivo: 'la página decía esto' }).success).toBe(
       false,

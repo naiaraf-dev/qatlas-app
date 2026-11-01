@@ -570,6 +570,148 @@ describe('Probar login', () => {
   });
 });
 
+describe('Probar login: límite de intentos', () => {
+  const MINUTO = 60_000;
+  let ahora: number;
+  const conReloj = () => new ServicioEjecuciones(boveda, proyectos, lanzador, () => ahora);
+
+  async function intentar(servicio: ServicioEjecuciones, proyecto: string, credencial: string) {
+    const resultado = servicio.probarLogin(proyecto, credencial);
+    await pausa();
+    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    return resultado;
+  }
+  const logins = () => mensajes.filter((m) => m.tipo === 'login');
+
+  beforeEach(() => {
+    ahora = Date.parse('2026-11-01T12:00:00.000Z');
+  });
+
+  it('el cuarto intento en 15 minutos no se hace, y dice cuánto falta', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    for (let i = 0; i < 3; i++) {
+      expect(await intentar(servicio, proyecto, credencial)).toEqual({
+        resultado: 'fallo',
+        motivo: 'no-confirmado',
+      });
+      ahora += MINUTO;
+    }
+    registro.length = 0;
+    expect(await servicio.probarLogin(proyecto, credencial)).toEqual({
+      resultado: 'limite',
+      esperaSegundos: 12 * 60,
+    });
+    expect(logins()).toHaveLength(3);
+    // Ni proxy, ni runner, ni una fila más en las ejecuciones.
+    expect(registro).toEqual([]);
+    expect(servicio.listar(proyecto)).toHaveLength(3);
+  });
+
+  it('un intento exitoso también cuenta', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    for (let i = 0; i < 3; i++) {
+      const resultado = servicio.probarLogin(proyecto, credencial);
+      await pausa();
+      runnerActual?.emitir({ tipo: 'login-terminado', funciono: true });
+      expect(await resultado).toEqual({ resultado: 'funciono' });
+    }
+    expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');
+  });
+
+  it('la ventana se mueve: al vencer el intento más viejo, se libera uno solo', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    await intentar(servicio, proyecto, credencial);
+    ahora += 10 * MINUTO;
+    await intentar(servicio, proyecto, credencial);
+    await intentar(servicio, proyecto, credencial);
+    ahora += 5 * MINUTO - 1000;
+    expect(await servicio.probarLogin(proyecto, credencial)).toEqual({
+      resultado: 'limite',
+      esperaSegundos: 1,
+    });
+    ahora += 1001;
+    expect((await intentar(servicio, proyecto, credencial)).resultado).toBe('fallo');
+    expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');
+  });
+
+  it('es por credencial: otra del mismo proyecto no se ve afectada', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const una = guardarCredencial(proyecto);
+    const otra = guardarCredencial(proyecto);
+    for (let i = 0; i < 3; i++) await intentar(servicio, proyecto, una);
+    expect((await servicio.probarLogin(proyecto, una)).resultado).toBe('limite');
+    expect((await intentar(servicio, proyecto, otra)).resultado).toBe('fallo');
+  });
+
+  it('sobrevive a un reinicio y a un bloqueo: vive en la base', async () => {
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    const servicio = conReloj();
+    for (let i = 0; i < 3; i++) await intentar(servicio, proyecto, credencial);
+    boveda.bloquear();
+    await boveda.desbloquear(CONTRASENA);
+    expect((await conReloj().probarLogin(proyecto, credencial)).resultado).toBe('limite');
+  });
+
+  it('reemplazar el secreto no lo reinicia: el sistema probado sigue contando', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    for (let i = 0; i < 3; i++) await intentar(servicio, proyecto, credencial);
+    proyectos.reemplazarSecreto(proyecto, credencial, 'otro-secreto-de-prueba');
+    expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');
+  });
+
+  it('lo que no llegó al sistema probado no cuenta', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    falloProxy = true;
+    for (let i = 0; i < 5; i++) {
+      expect(await servicio.probarLogin(proyecto, credencial)).toEqual({
+        resultado: 'fallo',
+        motivo: 'no-se-pudo-ejecutar',
+      });
+    }
+    falloProxy = false;
+    expect((await intentar(servicio, proyecto, credencial)).resultado).toBe('fallo');
+  });
+
+  it('el intento queda registrado antes de mandar el secreto', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    const resultado = servicio.probarLogin(proyecto, credencial);
+    await pausa();
+    const filas = boveda.conAcceso(
+      (base) => base.prepare('SELECT count(*) AS n FROM intento_login').get() as { n: number },
+    );
+    expect(filas.n).toBe(1);
+    expect(logins()).toHaveLength(1);
+    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    await resultado;
+  });
+
+  it('eliminar el proyecto purga sus intentos', async () => {
+    const servicio = conReloj();
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto);
+    await intentar(servicio, proyecto, credencial);
+    proyectos.eliminar(proyecto, 'Lexora');
+    const filas = boveda.conAcceso(
+      (base) => base.prepare('SELECT count(*) AS n FROM intento_login').get() as { n: number },
+    );
+    expect(filas.n).toBe(0);
+  });
+});
+
 describe('Actividad (pendiente de la semana 4)', () => {
   it('cada evento de entrada reinicia el contador', () => {
     const emisor = new EventEmitter();

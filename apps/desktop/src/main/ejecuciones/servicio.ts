@@ -7,16 +7,19 @@ import {
   leerEjecucion,
   leerEjecuciones,
   leerEjecucionesActivas,
+  leerIntentosLogin,
+  registrarIntentoLogin,
   leerUltimasConexiones,
   type BaseCifrada,
   type FilaEjecucion,
 } from '@qatlas/db';
-import type {
-  ConnectionEntry,
-  EjecucionResumen,
-  IpcResponse,
-  MotivoFinEjecucion,
-  ResumenEjecucion,
+import {
+  LIMITE_PRUEBAS_LOGIN,
+  type ConnectionEntry,
+  type EjecucionResumen,
+  type IpcResponse,
+  type MotivoFinEjecucion,
+  type ResumenEjecucion,
 } from '@qatlas/shared';
 import type { Configuracion, MensajeAlRunner, MensajeDelRunner } from '@qatlas/runner';
 import type { ServicioBoveda } from '../boveda/servicio';
@@ -106,6 +109,7 @@ export class ServicioEjecuciones {
     private readonly boveda: ServicioBoveda,
     private readonly proyectos: ServicioProyectos,
     private readonly lanzador: LanzadorDeProcesos,
+    private readonly ahora: () => number = Date.now,
   ) {}
 
   /** Lo que quedó sin terminar no se relanza solo: no sale tráfico sin una acción del usuario. */
@@ -238,6 +242,8 @@ export class ServicioEjecuciones {
     if (!this.proyectos.estadoAutorizacion(proyectoId).vigente) {
       return { resultado: 'fallo', motivo: 'sin-autorizacion' };
     }
+    const espera = this.esperaDeIntentos(credencialId);
+    if (espera > 0) return { resultado: 'limite', esperaSegundos: espera };
     // Una prueba es un intento real contra el sistema: no espera en la cola para salir más tarde.
     if (this.actual) return { resultado: 'fallo', motivo: 'ocupado' };
     const id = this.encolar(proyectoId, 'prueba-login');
@@ -250,6 +256,15 @@ export class ServicioEjecuciones {
         if (!configuracion) return;
         try {
           await this.proyectos.usarSecreto(proyectoId, credencialId, (secreto) => {
+            // Antes de mandarlo y en la base: un cierre abrupto no devuelve el intento. Lo que falló
+            // antes de este punto, como un proxy que no arrancó, no llegó al sistema y no cuenta.
+            this.boveda.conAcceso((base) => {
+              registrarIntentoLogin(base, {
+                proyectoId,
+                credencialId,
+                fecha: new Date(this.ahora()).toISOString(),
+              });
+            });
             // Una copia con su propio buffer: un Buffer puede compartir memoria con otros datos.
             // `postMessage` la clona; la de acá se borra enseguida, y `secreto`, al volver.
             const copia = new Uint8Array(secreto);
@@ -278,6 +293,19 @@ export class ServicioEjecuciones {
     });
     if (funciono === null) return { resultado: 'fallo', motivo: 'no-se-pudo-ejecutar' };
     return funciono ? { resultado: 'funciono' } : { resultado: 'fallo', motivo: 'no-confirmado' };
+  }
+
+  /** Segundos hasta que se libere un intento. 0 si se puede probar. */
+  private esperaDeIntentos(credencialId: string): number {
+    const ventanaMs = LIMITE_PRUEBAS_LOGIN.ventanaMinutos * 60_000;
+    const ahora = this.ahora();
+    const intentos = this.boveda.conAcceso((base) =>
+      leerIntentosLogin(base, credencialId, new Date(ahora - ventanaMs).toISOString()),
+    );
+    if (intentos.length < LIMITE_PRUEBAS_LOGIN.intentos) return 0;
+    // El que se libera primero, para volver a quedar por debajo del límite.
+    const clave = intentos[intentos.length - LIMITE_PRUEBAS_LOGIN.intentos] as string;
+    return Math.max(1, Math.ceil((Date.parse(clave) + ventanaMs - ahora) / 1000));
   }
 
   private crearEnCurso(id: string, proyectoId: string): EnCurso {

@@ -36,6 +36,9 @@ export const PROYECTO_POR_DEFECTO = {
   permitirLoginHttp: false,
 } as const;
 
+/** Una prueba de login es un intento real: los fallidos pueden bloquear la cuenta en el sistema probado. */
+export const LIMITE_PRUEBAS_LOGIN = { intentos: 3, ventanaMinutos: 15 } as const;
+
 /** Lo mínimo que tarda un escaneo si usa todas sus páginas. Sirve para avisar antes de lanzarlo. */
 export function minutosMinimosDeEjecucion(limites: { maxPaginas: number; maxRps: number }): number {
   return limites.maxPaginas / limites.maxRps / 60;

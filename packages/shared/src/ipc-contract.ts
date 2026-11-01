@@ -423,6 +423,10 @@ export const ipcContract = {
     request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad }).strict(),
     response: z.discriminatedUnion('resultado', [
       z.object({ resultado: z.literal('funciono') }).strict(),
+      // No se hizo ningún intento: se llegó al límite (LIMITE_PRUEBAS_LOGIN).
+      z
+        .object({ resultado: z.literal('limite'), esperaSegundos: z.number().int().positive() })
+        .strict(),
       z
         .object({
           resultado: z.literal('fallo'),
