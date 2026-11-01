@@ -37,6 +37,7 @@ import {
 } from '../packages/runner/src/red/proxy';
 import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
 import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
+import { restaurarEntorno, vigilarEntorno } from './entorno';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 const manifiesto = JSON.parse(
@@ -58,6 +59,7 @@ let conexiones: RegistroConexion[];
 let delNavegador: RegistroNavegador[];
 
 test.describe.configure({ mode: 'serial' });
+vigilarEntorno(test);
 
 const politica = (extra: Partial<PoliticaDeRed> = {}): PoliticaDeRed => ({
   urlBase: `http://${HOST_SITIO}:${sitio.puerto}/`,
@@ -704,7 +706,7 @@ test.describe('Perfil en memoria (ADR 018)', () => {
         .poll(() => readdirSync(carpeta).filter((n) => n.startsWith('playwright')))
         .toEqual([]);
     } finally {
-      Object.assign(process.env, original);
+      restaurarEntorno(original);
       rmSync(carpeta, { recursive: true, force: true, maxRetries: 3 });
     }
   });

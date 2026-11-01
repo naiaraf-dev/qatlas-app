@@ -15,6 +15,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
@@ -25,6 +26,7 @@ let app: ElectronApplication;
 let page: Page;
 
 test.describe.configure({ mode: 'serial' });
+vigilarEntorno(test);
 
 test.beforeAll(async () => {
   carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-e2e-boveda-'));

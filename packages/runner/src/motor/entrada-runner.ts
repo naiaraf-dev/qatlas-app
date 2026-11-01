@@ -1,6 +1,8 @@
+import { tmpdir } from 'node:os';
 import type { Browser } from 'playwright-core';
 import { MensajeAlRunner, type MensajeDelRunner } from '../protocolo';
 import { instalarAgente } from '../red/agente';
+import { causaDeFalla, detalleDeFalla, perfilDemasiadoLargo } from './diagnostico';
 import { abrirContexto, abrirNavegador, escanear, probarLogin } from './motor';
 
 /**
@@ -44,11 +46,21 @@ async function ejecutar(mensaje: Exclude<MensajeAlRunner, { tipo: 'cancelar' }>)
   }): void => {
     enviar({ tipo: 'conexion', proceso: 'navegador', destino, permitida, regla });
   };
+  if (perfilDemasiadoLargo(tmpdir(), process.platform)) {
+    if (mensaje.tipo === 'login') mensaje.secreto.fill(0);
+    enviar({ tipo: 'navegador-no-disponible', causa: 'perfil-ruta-larga', detalle: '' });
+    return;
+  }
   try {
     navegador = await abrirNavegador(configuracion);
-  } catch {
+  } catch (error) {
     if (mensaje.tipo === 'login') mensaje.secreto.fill(0);
-    enviar({ tipo: 'navegador-no-disponible' });
+    const texto = error instanceof Error ? error.message : '';
+    enviar({
+      tipo: 'navegador-no-disponible',
+      causa: causaDeFalla(texto),
+      detalle: detalleDeFalla(texto),
+    });
     return;
   }
 

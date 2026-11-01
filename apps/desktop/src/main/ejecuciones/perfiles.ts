@@ -37,8 +37,12 @@ export function entornoMinimo(
 export const carpetaPerfiles = (carpetaDatos: string): string =>
   path.join(carpetaDatos, 'perfiles');
 
+/**
+ * Solo el comienzo del ID: corre una ejecución a la vez, y en Linux Chromium crea un socket Unix dentro
+ * de esta carpeta, con un límite de 107 bytes. Con el ID entero no entraba.
+ */
 export const carpetaPerfil = (carpetaDatos: string, ejecucionId: string): string =>
-  path.join(carpetaPerfiles(carpetaDatos), ejecucionId);
+  path.join(carpetaPerfiles(carpetaDatos), ejecucionId.slice(0, 8));
 
 /** Al arrancar: lo que haya quedado es de una ejecución cortada. */
 export function limpiarPerfilesHuerfanos(carpetaDatos: string): void {

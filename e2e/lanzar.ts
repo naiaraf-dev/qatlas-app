@@ -23,7 +23,7 @@ export async function lanzarApp(
   electron: typeof _electron,
   carpeta: string,
   entorno: Record<string, string> = {},
-): Promise<{ app: ElectronApplication; page: Page }> {
+): Promise<{ app: ElectronApplication; page: Page; diagnostico: string[] }> {
   mkdirSync(carpeta, { recursive: true });
   const app = await electron.launch({
     args: [APP_DIR, `--user-data-dir=${path.join(carpeta, 'QAtlas')}`],
@@ -36,5 +36,14 @@ export async function lanzarApp(
       ...entorno,
     },
   });
-  return { app, page: await app.firstWindow() };
+  // El diagnóstico interno de la app, también en el log del CI. La interfaz no lo muestra.
+  const diagnostico: string[] = [];
+  app.process().stderr?.on('data', (datos: Buffer) => {
+    for (const linea of datos.toString().split(/\r?\n/)) {
+      if (!linea.includes('[ejecucion]')) continue;
+      diagnostico.push(linea);
+      console.log(linea);
+    }
+  });
+  return { app, page: await app.firstWindow(), diagnostico };
 }

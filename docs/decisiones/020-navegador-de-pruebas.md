@@ -27,6 +27,12 @@ Playwright descarga sus navegadores desde internet, y eso choca con «nada se de
   `scripts/verificar-navegador.mjs` lo compara antes y después de los E2E. Si no coincide, falla. El «después» ya
   sirvió: un entorno sin `SystemDrive` hacía que Chromium escribiera en su propia carpeta.
 
+### Lo que la app verifica y lo que no
+
+**La app no calcula el hash al lanzar una ejecución.** Lo hace `scripts/verificar-navegador.mjs`, en desarrollo y en CI. En el
+producto, la integridad llega con la firma del instalador (semana 10). La app falla cerrado si el navegador no arranca,
+y el log del proceso principal dice la causa: `ruta`, `perfil-ruta-larga`, `sandbox`, `dependencias` u `otra`.
+
 ## Dependencias
 
 | Paquete                  | Para qué               | Script de instalación | Tamaño instalado | Licencia   | Mantenimiento |
@@ -41,6 +47,6 @@ es peor. No trae navegadores ni los descarga al instalarse.
 - **Es confianza en el primer uso:** protege de un cambio posterior, no de que esa primera descarga ya estuviera
   alterada. La comparación con una fuente independiente llega con los instaladores.
 - **El hash de Linux se calculó en Windows,** descargando la versión de Linux con
-  `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE`. **No se probó en una máquina Linux todavía:** si difiere, el CI falla e imprime el
-  hash que encontró. Antes de registrarlo hay que entender por qué difiere.
+  `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE`. Si difiere, el CI falla e imprime el hash que encontró. Antes de registrarlo hay
+  que entender por qué difiere.
 - Subir Playwright cambia la revisión de Chromium: hay que registrar el hash nuevo a propósito.

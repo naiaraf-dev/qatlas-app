@@ -415,6 +415,8 @@ export class ServicioEjecuciones {
         this.finalizar(enCurso, 'finalizada', null);
         return;
       case 'navegador-no-disponible':
+        // Sin datos de la ejecución: solo la causa, y las líneas de error de Chromium sin rutas.
+        console.warn(`[ejecucion] navegador no disponible: ${mensaje.causa} ${mensaje.detalle}`);
         this.finalizar(enCurso, 'fallida', 'navegador-no-disponible');
         return;
       case 'rechazado':

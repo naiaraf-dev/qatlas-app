@@ -29,6 +29,7 @@ import {
   type RegistroConexion,
 } from '../packages/runner/src/red/proxy';
 import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
+import { vigilarEntorno } from './entorno';
 import { generarCertificado, type CertificadoDePrueba } from './fixtures/certificado';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
@@ -43,6 +44,7 @@ let navegador: Browser;
 let conexiones: RegistroConexion[];
 
 test.describe.configure({ mode: 'serial' });
+vigilarEntorno(test);
 
 const resolver = (host: string) => {
   const ip = MAPA_DE_HOSTS[host];

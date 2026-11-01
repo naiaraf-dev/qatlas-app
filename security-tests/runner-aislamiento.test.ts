@@ -47,7 +47,11 @@ describe('El código del motor no abre red ni procesos por su cuenta', () => {
   const motor = fuentes(path.join(RUNNER, 'motor'));
 
   it('hay código que revisar', () => {
-    expect(motor.map((f) => f.nombre).sort()).toEqual(['entrada-runner.ts', 'motor.ts']);
+    expect(motor.map((f) => f.nombre).sort()).toEqual([
+      'diagnostico.ts',
+      'entrada-runner.ts',
+      'motor.ts',
+    ]);
   });
 
   it.each(motor)('$nombre no importa red, child_process ni electron', ({ texto }) => {

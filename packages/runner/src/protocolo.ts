@@ -91,7 +91,14 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
     .strict(),
   // Solo un resultado: ningún contenido de la página cruza este canal (EVI-01).
   z.object({ tipo: z.literal('login-terminado'), funciono: z.boolean() }).strict(),
-  z.object({ tipo: z.literal('navegador-no-disponible') }).strict(),
+  // La causa y el detalle van al log del proceso principal, no a la interfaz.
+  z
+    .object({
+      tipo: z.literal('navegador-no-disponible'),
+      causa: z.enum(['ruta', 'perfil-ruta-larga', 'sandbox', 'dependencias', 'otra']),
+      detalle: z.string().max(300),
+    })
+    .strict(),
   z.object({ tipo: z.literal('rechazado') }).strict(),
 ]);
 export type MensajeDelRunner = z.infer<typeof MensajeDelRunner>;

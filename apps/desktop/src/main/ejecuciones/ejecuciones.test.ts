@@ -220,7 +220,7 @@ describe('RN-EJE-02: fallar cerrado', () => {
     const proyecto = crearProyecto();
     const id = lanzar(proyecto);
     await pausa();
-    runnerActual?.emitir({ tipo: 'navegador-no-disponible' });
+    runnerActual?.emitir({ tipo: 'navegador-no-disponible', causa: 'ruta', detalle: '' });
     expect(estado(proyecto, id)?.resumen.motivo).toBe('navegador-no-disponible');
   });
 });
@@ -754,6 +754,12 @@ describe('Carpeta de perfiles', () => {
     expect(() => {
       limpiarPerfilesHuerfanos(path.join(carpeta, 'no-existe'));
     }).not.toThrow();
+  });
+
+  it('la carpeta del perfil es corta: en Linux, Chromium crea ahí un socket Unix', async () => {
+    const { carpetaPerfil } = await import('./perfiles');
+    const ruta = carpetaPerfil('/datos', '12345678-1234-4234-8234-123456789012');
+    expect(path.basename(ruta)).toBe('12345678');
   });
 
   it('el entorno de un proceso de la ejecución es una lista cerrada', async () => {

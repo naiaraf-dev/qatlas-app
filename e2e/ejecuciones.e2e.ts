@@ -29,6 +29,7 @@ import {
   iniciarSandbox,
   type SandboxActivo,
 } from '../apps/sandbox-site/src/servidor.mjs';
+import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 
 // El service worker no se registra, así que su destino nunca se intenta.
@@ -43,6 +44,7 @@ let page: Page;
 let sitio: SandboxActivo;
 
 test.describe.configure({ mode: 'serial' });
+vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
 const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
@@ -297,7 +299,8 @@ test('sin el navegador instalado, la ejecución falla y no se descarga nada', as
   const vacia = path.join(otra, 'sin-navegadores');
   mkdirSync(vacia);
   await app.close();
-  ({ app, page } = await lanzarApp(electron, carpeta, { PLAYWRIGHT_BROWSERS_PATH: vacia }));
+  const sinNavegador = await lanzarApp(electron, carpeta, { PLAYWRIGHT_BROWSERS_PATH: vacia });
+  ({ app, page } = sinNavegador);
   await entrada('Contraseña maestra').fill(CONTRASENA);
   await boton('Desbloquear').click();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
@@ -307,6 +310,11 @@ test('sin el navegador instalado, la ejecución falla y no se descarga nada', as
   await expect(ejecuciones().first()).toContainText('Ejecución: Fallida', { timeout: 30_000 });
   await expect(ejecuciones().first()).toContainText('El navegador de pruebas no está disponible');
   expect(readdirSync(vacia)).toEqual([]);
+  // La causa llega al log, y la interfaz no la muestra.
+  await expect
+    .poll(() => sinNavegador.diagnostico.join('\n'))
+    .toContain('navegador no disponible: ruta');
+  await expect(page.locator('body')).not.toContainText('[ejecucion]');
 
   await app.close();
   rmSync(otra, { recursive: true, force: true });

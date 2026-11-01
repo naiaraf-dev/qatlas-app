@@ -13,6 +13,9 @@ cifrar. Chromium no ofrece una carpeta de perfil cifrada.
 - **`launch` más `newContext`:** un contexto off-the-record, con cookies, almacenamiento y caché en memoria.
 - **La carpeta del perfil va en la carpeta de datos** (`perfiles/<ejecución>`), no en el temporal del sistema. Se logra
   pasándole al runner `TEMP`, `TMP` y `TMPDIR` apuntando ahí.
+- **El nombre es corto:** el comienzo del ID de la ejecución. En Linux y macOS, Chromium crea un socket Unix dentro de
+  `TMPDIR`, y esa ruta no puede pasar de 107 bytes. Con una carpeta de datos más larga, la ejecución falla sin abrir nada,
+  y el log dice por qué.
 - **Se borra al terminar,** y al arrancar se borra cualquier carpeta de una ejecución cortada.
 - **Descargas bloqueadas.** El estado de sesión del login cifrado llega en la semana 6.
 
