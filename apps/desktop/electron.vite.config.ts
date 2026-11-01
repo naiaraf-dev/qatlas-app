@@ -14,6 +14,7 @@ const WORKSPACE_PACKAGES = [
   '@qatlas/shared/dominios',
   '@qatlas/crypto',
   '@qatlas/db',
+  '@qatlas/runner',
 ];
 
 const require = createRequire(import.meta.url);
@@ -55,7 +56,20 @@ export default defineConfig({
     define: { __QATLAS_NATIVOS__: JSON.stringify(manifiestoNativos()) },
     build: {
       externalizeDeps: { exclude: WORKSPACE_PACKAGES },
-      rolldownOptions: { input: { index: resolve(import.meta.dirname, 'src/main/index.ts') } },
+      rolldownOptions: {
+        input: {
+          index: resolve(import.meta.dirname, 'src/main/index.ts'),
+          // Procesos aparte (ADR 016 y 017): no importan ni la base ni las claves.
+          'proceso-proxy': resolve(
+            import.meta.dirname,
+            '../../packages/runner/src/red/entrada-proxy.ts',
+          ),
+          'proceso-runner': resolve(
+            import.meta.dirname,
+            '../../packages/runner/src/motor/entrada-runner.ts',
+          ),
+        },
+      },
     },
   },
   preload: {

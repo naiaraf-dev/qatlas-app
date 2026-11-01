@@ -13,6 +13,11 @@ export default defineConfig({
       include: [
         'packages/crypto/src/**/*.ts',
         'packages/db/src/**/*.ts',
+        'packages/runner/src/red/reglas.ts',
+        'packages/runner/src/red/proxy.ts',
+        'packages/runner/src/red/agente.ts',
+        'apps/desktop/src/main/ejecuciones/servicio.ts',
+        'apps/desktop/src/main/ejecuciones/perfiles.ts',
         'packages/shared/src/dominios.ts',
         'packages/shared/src/declaracion.ts',
         'apps/desktop/src/main/boveda/**/*.ts',
