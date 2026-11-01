@@ -32,6 +32,8 @@ export interface SandboxActivo {
     tls: (string | null)[];
     https: string[];
     intentosLogin: string[];
+    /** Cada página pedida, en orden. Sirve de señal: el navegador llegó hasta acá. */
+    rutas: string[];
   };
   cerrar(): Promise<void>;
 }

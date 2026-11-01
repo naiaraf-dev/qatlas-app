@@ -36,6 +36,8 @@ import { lanzarApp } from './lanzar';
 const HOSTS_DE_FUGA_DEL_RECORRIDO = HOSTS_DE_FUGA.filter((host) => host !== 'sw.fuga.invalid');
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
+// Menos que el timeout por página del proyecto de prueba, para que la visita no se corte antes.
+const DEMORA_LENTA_MS = 4000;
 const SONDA = path.resolve(import.meta.dirname, 'fixtures/sonda-utility.cjs');
 
 let carpeta: string;
@@ -82,6 +84,37 @@ const pidsDe = (servicio: string) =>
     servicio,
   );
 
+/**
+ * Lanza una ejecución y espera a que aparezca en la lista. Sin esto, `ejecuciones().first()` todavía es
+ * la ejecución anterior, y lo que se espera de ella puede cumplirse enseguida.
+ */
+async function lanzarEjecucion(): Promise<void> {
+  const antes = await page.evaluate(async () => {
+    const { qatlas } = window as unknown as { qatlas: QatlasApi };
+    const proyectos = await qatlas.proyectos.listar();
+    const id = proyectos.ok ? proyectos.data[0]?.id : undefined;
+    if (!id) return 0;
+    const lista = await qatlas.ejecuciones.listar({ proyectoId: id });
+    return lista.ok ? lista.data.length : 0;
+  });
+  await boton('Lanzar ejecución').click();
+  await expect(ejecuciones()).toHaveCount(antes + 1);
+}
+
+/**
+ * La señal de que la ejecución está en curso con el navegador abierto: el sandbox recibió el pedido de
+ * la página lenta, y lo retiene `DEMORA_LENTA_MS`. Todo lo que el test haga después ocurre en ese lapso.
+ */
+async function lanzarHastaPaginaLenta(): Promise<void> {
+  const vistas = sitio.registro.rutas.filter((ruta) => ruta === '/lenta').length;
+  await lanzarEjecucion();
+  await expect
+    .poll(() => sitio.registro.rutas.filter((ruta) => ruta === '/lenta').length, {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(vistas);
+}
+
 function archivosCon(raiz: string, canario: string): string[] {
   if (!existsSync(raiz)) return [];
   return (readdirSync(raiz, { recursive: true }) as string[]).filter((nombre) => {
@@ -97,7 +130,7 @@ function archivosCon(raiz: string, canario: string): string[] {
 }
 
 test.beforeAll(async () => {
-  sitio = await iniciarSandbox({ puerto: 0, demoraLentaMs: 2500 });
+  sitio = await iniciarSandbox({ puerto: 0, demoraLentaMs: DEMORA_LENTA_MS });
   carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-e2e-ejecuciones-'));
   // Un perfil de una ejecución cortada, de antes de que arrancara esta instancia.
   const huerfano = path.join(carpeta, 'QAtlas', 'perfiles', 'cortada');
@@ -147,7 +180,7 @@ test('el proyecto declara un puerto extra, y queda en la declaración', async ()
 });
 
 test('una ejecución abre la URL base, sigue los links y no deja salir nada', async () => {
-  await boton('Lanzar ejecución').click();
+  await lanzarEjecucion();
   await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 60_000 });
   await expect(ejecuciones().first()).toContainText(/Páginas: \d\d? · Links excluidos: \d/);
   await expect(ejecuciones().first()).toContainText(/Bloqueadas: [1-9]/);
@@ -231,7 +264,7 @@ test('TS-03: el proceso principal no abre conexiones propias durante una ejecuci
 
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await page.getByRole('button', { name: /Sandbox/ }).click();
-  await boton('Lanzar ejecución').click();
+  await lanzarEjecucion();
   await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 60_000 });
 
   const conexiones = await app.evaluate(() => {
@@ -250,8 +283,8 @@ test('RN-EJE-01: mientras corre, no se lanza otra del mismo proyecto', async () 
     const res = await qatlas.proyectos.listar();
     return res.ok ? res.data[0]?.id : undefined;
   });
-  await boton('Lanzar ejecución').click();
-  await expect(ejecuciones().first()).toContainText(/En curso|En cola/);
+  await lanzarHastaPaginaLenta();
+  await expect(ejecuciones().first()).toContainText('Ejecución: En curso');
   await expect(boton('Lanzar ejecución')).toBeDisabled();
   const segunda = await page.evaluate(async (id) => {
     const { qatlas } = window as unknown as { qatlas: QatlasApi };
@@ -267,9 +300,9 @@ test('RN-EJE-01: mientras corre, no se lanza otra del mismo proyecto', async () 
 });
 
 test('el perfil vive dentro de la carpeta de datos mientras corre, no en el temporal', async () => {
-  await boton('Lanzar ejecución').click();
+  await lanzarHastaPaginaLenta();
   const perfiles = path.join(carpeta, 'QAtlas', 'perfiles');
-  await expect.poll(() => readdirSync(perfiles).length).toBe(1);
+  expect(readdirSync(perfiles)).toHaveLength(1);
   const [ejecucion] = readdirSync(perfiles);
   await expect
     .poll(() =>
@@ -282,9 +315,9 @@ test('el perfil vive dentro de la carpeta de datos mientras corre, no en el temp
 });
 
 test('fallar cerrado: si el proxy se cae, la ejecución se aborta', async () => {
-  await boton('Lanzar ejecución').click();
-  await expect.poll(() => pidsDe('qatlas-proxy')).toHaveLength(1);
+  await lanzarHastaPaginaLenta();
   const [pid] = await pidsDe('qatlas-proxy');
+  expect(pid).toBeDefined();
   // Solo este PID: lo lanzó esta app, dentro de este test.
   process.kill(pid as number);
   await expect(ejecuciones().first()).toContainText('Ejecución: Fallida', { timeout: 15_000 });
@@ -306,7 +339,7 @@ test('sin el navegador instalado, la ejecución falla y no se descarga nada', as
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await page.getByRole('button', { name: /Sandbox/ }).click();
-  await boton('Lanzar ejecución').click();
+  await lanzarEjecucion();
   await expect(ejecuciones().first()).toContainText('Ejecución: Fallida', { timeout: 30_000 });
   await expect(ejecuciones().first()).toContainText('El navegador de pruebas no está disponible');
   expect(readdirSync(vacia)).toEqual([]);
@@ -327,8 +360,8 @@ test('sin el navegador instalado, la ejecución falla y no se descarga nada', as
 test('bloquear la bóveda cancela la ejecución y limpia todo', async () => {
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await page.getByRole('button', { name: /Sandbox/ }).click();
-  await boton('Lanzar ejecución').click();
-  await expect.poll(() => pidsDe('qatlas-runner')).toHaveLength(1);
+  await lanzarHastaPaginaLenta();
+  expect(await pidsDe('qatlas-runner')).toHaveLength(1);
   await page.evaluate(async () => {
     const { qatlas } = window as unknown as { qatlas: QatlasApi };
     await qatlas.vault.lock();

@@ -18,6 +18,7 @@ export default defineConfig({
         'packages/runner/src/red/agente.ts',
         'apps/desktop/src/main/ejecuciones/servicio.ts',
         'apps/desktop/src/main/ejecuciones/perfiles.ts',
+        'apps/desktop/src/main/ejecuciones/proxy-proceso.ts',
         'packages/shared/src/dominios.ts',
         'packages/shared/src/declaracion.ts',
         'apps/desktop/src/main/boveda/**/*.ts',

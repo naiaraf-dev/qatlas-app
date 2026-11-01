@@ -384,6 +384,10 @@ export class ServicioEjecuciones {
     proxy.alCaer(() => {
       this.finalizar(enCurso, 'fallida', 'proxy-caido');
     });
+    // Pudo caerse antes de que se lo escuchara: entonces el runner no se lanza. El análisis de tipos no
+    // sabe que `alCaer` puede cambiar este valor.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (enCurso.terminada) return null;
 
     const runner = this.lanzador.iniciarRunner(enCurso.id);
     enCurso.runner = runner;

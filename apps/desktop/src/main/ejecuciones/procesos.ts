@@ -1,9 +1,10 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { utilityProcess } from 'electron';
-import { MensajeDelProxy, MensajeDelRunner, type MensajeAlProxy } from '@qatlas/runner';
+import { MensajeDelRunner } from '@qatlas/runner';
 import { carpetaPerfil, entornoMinimo } from './perfiles';
-import type { LanzadorDeProcesos, ProcesoProxy, ProcesoRunner } from './servicio';
+import { conectarProxy } from './proxy-proceso';
+import type { LanzadorDeProcesos, ProcesoRunner } from './servicio';
 
 const TIEMPO_INICIO_PROXY_MS = 10_000;
 
@@ -21,45 +22,16 @@ export function crearLanzador({
 }: OpcionesLanzador): LanzadorDeProcesos {
   return {
     iniciarProxy: (datos, alRegistrar) =>
-      new Promise<ProcesoProxy>((resolver, rechazar) => {
-        const hijo = utilityProcess.fork(path.join(carpetaCompilada, 'proceso-proxy.js'), [], {
+      conectarProxy(
+        utilityProcess.fork(path.join(carpetaCompilada, 'proceso-proxy.js'), [], {
           serviceName: 'qatlas-proxy',
           stdio: 'ignore',
           env: entornoMinimo(process.env, {}),
-        });
-        let listo = false;
-        let alCaer: (() => void) | undefined;
-        const limite = setTimeout(() => {
-          hijo.kill();
-          rechazar(new Error('El proxy no arrancó.'));
-        }, TIEMPO_INICIO_PROXY_MS);
-        hijo.on('message', (crudo: unknown) => {
-          const mensaje = MensajeDelProxy.safeParse(crudo);
-          if (!mensaje.success) return;
-          if (mensaje.data.tipo === 'conexion') {
-            alRegistrar(mensaje.data);
-            return;
-          }
-          listo = true;
-          clearTimeout(limite);
-          resolver({
-            puerto: mensaje.data.puerto,
-            alCaer: (oyente) => {
-              alCaer = oyente;
-            },
-            detener: () => {
-              alCaer = undefined;
-              hijo.kill();
-            },
-          });
-        });
-        hijo.once('exit', () => {
-          clearTimeout(limite);
-          if (listo) alCaer?.();
-          else rechazar(new Error('El proxy terminó al arrancar.'));
-        });
-        hijo.postMessage({ tipo: 'iniciar', ...datos } satisfies MensajeAlProxy);
-      }),
+        }),
+        datos,
+        alRegistrar,
+        TIEMPO_INICIO_PROXY_MS,
+      ),
 
     iniciarRunner: (ejecucionId) => {
       const perfil = carpetaPerfil(carpetaDatos, ejecucionId);

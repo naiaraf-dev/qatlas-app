@@ -296,6 +296,7 @@ export function iniciarSandbox({
     tls: [],
     https: [],
     intentosLogin: [],
+    rutas: [],
   };
   let puertoReal = puerto;
   let puertoApi = 0;
@@ -320,6 +321,7 @@ export function iniciarSandbox({
     }
 
     const { pathname } = new URL(req.url ?? '/', `http://${HOST_ESCUCHA}`);
+    registro.rutas.push(pathname);
     const clave = `${req.method} ${pathname}`;
     switch (clave) {
       case 'GET /':

@@ -40,6 +40,7 @@ let mensajes: MensajeAlRunner[];
 let caerProxy: (() => void) | undefined;
 let alRegistrarProxy:
   ((r: { destino: string; permitida: boolean; regla: string }) => void) | undefined;
+let proxyYaCaido: boolean;
 let runnerActual: { emitir: (m: MensajeDelRunner) => void; salir: () => void } | undefined;
 
 const lanzador: LanzadorDeProcesos = {
@@ -51,6 +52,7 @@ const lanzador: LanzadorDeProcesos = {
       puerto: 49152,
       alCaer: (oyente) => {
         caerProxy = oyente;
+        if (proxyYaCaido) oyente();
       },
       detener: () => {
         registro.push('proxy-detenido');
@@ -125,6 +127,7 @@ beforeEach(async () => {
   registro = [];
   mensajes = [];
   falloProxy = false;
+  proxyYaCaido = false;
   caerProxy = undefined;
   runnerActual = undefined;
   carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ejecuciones-'));
@@ -184,6 +187,20 @@ describe('RN-EJE-02: fallar cerrado', () => {
     expect(estado(proyecto, id)).toMatchObject({
       estado: 'fallida',
       resumen: { motivo: 'proxy-no-inicio' },
+    });
+  });
+
+  it('si reportó su puerto y se cae antes de abrir el navegador, se cayó, y el runner no se lanza', async () => {
+    proxyYaCaido = true;
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    expect(registro).not.toContain('runner');
+    expect(registro).toContain('proxy-detenido');
+    expect(registro).toContain('perfil-borrado');
+    expect(estado(proyecto, id)).toMatchObject({
+      estado: 'fallida',
+      resumen: { motivo: 'proxy-caido' },
     });
   });
 
