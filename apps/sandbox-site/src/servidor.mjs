@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
+import { createSocket } from 'node:dgram';
 import { createServer } from 'node:http';
+import { createServer as crearServidorTls } from 'node:https';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
@@ -22,6 +24,10 @@ const FUGA_FETCH = 'api.fuga.invalid';
 const FUGA_REDIRECCION = 'redireccion.fuga.test';
 const FUGA_WEBSOCKET = 'ws.fuga.example';
 const FUGA_SERVICE_WORKER = 'sw.fuga.invalid';
+// Por UDP: no pasan por el proxy, y por eso van aparte de los demás.
+const FUGA_STUN = 'stun.fuga.test';
+const FUGA_QUIC = 'quic.fuga.test';
+export const HOSTS_UDP_DE_FUGA = [FUGA_STUN, FUGA_QUIC];
 export const HOSTS_DE_FUGA = [
   FUGA_SCRIPT,
   FUGA_PIXEL,
@@ -44,6 +50,8 @@ export const MAPA_DE_HOSTS = Object.freeze({
   [FUGA_REDIRECCION]: HOST_ESCUCHA,
   [FUGA_WEBSOCKET]: HOST_ESCUCHA,
   [FUGA_SERVICE_WORKER]: HOST_ESCUCHA,
+  [FUGA_STUN]: HOST_ESCUCHA,
+  [FUGA_QUIC]: HOST_ESCUCHA,
 });
 
 export const REGLAS_RESOLVER = Object.entries(MAPA_DE_HOSTS)
@@ -85,6 +93,7 @@ const INICIO = pagina(
   <li><a href="/api-en-otro-puerto">API en otro puerto</a></li>
   <li><a href="/puerto-no-declarado">Puerto no declarado</a></li>
   <li><a href="/auto-post">Envío automático</a></li>
+  <li><a href="/webrtc">WebRTC</a></li>
   <li><a href="/cerrar-sesion">Cerrar sesión</a></li>
   <li><a href="/eliminar-cuenta">Eliminar cuenta</a></li>
 </ul>`,
@@ -203,6 +212,36 @@ const AUTO_POST = pagina(
 </script>`,
 );
 
+// La IP literal también: una regla del resolvedor no alcanza a STUN.
+const webrtc = (puertoUdp) =>
+  pagina(
+    'WebRTC',
+    `<script>
+  window.resultadoRtc = new Promise((listo) => {
+    const candidatos = [];
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: ['stun:${HOST_ESCUCHA}:${puertoUdp}', 'stun:${FUGA_STUN}:${puertoUdp}'] }],
+    });
+    const terminar = () => listo({ candidatos, sdp: pc.localDescription ? pc.localDescription.sdp : '' });
+    pc.createDataChannel('fuga');
+    pc.onicecandidate = (e) => {
+      if (e.candidate) candidatos.push(e.candidate.candidate);
+      else terminar();
+    };
+    pc.createOffer().then((oferta) => pc.setLocalDescription(oferta));
+    setTimeout(terminar, 3000);
+  });
+</script>`,
+  );
+
+const quic = (puertoUdp) =>
+  pagina(
+    'QUIC',
+    `<script>
+  fetch('https://${FUGA_QUIC}:${puertoUdp}/datos', { mode: 'no-cors' }).catch(() => {});
+</script>`,
+  );
+
 const IMAGEN = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>';
 
 function responder(res, estado, cuerpo, encabezados = {}) {
@@ -241,6 +280,8 @@ function tieneSesion(req) {
 export function iniciarSandbox({
   puerto = PUERTO_POR_DEFECTO,
   demoraLentaMs = DEMORA_LENTA_MS,
+  // Clave y certificado de prueba, generados por quien lo llama. Sin esto, no hay HTTPS.
+  tls = undefined,
 } = {}) {
   const registro = {
     fugas: [],
@@ -251,10 +292,16 @@ export function iniciarSandbox({
     websockets: [],
     serviceWorkers: [],
     hosts: [],
+    udp: [],
+    tls: [],
+    https: [],
+    intentosLogin: [],
   };
   let puertoReal = puerto;
   let puertoApi = 0;
   let puertoTrampa = 0;
+  let puertoUdp = 0;
+  let puertoHttps = 0;
 
   const atender = async (req, res) => {
     const nombreHost = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
@@ -282,6 +329,7 @@ export function iniciarSandbox({
         responder(res, 200, LOGIN);
         return;
       case 'POST /login': {
+        registro.intentosLogin.push(pathname);
         const datos = new URLSearchParams(await leerCuerpo(req));
         if (
           datos.get('usuario') === CREDENCIALES_DE_PRUEBA.usuario &&
@@ -364,6 +412,12 @@ export function iniciarSandbox({
       case 'GET /puerto-no-declarado':
         responder(res, 200, puertoNoDeclarado(puertoTrampa));
         return;
+      case 'GET /webrtc':
+        responder(res, 200, webrtc(puertoUdp));
+        return;
+      case 'GET /quic':
+        responder(res, 200, quic(puertoUdp));
+        return;
       case 'GET /auto-post':
         responder(res, 200, AUTO_POST);
         return;
@@ -415,6 +469,29 @@ export function iniciarSandbox({
   });
 
   // Otro servicio local, no declarado en el proyecto: si algo llega acá, el proxy falló.
+  // Lo que llegue acá salió del navegador por UDP, sin pasar por el proxy.
+  const receptorUdp = createSocket('udp4');
+  receptorUdp.on('message', (mensaje) => {
+    registro.udp.push(mensaje.length);
+  });
+
+  const servidorTls =
+    tls &&
+    crearServidorTls(tls, (req, res) => {
+      const ruta = (req.url ?? '/').split('?')[0];
+      registro.https.push(req.method === 'GET' ? ruta : `${req.method} ${ruta}`);
+      // Un sitio puede anunciar HTTP3 por su cuenta: el navegador no debería hacerle caso.
+      res.setHeader('alt-svc', `h3=":${puertoUdp}"`);
+      atender(req, res).catch(() => {
+        if (!res.headersSent) responder(res, 400, '');
+        else res.end();
+      });
+    });
+  servidorTls?.on('secureConnection', (socket) => {
+    registro.tls.push(socket.getProtocol());
+  });
+  servidorTls?.on('tlsClientError', () => {});
+
   const servidorTrampa = createServer((req, res) => {
     registro.puertoNoDeclarado.push(req.url ?? '/');
     res.writeHead(204);
@@ -441,10 +518,18 @@ export function iniciarSandbox({
     puertoReal = direccion.port;
     puertoApi = (await escuchar(servidorApi, 0)).port;
     puertoTrampa = (await escuchar(servidorTrampa, 0)).port;
+    await new Promise((listo, rechazar) => {
+      receptorUdp.once('error', rechazar);
+      receptorUdp.bind(0, HOST_ESCUCHA, listo);
+    });
+    puertoUdp = receptorUdp.address().port;
+    if (servidorTls) puertoHttps = (await escuchar(servidorTls, 0)).port;
     return {
       puerto: puertoReal,
       puertoApi,
       puertoTrampa,
+      puertoUdp,
+      puertoHttps,
       direccion: direccion.address,
       url: `http://${HOST_ESCUCHA}:${puertoReal}`,
       registro,
@@ -454,6 +539,10 @@ export function iniciarSandbox({
           cerrarUno(servidor),
           cerrarUno(servidorApi),
           cerrarUno(servidorTrampa),
+          ...(servidorTls ? [cerrarUno(servidorTls)] : []),
+          new Promise((listo) => {
+            receptorUdp.close(listo);
+          }),
         ]).then(() => undefined);
       },
     };

@@ -19,7 +19,8 @@ export type AlRegistrar = (registro: RegistroNavegador) => void;
 /**
  * - `chromiumSandbox`: Playwright lo trae apagado, y el sitio probado es hostil por defecto.
  * - `<-loopback>`: sin esto, Chromium se saltea el proxy para localhost.
- * - WebRTC y QUIC usan UDP, que el proxy no ve: se apagan.
+ * - WebRTC y QUIC usan UDP, que el proxy no ve: se apagan. El nombre importa: la variante `--force-` de
+ *   este flag no hace nada en esta versión, y sin decir nada. Por eso hay un control positivo en los E2E.
  * - `PreconnectToSearch` y `AutofillServerCommunication`: Chromium se conecta solo a su buscador por
  *   defecto y al servicio de autocompletar, al ver un formulario. El proxy los bloquea igual, pero
  *   llenarían el monitor con destinos que el sitio nunca pidió.
@@ -27,7 +28,7 @@ export type AlRegistrar = (registro: RegistroNavegador) => void;
  */
 export const ARGUMENTOS_CHROMIUM = [
   '--proxy-bypass-list=<-loopback>',
-  '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+  '--webrtc-ip-handling-policy=disable_non_proxied_udp',
   '--disable-quic',
   '--disable-background-networking',
   '--disable-sync',

@@ -10,6 +10,7 @@ import {
   CREDENCIALES_DE_PRUEBA,
   HOST_ESCUCHA,
   HOSTS_DE_FUGA,
+  HOSTS_UDP_DE_FUGA,
   iniciarSandbox,
   MAPA_DE_HOSTS,
   REGLAS_RESOLVER,
@@ -31,6 +32,7 @@ const manifiesto = JSON.parse(
   soloLectura: { url: string; origen: string; metodo: string }[];
   exclusiones: { url: string; origen: string; texto: string }[];
   fugas: { host: string; origen: string; tipo: string }[];
+  fugasUdp: { host: string; origen: string; tipo: string }[];
 };
 
 const RESERVADOS = /\.(test|example|invalid)$/;
@@ -170,6 +172,19 @@ describe('Intentos de fuga: nunca a un dominio real', () => {
     expect(sitio.puertoTrampa).not.toBe(sitio.puertoApi);
     expect((await pedir('/api-en-otro-puerto')).cuerpo).toContain(String(sitio.puertoApi));
     expect((await pedir('/puerto-no-declarado')).cuerpo).toContain(String(sitio.puertoTrampa));
+  });
+
+  it('las fugas por UDP están en el manifiesto, mapeadas, y sus páginas apuntan al receptor', async () => {
+    expect(manifiesto.fugasUdp.map((f) => f.host).sort()).toEqual([...HOSTS_UDP_DE_FUGA].sort());
+    for (const { host, origen } of manifiesto.fugasUdp) {
+      expect(host).toMatch(RESERVADOS);
+      expect(MAPA_DE_HOSTS[host]).toBe('127.0.0.1');
+      expect((await pedir(origen)).cuerpo).toContain(`${host}:${String(sitio.puertoUdp)}`);
+    }
+  });
+
+  it('sin un certificado no hay HTTPS: nada de eso está versionado', () => {
+    expect(sitio.puertoHttps).toBe(0);
   });
 
   it('la página de fuga intenta llegar a los tres dominios', async () => {

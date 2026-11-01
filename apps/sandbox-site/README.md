@@ -42,6 +42,7 @@ comprueba que el manifiesto y el sitio coinciden.
 | `/redirige-afuera`     | Redirección 302 a un dominio de fuga                              |
 | `/websocket-externo`   | WebSocket a un dominio de fuga                                    |
 | `/service-worker`      | Un service worker que intenta salir por su cuenta                 |
+| `/webrtc`, `/quic`     | Salidas por UDP: un receptor del sandbox registra lo que llegue   |
 | `/auto-post`           | POST que se dispara solo al cargar                                |
 | `/api-en-otro-puerto`  | API en un segundo puerto local, como un backend en 3000           |
 | `/puerto-no-declarado` | Otro servicio local, que nunca debe recibir nada                  |

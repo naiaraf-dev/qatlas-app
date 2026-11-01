@@ -141,7 +141,9 @@ describe('Configuración del navegador', () => {
 
   it('no se saltea el proxy en loopback, y apaga lo que el proxy no ve', () => {
     expect(motor).toContain('--proxy-bypass-list=<-loopback>');
-    expect(motor).toContain('disable_non_proxied_udp');
+    expect(motor).toContain("'--webrtc-ip-handling-policy=disable_non_proxied_udp'");
+    // Esta variante no hace nada, y sin decir nada.
+    expect(motor).not.toContain('--force-webrtc-ip-handling-policy');
     expect(motor).toContain('--disable-quic');
   });
 
@@ -156,6 +158,21 @@ describe('Configuración del navegador', () => {
 
   it('el navegador nunca se descarga solo', () => {
     expect(motor).not.toMatch(/\binstall\b|registry/);
+  });
+});
+
+describe('Certificados', () => {
+  it('aceptar un certificado inválido no es una opción de la app: solo de los tests', () => {
+    const carpetas = [RUNNER, path.join(RAIZ, 'apps/desktop/src')];
+    const usos = carpetas
+      .flatMap(fuentes)
+      .filter(({ texto }) =>
+        /ignoreHTTPSErrors|ignore-certificate-errors|rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED|setCertificateVerifyProc/.test(
+          texto,
+        ),
+      )
+      .map(({ nombre }) => nombre);
+    expect(usos).toEqual([]);
   });
 });
 

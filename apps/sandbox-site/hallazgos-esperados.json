@@ -187,5 +187,21 @@
       "origen": "/puerto-no-declarado",
       "detalle": "Otro servicio local: nunca debe recibir nada"
     }
+  ],
+  "fugasUdp": [
+    {
+      "id": "fuga-webrtc",
+      "tipo": "webrtc",
+      "origen": "/webrtc",
+      "host": "stun.fuga.test",
+      "detalle": "STUN/ICE por UDP, hacia el receptor del sandbox. Tampoco debe exponer una IP local"
+    },
+    {
+      "id": "fuga-quic",
+      "tipo": "quic",
+      "origen": "/quic",
+      "host": "quic.fuga.test",
+      "detalle": "HTTP3 sobre UDP, hacia el receptor del sandbox"
+    }
   ]
 }
