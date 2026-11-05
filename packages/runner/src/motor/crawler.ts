@@ -8,8 +8,8 @@ import {
   consoleErrorRelevante,
   hallazgoDeEstado,
   hallazgosDeRendimiento,
+  claveDeMensaje,
   hostDe,
-  normalizarMensaje,
   SEVERIDAD,
   severidadDeAccesibilidad,
   UMBRALES,
@@ -413,7 +413,7 @@ export async function rastrear(
         severidad: SEVERIDAD['error-javascript'],
         url,
         urlOrigen: null,
-        clave: normalizarMensaje(excepcion),
+        clave: claveDeMensaje(excepcion),
         titulo: 'Excepción de JavaScript no capturada',
         detalle: excepcion.slice(0, 1000),
       });
@@ -429,7 +429,7 @@ export async function rastrear(
         severidad: SEVERIDAD['console-error'],
         url,
         urlOrigen: null,
-        clave: normalizarMensaje(mensaje.texto),
+        clave: claveDeMensaje(mensaje.texto),
         titulo: 'console.error en la página',
         detalle: mensaje.texto.slice(0, 1000),
       });

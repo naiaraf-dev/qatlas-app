@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analizarCookie,
+  claveDeMensaje,
   coincideExclusion,
   consoleErrorRelevante,
   hallazgoDeEstado,
@@ -83,6 +84,15 @@ describe('console.error', () => {
     "WebSocket connection to 'ws://ws.fuga.example/canal' failed",
   ])('descarta: %s', (texto) => {
     expect(consoleErrorRelevante(texto, ['ws.fuga.example'])).toBe(false);
+  });
+
+  it('la clave de un mensaje es un hash: el texto de la página no queda en claro', () => {
+    const clave = claveDeMensaje('TypeError: la tarjeta 4111 no existe');
+    expect(clave).toMatch(/^msj:[0-9a-f]{16}$/);
+    expect(clave).not.toContain('tarjeta');
+    // El mismo problema con otros números da la misma clave.
+    expect(claveDeMensaje('TypeError: la tarjeta 5500 no existe')).toBe(clave);
+    expect(claveDeMensaje('Otro error')).not.toBe(clave);
   });
 
   it('el mensaje se normaliza para la clave: sin números ni IDs', () => {

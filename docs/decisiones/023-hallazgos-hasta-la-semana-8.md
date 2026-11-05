@@ -15,8 +15,9 @@ traer datos de la página.
   - `hallazgo`: la identidad, por proyecto, con las columnas de la especificación. Esta semana una por aparición, con
     `huella` vacía y estado `nuevo`.
   - `hallazgo_ocurrencia`: cada aparición en una ejecución, con su URL, la página de origen y su detalle.
-- **`clave`:** lo que identifica el problema en su página (regla de axe, código HTTP, nombre de cookie, host,
-  mensaje normalizado sin números ni IDs). La semana 8 calcula la huella con tipo, URL y clave, y fusiona sin volver
+- **`clave`:** lo que identifica el problema en su página (regla de axe, código HTTP, nombre de cookie, host). Para un
+  mensaje de consola o una excepción, un hash del mensaje normalizado sin números ni IDs: el texto es de la página y
+  no queda en claro. Lo encontró el test del oráculo. La semana 8 calcula la huella con tipo, URL y clave, y fusiona sin volver
   a escanear.
 - **En claro:** tipo, severidad, un título genérico y la URL sin query.
 - **Cifrado con la clave del proyecto:** el detalle (mensaje de consola o de excepción, selectores, URL del recurso)

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SeveridadHallazgo, TipoHallazgo } from '@qatlas/shared';
 
 /**
@@ -92,6 +93,14 @@ export function normalizarMensaje(texto: string): string {
     .replace(/\d+/g, '#')
     .trim()
     .slice(0, 200);
+}
+
+/**
+ * La clave de un mensaje: un hash del mensaje normalizado. El mismo problema da la misma clave, para la
+ * huella de la semana 8, y el texto, que es de la página, no queda en claro (ADR 023).
+ */
+export function claveDeMensaje(texto: string): string {
+  return `msj:${createHash('sha256').update(normalizarMensaje(texto)).digest('hex').slice(0, 16)}`;
 }
 
 /**
