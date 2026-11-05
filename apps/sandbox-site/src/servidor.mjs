@@ -60,6 +60,7 @@ export const REGLAS_RESOLVER = Object.entries(MAPA_DE_HOSTS)
 
 const DEMORA_LENTA_MS = 3000;
 const COOKIE_SESION = 'sesion';
+const COOKIE_ANONIMA = 'sesion_anonima';
 const TOKEN_SESION = 'sesion-de-prueba-inventada';
 const LARGO_MAXIMO_CUERPO = 4096;
 
@@ -73,9 +74,10 @@ ${cuerpo}
 </body>
 </html>`;
 
-const INICIO = pagina(
-  'Sandbox de QAtlas',
-  `<p>Sitio de prueba con problemas plantados.</p>
+const inicio = (puertoHttps) =>
+  pagina(
+    'Sandbox de QAtlas',
+    `<p>Sitio de prueba con problemas plantados.</p>
 <ul>
   <li><a href="/login">Iniciar sesión</a></li>
   <li><a href="/panel">Panel</a></li>
@@ -96,8 +98,15 @@ const INICIO = pagina(
   <li><a href="/webrtc">WebRTC</a></li>
   <li><a href="/cerrar-sesion">Cerrar sesión</a></li>
   <li><a href="/eliminar-cuenta">Eliminar cuenta</a></li>
+  <li><a href="/sana">Página sana</a></li>
+  <li><a href="/lcp-lenta">Imagen principal lenta</a></li>
+  <li><a href="/calendario/2026/11">Calendario</a></li>
+  <li><a href="/buscar?t=1">Búsqueda</a></li>
+  <li><a href="/spa">Aplicación de una página</a></li>
+  <li><a href="/ws-escritura">WebSocket que escribe</a></li>
+  ${puertoHttps ? `<li><a href="https://${HOST_SITIO}:${puertoHttps}/mixto">Contenido mixto</a></li>` : ''}
 </ul>`,
-);
+  );
 
 const LOGIN = pagina(
   'Iniciar sesión',
@@ -242,6 +251,83 @@ const quic = (puertoUdp) =>
 </script>`,
   );
 
+// Páginas sanas: ningún chequeo debería encontrar nada acá. Si encuentra algo, es un falso positivo.
+const SANA = pagina(
+  'Página sana',
+  `<p>Una página sin problemas, para detectar falsos positivos.</p>
+<p><a href="/sana/otra">Otra página sana</a></p>`,
+);
+const SANA_OTRA = pagina(
+  'Otra página sana',
+  `<p>También sin problemas.</p>
+<img src="/imagen.svg" alt="Un cuadrado de ejemplo" width="40" height="40">`,
+);
+
+// La imagen principal tarda: el LCP pasa los 4 segundos.
+const DEMORA_LCP_MS = 4500;
+const LCP_LENTA = pagina(
+  'Imagen principal lenta',
+  '<img src="/imagen-grande.svg" alt="Una imagen grande de ejemplo" width="1200" height="800">',
+);
+// Con detalle: Chromium no cuenta para el LCP una imagen de un solo color (baja entropía).
+const IMAGEN_GRANDE = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">${Array.from(
+  { length: 600 },
+  (_, i) =>
+    `<rect x="${(i * 37) % 1200}" y="${(i * 53) % 800}" width="${20 + (i % 40)}" height="${15 + (i % 30)}" fill="#${((i * 2654435761) >>> 8).toString(16).padStart(6, '0').slice(0, 6)}"/>`,
+).join('')}</svg>`;
+
+// Trampas de URLs infinitas: cada mes enlaza al siguiente, y cada búsqueda a otra con otro parámetro.
+const calendario = (anio, mes) => {
+  const siguiente = mes === 12 ? [anio + 1, 1] : [anio, mes + 1];
+  return pagina(
+    `Calendario ${mes}/${anio}`,
+    `<p><a href="/calendario/${siguiente[0]}/${siguiente[1]}">Mes siguiente</a></p>`,
+  );
+};
+const buscar = (t) =>
+  pagina(
+    'Búsqueda',
+    `<p><a href="/buscar?t=${t + 1}&amp;orden=${(t * 7) % 13}">Más resultados</a></p>`,
+  );
+
+// Una aplicación de una página: navega y escribe con botones, sin links.
+const SPA = pagina(
+  'Aplicación de una página',
+  `<div id="vista"><p>Inicio de la aplicación.</p></div>
+<button type="button" id="ver">Ver detalle</button>
+<button type="button" id="guardar">Guardar cambios</button>
+<button type="button" id="borrar" data-testid="eliminar-todo">Quitar todo</button>
+<script>
+  const vista = document.getElementById('vista');
+  document.getElementById('ver').onclick = () => {
+    history.pushState({}, '', '/spa/detalle');
+    vista.textContent = 'Detalle.';
+  };
+  document.getElementById('guardar').onclick = () => {
+    fetch('/api/guardar', { method: 'POST', body: 'x' }).catch(() => {});
+  };
+  document.getElementById('borrar').onclick = () => {
+    fetch('/api/eliminar', { method: 'POST', body: 'x' }).catch(() => {});
+  };
+</script>`,
+);
+
+// Escribe por WebSocket apenas abre: solo lectura no puede dejarlo pasar.
+const WS_ESCRITURA = pagina(
+  'WebSocket que escribe',
+  `<script>
+  window.resultadoWsEscritura = new Promise((listo) => {
+    const ws = new WebSocket(\`ws://\${location.host}/canal\`);
+    ws.onopen = () => { ws.send('guardar'); setTimeout(() => listo('enviado'), 300); };
+    ws.onerror = () => listo('error');
+  });
+</script>`,
+);
+
+// En HTTPS, un script por HTTP: contenido mixto.
+const mixto = (puertoHttp) =>
+  pagina('Contenido mixto', `<script src="http://${HOST_SITIO}:${puertoHttp}/mixto.js"></script>`);
+
 const IMAGEN = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"></svg>';
 
 function responder(res, estado, cuerpo, encabezados = {}) {
@@ -297,6 +383,7 @@ export function iniciarSandbox({
     https: [],
     intentosLogin: [],
     rutas: [],
+    wsMensajes: [],
   };
   let puertoReal = puerto;
   let puertoApi = 0;
@@ -325,10 +412,13 @@ export function iniciarSandbox({
     const clave = `${req.method} ${pathname}`;
     switch (clave) {
       case 'GET /':
-        responder(res, 200, INICIO);
+        responder(res, 200, inicio(puertoHttps));
         return;
       case 'GET /login':
-        responder(res, 200, LOGIN);
+        // Plantado: una cookie de sesión anónima sin HttpOnly, antes de cualquier login.
+        responder(res, 200, LOGIN, {
+          'set-cookie': `${COOKIE_ANONIMA}=anonima-inventada; Path=/`,
+        });
         return;
       case 'POST /login': {
         registro.intentosLogin.push(pathname);
@@ -420,11 +510,56 @@ export function iniciarSandbox({
       case 'GET /quic':
         responder(res, 200, quic(puertoUdp));
         return;
+      case 'GET /favicon.ico':
+        responder(res, 204, '');
+        return;
+      case 'GET /sana':
+        responder(res, 200, SANA);
+        return;
+      case 'GET /sana/otra':
+        responder(res, 200, SANA_OTRA);
+        return;
+      case 'GET /lcp-lenta':
+        responder(res, 200, LCP_LENTA);
+        return;
+      case 'GET /imagen-grande.svg':
+        await new Promise((resolver) => setTimeout(resolver, DEMORA_LCP_MS));
+        responder(res, 200, IMAGEN_GRANDE, { 'content-type': 'image/svg+xml' });
+        return;
+      case 'GET /spa':
+      case 'GET /spa/detalle':
+        responder(res, 200, SPA);
+        return;
+      case 'POST /api/guardar':
+      case 'POST /api/eliminar':
+        registro.posts.push(pathname);
+        responder(res, 204, '');
+        return;
+      case 'GET /ws-escritura':
+        responder(res, 200, WS_ESCRITURA);
+        return;
+      case 'GET /mixto':
+        responder(res, 200, mixto(puertoReal));
+        return;
+      case 'GET /mixto.js':
+        responder(res, 200, 'void 0;', { 'content-type': 'text/javascript' });
+        return;
       case 'GET /auto-post':
         responder(res, 200, AUTO_POST);
         return;
-      default:
+      default: {
+        const mes = /^GET \/calendario\/(\d{4})\/(\d{1,2})$/.exec(clave);
+        if (mes) {
+          responder(res, 200, calendario(Number(mes[1]), Number(mes[2])));
+          return;
+        }
+        if (clave === 'GET /buscar') {
+          const t = Number(new URL(req.url ?? '/', 'http://x').searchParams.get('t')) || 1;
+          responder(res, 200, buscar(t));
+          return;
+        }
         responder(res, 404, pagina('No encontrada', '<p>No existe esta página.</p>'));
+      }
     }
   };
 
@@ -452,6 +587,14 @@ export function iniciarSandbox({
       return;
     }
     registro.websockets.push(nombreHost);
+    socket.on('data', (datos) => {
+      // Una trama de texto chica y enmascarada, como la manda un navegador.
+      const largo = datos[1] & 0x7f;
+      if (datos.length < 6 || largo >= 126 || (datos[0] & 0x0f) !== 1) return;
+      const mascara = datos.subarray(2, 6);
+      const texto = Buffer.from(datos.subarray(6, 6 + largo).map((b, i) => b ^ mascara[i % 4]));
+      registro.wsMensajes.push(texto.toString('utf8'));
+    });
     const aceptar = createHash('sha1')
       .update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
       .digest('base64');

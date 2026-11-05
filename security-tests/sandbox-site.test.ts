@@ -27,7 +27,7 @@ const manifiesto = JSON.parse(
     url: string;
     origen?: string;
     severidad: string;
-    regla?: string;
+    clave?: string;
   }[];
   soloLectura: { url: string; origen: string; metodo: string }[];
   exclusiones: { url: string; origen: string; texto: string }[];
@@ -155,7 +155,8 @@ describe('Intentos de fuga: nunca a un dominio real', () => {
       ...[...html, panel.cuerpo].join('\n').matchAll(/(?:https?|wss?):\/\/([^/:"'\s<>]+)/g),
     ].map((m) => m[1] as string);
     expect(hosts.length).toBeGreaterThanOrEqual(3);
-    for (const host of hosts) expect(host).toMatch(RESERVADOS);
+    // 127.0.0.1 es el propio sandbox: su API y su servicio trampa, en otros puertos.
+    for (const host of hosts) if (host !== HOST_ESCUCHA) expect(host).toMatch(RESERVADOS);
   });
 
   it('la redirección, el WebSocket y el service worker apuntan a dominios de fuga', async () => {
@@ -229,7 +230,7 @@ describe('El sitio hace lo que dice el manifiesto', () => {
     for (const { tipo, url, severidad } of manifiesto.hallazgos) {
       expect(tipo).toBeTruthy();
       expect(url).toMatch(/^\//);
-      expect(['critica', 'alta', 'media', 'baja']).toContain(severidad);
+      expect(['critica', 'alta', 'media', 'baja', 'informativa']).toContain(severidad);
     }
     const ids = manifiesto.hallazgos.map((h) => h.id);
     expect(new Set(ids).size).toBe(ids.length);
