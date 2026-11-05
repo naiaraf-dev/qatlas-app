@@ -5,7 +5,14 @@
  * rechazan, y un handler nunca puede devolver datos no declarados.
  */
 import { describe, expect, it } from 'vitest';
-import { CANALES_SIN_BOVEDA, IPC_CHANNELS, ipcContract, type IpcChannel } from '@qatlas/shared';
+import {
+  CANALES_SIN_BOVEDA,
+  HallazgoVista,
+  IPC_CHANNELS,
+  ipcContract,
+  ipcEventos,
+  type IpcChannel,
+} from '@qatlas/shared';
 import { createIpcHandler, makeSenderCheck } from '../apps/desktop/src/main/ipc/create-handler';
 
 const APP = 'app://qatlas';
@@ -261,6 +268,7 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     maxPaginas: 200,
     maxProfundidad: 5,
     timeoutPaginaSegundos: 30,
+    maxMinutos: 30,
     soloLectura: true,
     exclusiones: ['logout'],
     modoDatosSensibles: false,
@@ -629,6 +637,12 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         conexionesPermitidas: 0,
         conexionesBloqueadas: 0,
         motivo: null,
+        hallazgos: 0,
+        detenido: null,
+        noRecorridosSoloLectura: 0,
+        noRecorridosExclusiones: 0,
+        urlsDescartadas: 0,
+        websocketDescartados: 0,
       },
     };
     const conexion = {
@@ -638,9 +652,14 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
       permitida: false,
       regla: 'fuera-de-dominios',
     };
-    expect(salida.safeParse({ ejecucion, conexiones: [conexion] }).success).toBe(true);
+    const vacios = { hallazgos: [], paginas: [] };
+    expect(salida.safeParse({ ejecucion, conexiones: [conexion], ...vacios }).success).toBe(true);
     expect(
-      salida.safeParse({ ejecucion, conexiones: [{ ...conexion, ruta: '/x?token=abc' }] }).success,
+      salida.safeParse({
+        ejecucion,
+        conexiones: [{ ...conexion, ruta: '/x?token=abc' }],
+        ...vacios,
+      }).success,
     ).toBe(false);
   });
 
@@ -677,6 +696,7 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
       maxPaginas: 1,
       maxProfundidad: 1,
       timeoutPaginaSegundos: 1,
+      maxMinutos: 30,
       soloLectura: true,
       exclusiones: [],
       modoDatosSensibles: false,
@@ -689,6 +709,66 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     );
     for (const puertosLocales of [[0], [65536], [1.5], ['3000'], [-1]]) {
       expect(validar.safeParse({ proyecto: { ...proyecto, puertosLocales } }).success).toBe(false);
+    }
+  });
+});
+
+describe('TS-08 · Escaneo: hallazgos y progreso', () => {
+  const HALLAZGO = {
+    id: '00000000-0000-4000-8000-000000000001',
+    tipo: 'accesibilidad',
+    severidad: 'alta',
+    titulo: 'Accesibilidad: imagen sin texto alternativo',
+    url: 'https://app.lexora.test/x',
+    urlOrigen: null,
+    detalle: 'img.logo',
+  };
+
+  it('un hallazgo tiene una forma cerrada: tipo y severidad de una lista', () => {
+    expect(HallazgoVista.safeParse(HALLAZGO).success).toBe(true);
+    expect(HallazgoVista.safeParse({ ...HALLAZGO, html: '<p>' }).success).toBe(false);
+    expect(HallazgoVista.safeParse({ ...HALLAZGO, tipo: 'otro' }).success).toBe(false);
+    expect(HallazgoVista.safeParse({ ...HALLAZGO, severidad: 'urgente' }).success).toBe(false);
+    expect(HallazgoVista.safeParse({ ...HALLAZGO, detalle: 'x'.repeat(2001) }).success).toBe(false);
+  });
+
+  it('el evento de progreso solo lleva lo que la pantalla muestra', () => {
+    const progreso = ipcEventos['ejecuciones:progreso'];
+    const valido = {
+      ejecucionId: '00000000-0000-4000-8000-000000000001',
+      estado: 'en-curso',
+      paginaActual: 'https://app.lexora.test/x',
+      paginasVisitadas: 1,
+      hallazgos: 0,
+      conexionesBloqueadas: 0,
+    };
+    expect(progreso.safeParse(valido).success).toBe(true);
+    expect(progreso.safeParse({ ...valido, detalle: 'x' }).success).toBe(false);
+    expect(progreso.safeParse({ ...valido, hallazgos: -1 }).success).toBe(false);
+  });
+
+  it('el tiempo máximo del proyecto va de 1 a 240 minutos', () => {
+    const validar = ipcContract['proyectos:validar'].request;
+    const proyecto = {
+      nombre: 'x',
+      descripcion: '',
+      urlBase: 'http://localhost:1/',
+      dominios: ['localhost'],
+      puertosLocales: [],
+      maxRps: 2,
+      maxPaginas: 1,
+      maxProfundidad: 1,
+      timeoutPaginaSegundos: 1,
+      soloLectura: true,
+      exclusiones: [],
+      modoDatosSensibles: false,
+      selectoresSensibles: [],
+      sistemaInterno: false,
+      permitirLoginHttp: false,
+    };
+    expect(validar.safeParse({ proyecto: { ...proyecto, maxMinutos: 30 } }).success).toBe(true);
+    for (const maxMinutos of [0, 241, 1.5]) {
+      expect(validar.safeParse({ proyecto: { ...proyecto, maxMinutos } }).success).toBe(false);
     }
   });
 });

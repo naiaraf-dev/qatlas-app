@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gte, inArray, ne, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BaseCifrada } from './conexion';
 import {
@@ -8,7 +8,10 @@ import {
   conexion,
   credencial,
   ejecucion,
+  hallazgo,
+  hallazgoOcurrencia,
   intentoLogin,
+  paginaVisitada,
   proyecto,
   type DetalleAuditoria,
 } from './esquema';
@@ -19,6 +22,9 @@ export type FilaCredencial = typeof credencial.$inferSelect;
 export type FilaAuditoria = typeof auditoria.$inferSelect;
 export type FilaEjecucion = typeof ejecucion.$inferSelect;
 export type FilaConexion = typeof conexion.$inferSelect;
+export type FilaPaginaVisitada = typeof paginaVisitada.$inferSelect;
+export type FilaHallazgo = typeof hallazgo.$inferSelect;
+export type FilaOcurrencia = typeof hallazgoOcurrencia.$inferSelect;
 
 type Comunes = 'createdAt' | 'updatedAt';
 export type NuevoProyecto = Omit<FilaProyecto, Comunes>;
@@ -268,6 +274,91 @@ export function leerUltimasConexiones(base: BaseCifrada, limite: number): FilaCo
     .from(conexion)
     .orderBy(desc(sql`rowid`))
     .limit(limite)
+    .all();
+}
+
+export function agregarPaginaVisitada(
+  base: BaseCifrada,
+  fila: Omit<FilaPaginaVisitada, Comunes | 'id'>,
+): void {
+  orm(base)
+    .insert(paginaVisitada)
+    .values({ ...fila, id: randomUUID(), ...marcas(new Date().toISOString()) })
+    .run();
+}
+
+export function leerPaginasVisitadas(base: BaseCifrada, ejecucionId: string): FilaPaginaVisitada[] {
+  return orm(base)
+    .select()
+    .from(paginaVisitada)
+    .where(eq(paginaVisitada.ejecucionId, ejecucionId))
+    .orderBy(asc(sql`rowid`))
+    .limit(500)
+    .all();
+}
+
+/** El hallazgo y su aparición, juntos. */
+export function agregarHallazgo(
+  base: BaseCifrada,
+  fila: Pick<
+    FilaHallazgo,
+    'proyectoId' | 'ejecucionId' | 'tipo' | 'severidad' | 'titulo' | 'descripcion' | 'url' | 'clave'
+  >,
+  ocurrencia: Pick<FilaOcurrencia, 'urlOrigen' | 'detalleCifrado'> & { id: string },
+): void {
+  const ahora = new Date().toISOString();
+  const hallazgoId = randomUUID();
+  base.transaction(() => {
+    orm(base)
+      .insert(hallazgo)
+      .values({
+        ...fila,
+        id: hallazgoId,
+        huella: null,
+        estado: 'nuevo',
+        primeraVezEn: ahora,
+        ultimaVezEn: ahora,
+        casoId: null,
+        pasoIndice: null,
+        ...marcas(ahora),
+      })
+      .run();
+    orm(base)
+      .insert(hallazgoOcurrencia)
+      .values({
+        id: ocurrencia.id,
+        proyectoId: fila.proyectoId,
+        hallazgoId,
+        ejecucionId: fila.ejecucionId,
+        url: fila.url,
+        urlOrigen: ocurrencia.urlOrigen,
+        detalleCifrado: ocurrencia.detalleCifrado,
+        ...marcas(ahora),
+      })
+      .run();
+  })();
+}
+
+export function leerHallazgosDeEjecucion(
+  base: BaseCifrada,
+  ejecucionId: string,
+): (FilaHallazgo & {
+  ocurrenciaId: string;
+  urlOrigen: string | null;
+  detalleCifrado: Buffer | null;
+})[] {
+  return orm(base)
+    .select({
+      ...getTableColumns(hallazgo),
+      ocurrenciaId: hallazgoOcurrencia.id,
+      urlOrigen: hallazgoOcurrencia.urlOrigen,
+      detalleCifrado: hallazgoOcurrencia.detalleCifrado,
+    })
+    .from(hallazgo)
+    .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
+    .where(eq(hallazgo.ejecucionId, ejecucionId))
+    .orderBy(asc(sql`hallazgo.rowid`))
+    .limit(1000)
     .all();
 }
 
