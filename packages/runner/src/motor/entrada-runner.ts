@@ -3,7 +3,8 @@ import type { Browser } from 'playwright-core';
 import { MensajeAlRunner, type MensajeDelRunner } from '../protocolo';
 import { instalarAgente } from '../red/agente';
 import { causaDeFalla, detalleDeFalla, perfilDemasiadoLargo } from './diagnostico';
-import { abrirContexto, abrirNavegador, escanear, probarLogin } from './motor';
+import { rastrear } from './crawler';
+import { abrirContexto, abrirNavegador, probarLogin } from './motor';
 
 /**
  * Punto de entrada del runner: un `utilityProcess` por ejecución (ADR 017). Recibe solo la
@@ -65,23 +66,48 @@ async function ejecutar(mensaje: Exclude<MensajeAlRunner, { tipo: 'cancelar' }>)
   }
 
   if (mensaje.tipo === 'escaneo') {
-    const contexto = await abrirContexto(navegador, configuracion.politica, {
+    const { contexto, vigilancia } = await abrirContexto(navegador, configuracion.politica, {
       soloLectura: mensaje.soloLectura,
       alRegistrar,
     });
-    const resultado = await escanear(contexto, {
-      urlBase: configuracion.politica.urlBase,
-      politica: configuracion.politica,
-      maxPaginas: mensaje.maxPaginas,
-      maxRps: mensaje.maxRps,
-      exclusiones: mensaje.exclusiones,
-      timeoutPaginaMs: configuracion.timeoutPaginaMs,
+    const resultado = await rastrear(
+      contexto,
+      vigilancia,
+      {
+        urlBase: configuracion.politica.urlBase,
+        politica: configuracion.politica,
+        maxPaginas: mensaje.maxPaginas,
+        maxProfundidad: mensaje.maxProfundidad,
+        maxMinutos: mensaje.maxMinutos,
+        maxRps: mensaje.maxRps,
+        exclusiones: mensaje.exclusiones,
+        timeoutPaginaMs: configuracion.timeoutPaginaMs,
+        soloLectura: mensaje.soloLectura,
+      },
+      {
+        alPagina: (pagina) => {
+          enviar({
+            tipo: 'pagina',
+            url: pagina.url,
+            status: pagina.status,
+            tiempoCargaMs: pagina.tiempoCargaMs === null ? null : Math.round(pagina.tiempoCargaMs),
+            profundidad: pagina.profundidad,
+          });
+        },
+        alHallazgo: (hallazgo) => {
+          enviar({ tipo: 'hallazgo', hallazgo });
+        },
+      },
+    );
+    enviar({
+      tipo: 'escaneo-terminado',
+      ...resultado,
+      websocketDescartados: vigilancia.websocketDescartados(),
     });
-    enviar({ tipo: 'escaneo-terminado', ...resultado });
     return;
   }
   // El login necesita escribir: solo lectura no aplica a este contexto (6.2).
-  const contexto = await abrirContexto(navegador, configuracion.politica, {
+  const { contexto } = await abrirContexto(navegador, configuracion.politica, {
     soloLectura: false,
     alRegistrar,
   });

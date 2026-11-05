@@ -1,4 +1,4 @@
-import { IndicadorExito, PasoLogin } from '@qatlas/shared';
+import { IndicadorExito, PasoLogin, SeveridadHallazgo, TipoHallazgo } from '@qatlas/shared';
 import { z } from 'zod';
 
 /**
@@ -51,6 +51,8 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
       tipo: z.literal('escaneo'),
       configuracion: Configuracion,
       maxPaginas: z.number().int().positive(),
+      maxProfundidad: z.number().int().positive(),
+      maxMinutos: z.number().int().positive(),
       maxRps: z.number().int().positive(),
       soloLectura: z.boolean(),
       exclusiones: z.array(z.string().max(200)).max(200),
@@ -72,6 +74,8 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
 ]);
 export type MensajeAlRunner = z.infer<typeof MensajeAlRunner>;
 
+const Cantidad = z.number().int().nonnegative();
+
 export const MensajeDelRunner = z.discriminatedUnion('tipo', [
   z
     .object({
@@ -84,9 +88,39 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
     .strict(),
   z
     .object({
+      tipo: z.literal('pagina'),
+      url: z.string().max(2048),
+      status: z.number().int().nullable(),
+      tiempoCargaMs: z.number().nonnegative().nullable(),
+      profundidad: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('hallazgo'),
+      hallazgo: z
+        .object({
+          tipo: TipoHallazgo,
+          severidad: SeveridadHallazgo,
+          url: z.string().max(2048),
+          urlOrigen: z.string().max(2048).nullable(),
+          clave: z.string().max(300),
+          titulo: z.string().max(300),
+          detalle: z.string().max(2000),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       tipo: z.literal('escaneo-terminado'),
-      paginasVisitadas: z.number().int().nonnegative(),
-      linksExcluidos: z.number().int().nonnegative(),
+      paginasVisitadas: Cantidad,
+      linksExcluidos: Cantidad,
+      detenido: z.enum(['max-paginas', 'max-tiempo']).nullable(),
+      noRecorridosSoloLectura: Cantidad,
+      noRecorridosExclusiones: Cantidad,
+      urlsDescartadas: Cantidad,
+      websocketDescartados: Cantidad,
     })
     .strict(),
   // Solo un resultado: ningún contenido de la página cruza este canal (EVI-01).
