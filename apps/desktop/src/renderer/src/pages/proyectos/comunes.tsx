@@ -169,6 +169,7 @@ const CAMPOS_NUMERICOS = [
   { campo: 'maxPaginas', etiqueta: 'Máximo de páginas' },
   { campo: 'maxProfundidad', etiqueta: 'Profundidad' },
   { campo: 'timeoutPaginaSegundos', etiqueta: 'Timeout por página (segundos)' },
+  { campo: 'maxMinutos', etiqueta: 'Tiempo máximo (minutos)' },
 ] as const;
 
 const esPuerto = (texto: string) =>

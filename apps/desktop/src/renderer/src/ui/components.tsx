@@ -78,13 +78,14 @@ export function Card({
 
 // --- Insignias de severidad y estado -------------------------------------------
 
-export type Severity = 'critica' | 'alta' | 'media' | 'baja';
+export type Severity = 'critica' | 'alta' | 'media' | 'baja' | 'informativa';
 
 const SEVERITY: Record<Severity, { label: string; className: string }> = {
   critica: { label: 'Crítica', className: 'bg-crit-bg text-crit-text' },
   alta: { label: 'Alta', className: 'bg-high-bg text-high-text' },
   media: { label: 'Media', className: 'bg-med-bg text-med-text' },
   baja: { label: 'Baja', className: 'bg-low-bg text-low-text' },
+  informativa: { label: 'Informativa', className: 'border border-border bg-surface text-muted' },
 };
 
 /** La severidad siempre lleva su nombre escrito: nunca se comunica solo con color. */
