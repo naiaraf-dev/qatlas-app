@@ -138,7 +138,12 @@ export function iniciarProxy(opciones: OpcionesProxy): Promise<ProxyActivo> {
 
   function atenderSolicitud(req: IncomingMessage, res: ServerResponse): void {
     const rechazar = (estado: number) => {
-      res.writeHead(estado, { 'content-length': 0, connection: 'close' });
+      // La marca le dice al crawler que este 403 es del proxy y no un error del sitio.
+      res.writeHead(estado, {
+        'content-length': 0,
+        connection: 'close',
+        ...(estado === 403 ? { 'x-qatlas-bloqueado': '1' } : {}),
+      });
       res.end();
     };
     const autenticacion = autenticar(req, esperado);

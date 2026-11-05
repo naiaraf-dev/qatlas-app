@@ -182,5 +182,18 @@ export function decidirUrlSinResolver(texto: string, politica: PoliticaDeRed): D
   if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
     return { permitida: false, regla: 'solicitud-invalida' };
   }
-  return decidirNombre(url.hostname, politica);
+  const nombre = decidirNombre(url.hostname, politica);
+  if (!nombre.permitida) return nombre;
+  // El puerto, con la misma regla del proxy: así un rechazo por puerto también se ve acá.
+  const seguro = url.protocol === 'https:' || url.protocol === 'wss:';
+  const puerto = Number(url.port) || (seguro ? 443 : 80);
+  const host = normalizarHost(url.hostname);
+  if (esHostLocal(host)) {
+    return puertosLocalesPermitidos(politica).has(puerto)
+      ? nombre
+      : { permitida: false, regla: 'puerto-local-no-declarado' };
+  }
+  return puertosRemotosPermitidos(politica).has(puerto)
+    ? nombre
+    : { permitida: false, regla: 'puerto-no-permitido' };
 }
