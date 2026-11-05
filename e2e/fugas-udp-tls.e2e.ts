@@ -172,7 +172,7 @@ test.describe('WebRTC', () => {
   test('el contexto de la app tampoco: la segunda capa no cambia el resultado', async () => {
     const politica = POLITICA();
     navegador = await conMotor(politica);
-    const contexto = await abrirContexto(navegador, politica, {
+    const { contexto } = await abrirContexto(navegador, politica, {
       soloLectura: true,
       alRegistrar: () => undefined,
     });
@@ -249,7 +249,7 @@ test.describe('HTTPS: sesión TLS completa por el túnel', () => {
 
   test('la app no acepta un certificado que no conoce', async () => {
     navegador = await conMotor(politica());
-    const contexto = await abrirContexto(navegador, politica(), {
+    const { contexto } = await abrirContexto(navegador, politica(), {
       soloLectura: true,
       alRegistrar: () => undefined,
     });

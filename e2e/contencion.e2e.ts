@@ -26,10 +26,14 @@ import {
   abrirContexto,
   abrirNavegador,
   ARGUMENTOS_CHROMIUM,
-  escanear,
   probarLogin,
   type RegistroNavegador,
 } from '../packages/runner/src/motor/motor';
+import {
+  rastrear,
+  type OpcionesRastreo,
+  type PaginaVisitada,
+} from '../packages/runner/src/motor/crawler';
 import {
   iniciarProxy,
   type ProxyActivo,
@@ -93,8 +97,9 @@ async function conProxy(p: PoliticaDeRed, resolvedor = resolver): Promise<void> 
   cerrarNavegador = () => navegador.close();
 }
 
-const contexto = (p: PoliticaDeRed, soloLectura = true): Promise<BrowserContext> =>
-  abrirContexto(navegador, p, { soloLectura, alRegistrar: (r) => delNavegador.push(r) });
+const contexto = async (p: PoliticaDeRed, soloLectura = true): Promise<BrowserContext> =>
+  (await abrirContexto(navegador, p, { soloLectura, alRegistrar: (r) => delNavegador.push(r) }))
+    .contexto;
 
 /** Sin la segunda capa: lo único entre la página y la red es el proxy. */
 const contextoSoloProxy = (): Promise<BrowserContext> =>
@@ -493,6 +498,7 @@ test.describe('Fallar cerrado', () => {
 });
 
 test.describe('TS-05 · Solo lectura y exclusiones', () => {
+  test.describe.configure({ timeout: 180_000 });
   const p = (): PoliticaDeRed => politica();
   test.beforeAll(async () => {
     await conProxy(politica());
@@ -520,47 +526,120 @@ test.describe('TS-05 · Solo lectura y exclusiones', () => {
     expect(delNavegador.some((r) => r.regla === 'solo-lectura')).toBe(true);
   });
 
-  test('el recorrido no visita lo excluido, sigue el resto y no llama a ninguna fuga', async () => {
-    const contextoEscaneo = await contexto(p());
-    const resultado = await escanear(contextoEscaneo, {
-      urlBase: `http://${HOST_SITIO}:${sitio.puerto}/`,
-      politica: p(),
-      maxPaginas: 200,
-      maxRps: 50,
-      exclusiones: ['cerrar sesión', 'eliminar', 'logout'],
-      timeoutPaginaMs: 5000,
+  /** Un recorrido con el crawler de la app. Devuelve también las páginas y lo que se descartó por WebSocket. */
+  async function recorrer(
+    opciones: Partial<OpcionesRastreo> = {},
+    ahora?: () => number,
+    paginas: PaginaVisitada[] = [],
+  ) {
+    const soloLectura = opciones.soloLectura ?? true;
+    const { contexto: c, vigilancia } = await abrirContexto(navegador, p(), {
+      soloLectura,
+      alRegistrar: (r) => delNavegador.push(r),
     });
+    const resultado = await rastrear(
+      c,
+      vigilancia,
+      {
+        urlBase: `http://${HOST_SITIO}:${sitio.puerto}/`,
+        politica: p(),
+        maxPaginas: 200,
+        // Todo lo del sandbox está a un link de la raíz; la trampa necesita más, y lo pide.
+        maxProfundidad: 1,
+        maxMinutos: 5,
+        maxRps: 50,
+        exclusiones: ['cerrar sesión', 'eliminar', 'logout'],
+        timeoutPaginaMs: 8000,
+        soloLectura,
+        ...opciones,
+      },
+      { alPagina: (pagina) => paginas.push(pagina), alHallazgo: () => undefined },
+      ahora,
+    );
+    await c.close();
+    return { resultado, paginas, wsDescartados: vigilancia.websocketDescartados() };
+  }
+  const rutas = (paginas: readonly PaginaVisitada[]) => paginas.map((x) => new URL(x.url).pathname);
+
+  test('en solo lectura: no visita lo excluido, no clickea, no escribe y no sale', async () => {
+    const { resultado, paginas, wsDescartados } = await recorrer();
     expect(resultado.linksExcluidos).toBe(2);
-    expect(resultado.paginasVisitadas).toBeGreaterThan(5);
+    expect(resultado.paginasVisitadas).toBeGreaterThan(10);
     expect(sitio.registro.trampas).toEqual([]);
     expect(sitio.registro.posts).toEqual([]);
     expect(sitio.registro.fugas).toEqual([]);
     expect(sitio.registro.puertoNoDeclarado).toEqual([]);
+    // Ningún clic: la ruta de la SPA no se descubrió, y la cobertura no alcanzada se informa.
+    expect(rutas(paginas)).not.toContain('/spa/detalle');
+    expect(resultado.noRecorridosSoloLectura).toBeGreaterThanOrEqual(3);
+    // El WebSocket abrió, pero lo que la página mandó no salió, y se cuenta.
+    expect(sitio.registro.wsMensajes).toEqual([]);
+    expect(wsDescartados).toBeGreaterThan(0);
+    // RN-ESC-04: cada URL se analiza una sola vez. Y la profundidad se respeta.
+    const urls = paginas.map((x) => x.url);
+    expect(new Set(urls).size).toBe(urls.length);
+    expect(Math.max(...paginas.map((x) => x.profundidad))).toBe(1);
   });
 
-  test('control: sin exclusiones, el recorrido sí pisa las trampas', async () => {
-    const contextoEscaneo = await contexto(p());
-    await escanear(contextoEscaneo, {
-      urlBase: `http://${HOST_SITIO}:${sitio.puerto}/`,
-      politica: p(),
-      maxPaginas: 200,
-      maxRps: 50,
+  test('control: sin solo lectura y sin exclusiones, los botones escriben y el WebSocket llega', async () => {
+    const { paginas, wsDescartados } = await recorrer({
+      soloLectura: false,
       exclusiones: [],
-      timeoutPaginaMs: 5000,
+      // La ruta que descubre un clic queda un nivel más abajo.
+      maxProfundidad: 2,
     });
+    expect(sitio.registro.posts).toEqual(expect.arrayContaining(['/api/guardar', '/api/eliminar']));
+    expect(rutas(paginas)).toContain('/spa/detalle');
+    expect(sitio.registro.wsMensajes).toContain('guardar');
+    expect(wsDescartados).toBe(0);
     expect(sitio.registro.trampas.length).toBeGreaterThan(0);
+    // Un botón que envía un formulario nunca se toca, aun sin solo lectura: el único envío es el
+    // automático de /auto-post, que no es un clic.
+    expect(sitio.registro.posts.filter((r) => r === '/formulario/enviar')).toEqual([
+      '/formulario/enviar',
+    ]);
   });
 
-  test('el recorrido respeta el máximo de páginas', async () => {
-    const resultado = await escanear(await contexto(p()), {
-      urlBase: `http://${HOST_SITIO}:${sitio.puerto}/`,
-      politica: p(),
-      maxPaginas: 2,
-      maxRps: 50,
-      exclusiones: [],
-      timeoutPaginaMs: 5000,
+  test('sin solo lectura, las exclusiones valen para botones, por texto o por atributos', async () => {
+    const { resultado, paginas } = await recorrer({
+      soloLectura: false,
+      exclusiones: ['cerrar sesión', 'eliminar', 'guardar'],
+      maxProfundidad: 2,
     });
+    // «Guardar cambios» por su texto; «Quitar todo» por su data-testid, eliminar-todo.
+    expect(sitio.registro.posts).not.toContain('/api/guardar');
+    expect(sitio.registro.posts).not.toContain('/api/eliminar');
+    // «Ver detalle» no está excluido: se clickeó y descubrió la ruta.
+    expect(rutas(paginas)).toContain('/spa/detalle');
+    expect(resultado.noRecorridosExclusiones).toBeGreaterThanOrEqual(4);
+    expect(sitio.registro.trampas).toEqual([]);
+  });
+
+  test('las trampas de URLs infinitas se cortan, y se cuentan', async () => {
+    const { resultado, paginas } = await recorrer({ maxProfundidad: 50 });
+    const visitadas = rutas(paginas);
+    expect(visitadas.filter((r) => r.startsWith('/calendario/')).length).toBeLessThanOrEqual(10);
+    expect(visitadas.filter((r) => r === '/buscar').length).toBeLessThanOrEqual(20);
+    expect(resultado.urlsDescartadas).toBeGreaterThan(0);
+    expect(resultado.detenido).toBeNull();
+  });
+
+  test('RN-ESC-05: se detiene en el máximo de páginas y lo dice', async () => {
+    const { resultado } = await recorrer({ maxPaginas: 2 });
     expect(resultado.paginasVisitadas).toBe(2);
+    expect(resultado.detenido).toBe('max-paginas');
+  });
+
+  test('RN-ESC-05: se detiene en el tiempo máximo y lo dice', async () => {
+    const vistas: PaginaVisitada[] = [];
+    // Después de la primera página, el reloj salta 10 minutos.
+    const { resultado } = await recorrer(
+      { maxMinutos: 1 },
+      () => Date.now() + (vistas.length > 0 ? 600_000 : 0),
+      vistas,
+    );
+    expect(resultado.paginasVisitadas).toBe(1);
+    expect(resultado.detenido).toBe('max-tiempo');
   });
 });
 

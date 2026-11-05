@@ -45,7 +45,7 @@ let app: ElectronApplication;
 let page: Page;
 let sitio: SandboxActivo;
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial', timeout: 150_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
@@ -53,7 +53,7 @@ const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true })
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const siguiente = () => boton('Siguiente').click();
 const ejecuciones = () =>
-  page.getByRole('list', { name: 'Ejecuciones del proyecto' }).getByRole('listitem');
+  page.getByRole('list', { name: 'Ejecuciones del proyecto' }).locator(':scope > li');
 
 async function crearProyecto(nombre: string, puertos: string): Promise<void> {
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
@@ -66,6 +66,8 @@ async function crearProyecto(nombre: string, puertos: string): Promise<void> {
   await siguiente();
   await entrada('Solicitudes por segundo').fill('5');
   await entrada('Timeout por página (segundos)').fill('5');
+  // Todo el sandbox está a un link de la raíz: así cada ejecución tarda menos.
+  await entrada('Profundidad').fill('1');
   await siguiente();
   await page.getByRole('checkbox', { name: 'Acepto esta declaración' }).check();
   await boton('Crear proyecto').click();
@@ -181,7 +183,7 @@ test('el proyecto declara un puerto extra, y queda en la declaración', async ()
 
 test('una ejecución abre la URL base, sigue los links y no deja salir nada', async () => {
   await lanzarEjecucion();
-  await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 60_000 });
+  await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 120_000 });
   await expect(ejecuciones().first()).toContainText(/Páginas: \d\d? · Links excluidos: \d/);
   await expect(ejecuciones().first()).toContainText(/Bloqueadas: [1-9]/);
   expect(sitio.registro.api.length).toBeGreaterThan(0);
@@ -202,7 +204,7 @@ test('al terminar no queda el perfil, ni el proxy, ni el runner', async () => {
 });
 
 test('el resumen muestra cada conexión bloqueada con su regla', async () => {
-  await boton('Ver conexiones').click();
+  await boton('Ver resultado').click();
   const bloqueadas = page.getByRole('region', { name: 'Conexiones bloqueadas de la ejecución' });
   await expect(bloqueadas).toContainText('analitica.fuga.test');
   await expect(bloqueadas).toContainText('fuera-de-dominios');
@@ -265,7 +267,7 @@ test('TS-03: el proceso principal no abre conexiones propias durante una ejecuci
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await page.getByRole('button', { name: /Sandbox/ }).click();
   await lanzarEjecucion();
-  await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 60_000 });
+  await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 120_000 });
 
   const conexiones = await app.evaluate(() => {
     const estado = globalThis as unknown as { conexiones: string[]; original: never };
