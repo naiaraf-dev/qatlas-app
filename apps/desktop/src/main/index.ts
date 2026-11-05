@@ -8,6 +8,7 @@ import type { ServicioEjecuciones } from './ejecuciones/servicio';
 import { limpiarPerfilesHuerfanos } from './ejecuciones/perfiles';
 import { crearLanzador } from './ejecuciones/procesos';
 import type { ServicioProyectos } from './proyectos/servicio';
+import { ipcEventos } from '@qatlas/shared';
 import { applyHardening } from './hardening';
 import { registerIpc } from './ipc/register';
 import { makeSenderCheck } from './ipc/create-handler';
@@ -209,6 +210,12 @@ async function cargarServicios(): Promise<{
         ? path.join(process.resourcesPath, 'navegadores')
         : process.env.PLAYWRIGHT_BROWSERS_PATH,
     }),
+    Date.now,
+    (progreso) => {
+      // Validado antes de salir, como la respuesta de un canal: nada no declarado llega a la interfaz.
+      const valido = ipcEventos['ejecuciones:progreso'].safeParse(progreso);
+      if (valido.success) mainWindow?.webContents.send('ejecuciones:progreso', valido.data);
+    },
   );
   dependientes.ejecuciones = ejecuciones;
   return { boveda, proyectos, ejecuciones };

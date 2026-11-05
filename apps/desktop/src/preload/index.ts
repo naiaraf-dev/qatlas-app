@@ -56,6 +56,16 @@ const api: QatlasApi = {
     cancelar: (req) => invoke('ejecuciones:cancelar', req),
     listar: (req) => invoke('ejecuciones:listar', req),
     detalle: (req) => invoke('ejecuciones:detalle', req),
+    // Solo los datos: la interfaz nunca recibe el evento de IPC ni `ipcRenderer`.
+    alProgreso: (oyente) => {
+      const escuchar = (_evento: unknown, progreso: unknown) => {
+        oyente(progreso as never);
+      };
+      ipcRenderer.on('ejecuciones:progreso', escuchar);
+      return () => {
+        ipcRenderer.removeListener('ejecuciones:progreso', escuchar);
+      };
+    },
   },
 };
 
