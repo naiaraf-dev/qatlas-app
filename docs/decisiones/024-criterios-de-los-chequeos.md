@@ -28,9 +28,13 @@ Las excepciones de JavaScript no capturadas van aparte, con severidad alta.
 
 ## Cookies de sesión
 
-- **Es de sesión** si no vence (sin `Expires` ni `Max-Age`) o si su nombre lo sugiere: contiene `ses`, `sid`, `auth`,
-  `token`, `jwt` o `login`.
-- **Le falta HttpOnly:** siempre se marca, alta.
+- **Es de sesión** si no vence (sin `Expires` ni `Max-Age`) o si un **segmento** de su nombre lo sugiere: `sess`,
+  `sesion`, `session`, `sessid`, `sessionid`, `phpsessid`, `jsessionid`, `sid`, `ssid`, `auth`, `token`, `jwt` o
+  `login`. Los segmentos se separan por `_`, `-`, `.` y por un cambio de minúscula a mayúscula: «ses» no atrapa
+  «preferences» ni «classes».
+- **Anti-CSRF** (`XSRF-TOKEN`, `csrftoken`, `_csrf`, `__RequestVerificationToken`): tiene que ser legible por JavaScript,
+  así que sin HttpOnly no es un hallazgo. Secure sí se controla en HTTPS.
+- **Le falta HttpOnly:** se marca, alta, salvo en una anti-CSRF.
 - **Le falta Secure:** solo en HTTPS. En HTTP el problema es el login sin cifrar, que tiene su hallazgo.
 - Se guardan el nombre y lo que le falta, nunca el valor.
 

@@ -149,3 +149,16 @@ test('restaurar una variable que no existía la borra, no guarda el texto "undef
   restaurarEntorno({ QATLAS_PRUEBA_ENTORNO: undefined });
   expect('QATLAS_PRUEBA_ENTORNO' in process.env).toBe(false);
 });
+
+test('Escaneos y Ejecuciones dicen que hoy se lanzan desde cada proyecto, y llevan ahí', async () => {
+  for (const seccion of ['Escaneos', 'Ejecuciones']) {
+    await nav().getByText(seccion, { exact: true }).click();
+    await expect(
+      page.getByText('Hoy los escaneos se lanzan y se siguen desde el detalle'),
+    ).toBeVisible();
+    await expect(page.getByText('Llega en: Fase 1 · semana 6')).toHaveCount(0);
+    await expect(page.getByText(/: semana 8\./).first()).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Ir a Proyectos' }).click();
+  await expect(page.getByRole('heading', { name: 'Proyectos', level: 1 })).toBeVisible();
+});

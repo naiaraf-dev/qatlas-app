@@ -315,5 +315,17 @@
     "rutaPorClic": "/spa/detalle",
     "escrituras": ["/api/guardar", "/api/eliminar"],
     "detalle": "Botones que navegan y que escriben, sin links"
-  }
+  },
+  "cookiesSinHallazgo": [
+    {
+      "nombre": "XSRF-TOKEN",
+      "url": "/login",
+      "detalle": "Anti-CSRF: sin HttpOnly a propósito, para que la lea el JavaScript del sitio"
+    },
+    {
+      "nombre": "preferences",
+      "url": "/login",
+      "detalle": "No es de sesión: vence y su nombre no lo sugiere, aunque contenga «ses»"
+    }
+  ]
 }

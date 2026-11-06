@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   analizarCookie,
   claveDeMensaje,
+  esAntiCsrf,
+  segmentosDeNombre,
   coincideExclusion,
   consoleErrorRelevante,
   hallazgoDeEstado,
@@ -116,6 +118,47 @@ describe('Cookies de sesión', () => {
   it('en HTTPS se pide Secure', () => {
     expect(analizarCookie('sid=x; Path=/; HttpOnly', true)).toEqual({
       nombre: 'sid',
+      faltaHttpOnly: false,
+      faltaSecure: true,
+    });
+  });
+
+  it.each([
+    ['ASP.NET_SessionId', ['asp', 'net', 'session', 'id']],
+    ['authToken', ['auth', 'token']],
+    ['sesion_anonima', ['sesion', 'anonima']],
+    ['connect.sid', ['connect', 'sid']],
+    ['__RequestVerificationToken', ['request', 'verification', 'token']],
+  ])('segmentos de %s', (nombre, segmentos) => {
+    expect(segmentosDeNombre(nombre)).toEqual(segmentos);
+  });
+
+  it.each(['preferences', 'classes', 'messages', 'sesame', 'sidebar_estado'])(
+    'un nombre que contiene «ses» o «sid» sin serlo no es de sesión: %s',
+    (nombre) => {
+      expect(analizarCookie(`${nombre}=x; Max-Age=3600`, true)).toBeNull();
+    },
+  );
+
+  it.each(['PHPSESSID', 'JSESSIONID', 'ASP.NET_SessionId', 'connect.sid', 'auth_token', 'jwt'])(
+    'un nombre de sesión conocido se reconoce aunque venza: %s',
+    (nombre) => {
+      expect(analizarCookie(`${nombre}=x; Max-Age=3600`, false)?.faltaHttpOnly).toBe(true);
+    },
+  );
+
+  it.each(['XSRF-TOKEN', 'csrftoken', '_csrf', '__RequestVerificationToken', 'csrf_token'])(
+    'una cookie anti-CSRF sin HttpOnly no es un hallazgo: %s',
+    (nombre) => {
+      expect(esAntiCsrf(nombre)).toBe(true);
+      expect(analizarCookie(`${nombre}=x; Path=/`, false)).toBeNull();
+      expect(analizarCookie(`${nombre}=x; Path=/; Secure`, true)).toBeNull();
+    },
+  );
+
+  it('una anti-CSRF en HTTPS sin Secure sí lo es', () => {
+    expect(analizarCookie('XSRF-TOKEN=x; Path=/', true)).toEqual({
+      nombre: 'XSRF-TOKEN',
       faltaHttpOnly: false,
       faltaSecure: true,
     });

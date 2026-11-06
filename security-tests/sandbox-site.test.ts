@@ -32,6 +32,7 @@ const manifiesto = JSON.parse(
   soloLectura: { url: string; origen: string; metodo: string }[];
   exclusiones: { url: string; origen: string; texto: string }[];
   fugas: { host: string; origen: string; tipo: string }[];
+  cookiesSinHallazgo: { nombre: string; url: string }[];
   fugasUdp: { host: string; origen: string; tipo: string }[];
 };
 
@@ -267,6 +268,18 @@ describe('El sitio hace lo que dice el manifiesto', () => {
     const inicio = performance.now();
     await pedir('/lenta');
     expect(performance.now() - inicio).toBeGreaterThanOrEqual(45);
+  });
+
+  it('el login, al abrirse, pone una cookie de sesión insegura y dos que no son hallazgos', async () => {
+    const cookies = (await pedir('/login')).encabezados['set-cookie'] as string[];
+    expect(cookies.map((c) => c.split('=')[0])).toEqual([
+      'sesion_anonima',
+      'XSRF-TOKEN',
+      'preferences',
+    ]);
+    for (const { nombre } of manifiesto.cookiesSinHallazgo) {
+      expect(cookies.some((c) => c.startsWith(`${nombre}=`))).toBe(true);
+    }
   });
 
   it('el login con las credenciales de prueba da una cookie sin Secure ni HttpOnly', async () => {

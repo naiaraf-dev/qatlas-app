@@ -415,9 +415,15 @@ export function iniciarSandbox({
         responder(res, 200, inicio(puertoHttps));
         return;
       case 'GET /login':
-        // Plantado: una cookie de sesión anónima sin HttpOnly, antes de cualquier login.
+        // Plantado: una cookie de sesión anónima sin HttpOnly, antes de cualquier login. Las otras dos
+        // no son hallazgos: la anti-CSRF tiene que ser legible por JavaScript, y «preferences» no es de
+        // sesión aunque contenga «ses».
         responder(res, 200, LOGIN, {
-          'set-cookie': `${COOKIE_ANONIMA}=anonima-inventada; Path=/`,
+          'set-cookie': [
+            `${COOKIE_ANONIMA}=anonima-inventada; Path=/`,
+            'XSRF-TOKEN=csrf-inventado; Path=/',
+            'preferences=tema-oscuro; Path=/; Max-Age=31536000',
+          ],
         });
         return;
       case 'POST /login': {

@@ -122,12 +122,51 @@ export interface CookieAnalizada {
   faltaSecure: boolean;
 }
 
-const NOMBRE_DE_SESION = /ses|sid|auth|token|jwt|login/i;
+/**
+ * Los segmentos de un nombre: se separan por `_`, `-`, `.` y por un cambio de minúscula a mayúscula.
+ * `ASP.NET_SessionId` → asp, net, session, id. Así «ses» no atrapa «preferences» ni «classes».
+ */
+export function segmentosDeNombre(nombre: string): string[] {
+  return nombre
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s_.-]+/)
+    .filter(Boolean)
+    .map((segmento) => segmento.toLowerCase());
+}
+
+const SEGMENTOS_DE_SESION = new Set([
+  'sess',
+  'sesion',
+  'session',
+  'sessid',
+  'sessionid',
+  'phpsessid',
+  'jsessionid',
+  'sid',
+  'ssid',
+  'auth',
+  'token',
+  'jwt',
+  'login',
+]);
+
+const SEGMENTOS_ANTI_CSRF = new Set(['csrf', 'xsrf', 'csrftoken', 'xsrftoken']);
+
+/** XSRF-TOKEN, csrftoken, _csrf, __RequestVerificationToken: el JavaScript del sitio tiene que leerlas. */
+export function esAntiCsrf(nombre: string): boolean {
+  const segmentos = segmentosDeNombre(nombre);
+  return (
+    segmentos.some((s) => SEGMENTOS_ANTI_CSRF.has(s)) ||
+    segmentos.join('') === 'requestverificationtoken'
+  );
+}
 
 /**
- * Criterio de cookie de sesión insegura. Es de sesión si no vence (sin `Expires` ni `Max-Age`) o si su
- * nombre lo sugiere. Le falta HttpOnly: siempre se marca. Le falta Secure: solo en HTTPS, porque en HTTP
- * el problema es el login sin cifrar. Nunca se guarda el valor: solo el nombre y lo que le falta.
+ * Criterio de cookie de sesión insegura (ADR 024).
+ * - Es de sesión si no vence (sin `Expires` ni `Max-Age`) o si un segmento de su nombre lo sugiere.
+ * - Le falta HttpOnly: se marca, salvo en una cookie anti-CSRF, que tiene que ser legible por JavaScript.
+ * - Le falta Secure: solo en HTTPS, también en una anti-CSRF. En HTTP el problema es el login sin cifrar.
+ * - Nunca se guarda el valor: solo el nombre y lo que le falta.
  */
 export function analizarCookie(encabezado: string, https: boolean): CookieAnalizada | null {
   const [par = '', ...atributos] = encabezado.split(';').map((parte) => parte.trim());
@@ -135,9 +174,13 @@ export function analizarCookie(encabezado: string, https: boolean): CookieAnaliz
   if (!nombre) return null;
   const tiene = (atributo: string) =>
     atributos.some((a) => a.toLowerCase().split('=')[0] === atributo);
-  const deSesion = (!tiene('expires') && !tiene('max-age')) || NOMBRE_DE_SESION.test(nombre);
+  const antiCsrf = esAntiCsrf(nombre);
+  const deSesion =
+    antiCsrf ||
+    (!tiene('expires') && !tiene('max-age')) ||
+    segmentosDeNombre(nombre).some((s) => SEGMENTOS_DE_SESION.has(s));
   if (!deSesion) return null;
-  const faltaHttpOnly = !tiene('httponly');
+  const faltaHttpOnly = !antiCsrf && !tiene('httponly');
   const faltaSecure = https && !tiene('secure');
   if (!faltaHttpOnly && !faltaSecure) return null;
   return { nombre: nombre.slice(0, 100), faltaHttpOnly, faltaSecure };

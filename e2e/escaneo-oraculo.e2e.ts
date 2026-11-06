@@ -115,6 +115,11 @@ test('ningún hallazgo sin documentar, y nada sobre las páginas sanas', () => {
   expect(comparacion.inesperados, resumen).toEqual([]);
 });
 
+test('las cookies que no son hallazgos no aparecen: anti-CSRF y «preferences»', () => {
+  const cookies = hallazgos.filter((h) => h.tipo === 'cookie-insegura').map((h) => h.clave);
+  expect(cookies).toEqual(['sesion_anonima']);
+});
+
 test('el recorrido terminó sin salir del alcance ni escribir', () => {
   expect(resultado.detenido).toBeNull();
   expect(resultado.noRecorridosSoloLectura).toBeGreaterThan(0);
