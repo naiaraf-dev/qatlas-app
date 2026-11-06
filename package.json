@@ -11,7 +11,7 @@
     "security-tests"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.15"
   },
   "scripts": {
     "setup": "npm ci && npm run setup:native",
