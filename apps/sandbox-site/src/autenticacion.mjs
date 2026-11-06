@@ -264,6 +264,18 @@ document.getElementById('form-login').addEventListener('submit', () => {
         res.end();
         return true;
       }
+      case 'GET /app/login-push': {
+        // Solo el segundo factor, sin escribir nada: para el login asistido en la app real, donde el
+        // test no puede escribir en la ventana. Lo aprueba el test, como desde un teléfono.
+        const id = aleatorio();
+        factores.set(id, { rol: 'admin', aprobado: false });
+        res.writeHead(302, {
+          location: '/app/segundo-factor',
+          'set-cookie': `${COOKIE_FACTOR}=${id}; Path=/app; HttpOnly; SameSite=Lax`,
+        });
+        res.end();
+        return true;
+      }
       case 'GET /app/segundo-factor':
         if (!factores.has(cookies[COOKIE_FACTOR])) {
           sinSesion(res, 'mfa');

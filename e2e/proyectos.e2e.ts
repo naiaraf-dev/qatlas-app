@@ -131,6 +131,7 @@ async function verificarSinReflejo(etiqueta: string, valor: string): Promise<voi
 test('credenciales: el secreto escrito no se refleja, y se vacía aunque el envío falle', async () => {
   await boton('Agregar credencial').click();
   await entrada('Nombre de la credencial').fill('Usuario de prueba');
+  await entrada('Rol').fill('admin');
   await entrada('Usuario').fill('ana@example.com');
   await entrada('Secreto').fill(SECRETO);
   await verificarSinReflejo('Secreto', SECRETO);

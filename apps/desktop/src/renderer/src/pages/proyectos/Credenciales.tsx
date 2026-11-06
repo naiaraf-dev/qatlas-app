@@ -190,6 +190,7 @@ export const ESTRATEGIAS: Record<
     usuario: boolean;
     pasos: boolean;
     etiquetaSecreto: string | null;
+    etiquetaReemplazo: string;
     etiquetaUrl: string | null;
     ayudaUrl: string;
   }
@@ -199,7 +200,8 @@ export const ESTRATEGIAS: Record<
     ayuda: 'QAtlas completa el formulario del sistema con el usuario y el secreto.',
     usuario: true,
     pasos: true,
-    etiquetaSecreto: 'Contraseña',
+    etiquetaSecreto: 'Secreto',
+    etiquetaReemplazo: 'Secreto nuevo',
     etiquetaUrl: 'URL de login',
     ayudaUrl: 'Dentro de los dominios permitidos.',
   },
@@ -209,7 +211,8 @@ export const ESTRATEGIAS: Record<
       'El sistema manda a otro dominio para entrar (OpenID Connect, OAuth o SAML) y vuelve. Los pasos se hacen en la pantalla del proveedor.',
     usuario: true,
     pasos: true,
-    etiquetaSecreto: 'Contraseña',
+    etiquetaSecreto: 'Secreto',
+    etiquetaReemplazo: 'Secreto nuevo',
     etiquetaUrl: 'URL donde empieza el login',
     ayudaUrl:
       'La página del sistema que redirige al proveedor. El dominio del proveedor va en «Dominios de autenticación» del proyecto.',
@@ -221,6 +224,7 @@ export const ESTRATEGIAS: Record<
     usuario: false,
     pasos: false,
     etiquetaSecreto: 'Enlace de entrada, con el token',
+    etiquetaReemplazo: 'Enlace de entrada nuevo',
     etiquetaUrl: null,
     ayudaUrl: '',
   },
@@ -231,6 +235,7 @@ export const ESTRATEGIAS: Record<
     usuario: false,
     pasos: false,
     etiquetaSecreto: null,
+    etiquetaReemplazo: '',
     etiquetaUrl: 'URL donde se abre la ventana',
     ayudaUrl: 'Dentro de los dominios permitidos o de autenticación.',
   },
@@ -240,7 +245,8 @@ export const ESTRATEGIAS: Record<
       'El servidor pide usuario y contraseña con el diálogo del navegador. Se mandan solo al origen de la URL base.',
     usuario: true,
     pasos: false,
-    etiquetaSecreto: 'Contraseña',
+    etiquetaSecreto: 'Secreto',
+    etiquetaReemplazo: 'Secreto nuevo',
     etiquetaUrl: 'URL protegida para comprobar el login',
     ayudaUrl: 'Una página que sin credenciales responde 401.',
   },
@@ -580,7 +586,7 @@ function FilaCredencial({
           }}
         >
           <CampoSecreto
-            etiqueta={`${etiquetaSecreto ?? 'Secreto'}: valor nuevo`}
+            etiqueta={ESTRATEGIAS[credencial.estrategia].etiquetaReemplazo}
             campo={campoSecreto}
             errores={erroresDe(erroresDelReemplazo, 'secreto')}
           />
