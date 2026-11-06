@@ -602,6 +602,7 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     'ejecuciones:cancelar',
     'ejecuciones:listar',
     'ejecuciones:detalle',
+    'ejecuciones:reanudar',
   ] as const)('%s queda bloqueado con la bóveda bloqueada', (canal) => {
     expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
   });
@@ -623,6 +624,30 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     expect(entrada('ejecuciones:cancelar').safeParse({ ejecucionId: 'no-uuid' }).success).toBe(
       false,
     );
+  });
+
+  it('lanzar elige la credencial por su ID, o ninguna; nunca recibe datos de login', () => {
+    const lanzar = entrada('ejecuciones:lanzarEscaneo');
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: null }).success).toBe(true);
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: ID_VALIDO }).success).toBe(true);
+    // Sin decirlo, no hay un valor por defecto que elija por la persona.
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO }).success).toBe(false);
+    for (const extra of [{ secreto: 'x' }, { estado: '{}' }, { rol: 'admin' }]) {
+      expect(
+        lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: null, ...extra }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('reanudar recibe solo el ID; un enlace nuevo se carga en la credencial, no acá', () => {
+    const reanudar = entrada('ejecuciones:reanudar');
+    expect(reanudar.safeParse({ ejecucionId: ID_VALIDO }).success).toBe(true);
+    expect(reanudar.safeParse({ ejecucionId: ID_VALIDO, secreto: 'x' }).success).toBe(false);
+    expect(
+      reanudar.safeParse({ ejecucionId: ID_VALIDO, enlace: 'https://x.test/?t=1' }).success,
+    ).toBe(false);
+    const salida = ipcContract['ejecuciones:reanudar'].response;
+    expect(salida.safeParse({ resultado: 'reanudada', estado: {} }).success).toBe(false);
   });
 
   it('probar login devuelve solo un resultado: ningún contenido de la página', () => {
