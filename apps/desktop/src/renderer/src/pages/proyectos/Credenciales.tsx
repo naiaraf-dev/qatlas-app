@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type {
   CredencialResumen,
   ErrorValidacion,
+  EstrategiaLogin,
   IndicadorExito,
   IpcResponse,
   PasoLogin,
@@ -105,7 +106,12 @@ function EditorPasos({
 }
 
 const TIPOS_DE_INDICADOR = [
-  { valor: '', texto: 'Sin indicador', ayuda: 'Sin indicador, «Probar login» no está disponible.' },
+  {
+    valor: '',
+    texto: 'Sin indicador',
+    ayuda:
+      'Sin indicador, la credencial no se puede probar ni usar en un escaneo. En la autenticación básica alcanza con que la URL no responda 401.',
+  },
   {
     valor: 'url',
     texto: 'La URL coincide con un patrón',
@@ -175,9 +181,93 @@ function EditorIndicador({
   );
 }
 
-function CampoSecreto({ etiqueta, campo }: { etiqueta: string; campo: CampoSensible }) {
+/** Lo que pide cada forma de login (ADR 025). Las de fases siguientes, en la especificación. */
+export const ESTRATEGIAS: Record<
+  EstrategiaLogin,
+  {
+    nombre: string;
+    ayuda: string;
+    usuario: boolean;
+    pasos: boolean;
+    etiquetaSecreto: string | null;
+    etiquetaUrl: string | null;
+    ayudaUrl: string;
+  }
+> = {
+  formulario: {
+    nombre: 'Formulario de login',
+    ayuda: 'QAtlas completa el formulario del sistema con el usuario y el secreto.',
+    usuario: true,
+    pasos: true,
+    etiquetaSecreto: 'Contraseña',
+    etiquetaUrl: 'URL de login',
+    ayudaUrl: 'Dentro de los dominios permitidos.',
+  },
+  sso: {
+    nombre: 'SSO con redirección',
+    ayuda:
+      'El sistema manda a otro dominio para entrar (OpenID Connect, OAuth o SAML) y vuelve. Los pasos se hacen en la pantalla del proveedor.',
+    usuario: true,
+    pasos: true,
+    etiquetaSecreto: 'Contraseña',
+    etiquetaUrl: 'URL donde empieza el login',
+    ayudaUrl:
+      'La página del sistema que redirige al proveedor. El dominio del proveedor va en «Dominios de autenticación» del proyecto.',
+  },
+  'token-url': {
+    nombre: 'Enlace con token',
+    ayuda:
+      'Se entra con un enlace que trae el token, como el que da un portal. El enlace completo es el secreto. Si es de un solo uso, cada login lo consume.',
+    usuario: false,
+    pasos: false,
+    etiquetaSecreto: 'Enlace de entrada, con el token',
+    etiquetaUrl: null,
+    ayudaUrl: '',
+  },
+  asistido: {
+    nombre: 'Login asistido',
+    ayuda:
+      'Se abre una ventana del navegador de pruebas y entrás a mano, con segundo factor, captcha o enlace por correo. QAtlas no guarda ningún secreto.',
+    usuario: false,
+    pasos: false,
+    etiquetaSecreto: null,
+    etiquetaUrl: 'URL donde se abre la ventana',
+    ayudaUrl: 'Dentro de los dominios permitidos o de autenticación.',
+  },
+  basica: {
+    nombre: 'Autenticación HTTP básica',
+    ayuda:
+      'El servidor pide usuario y contraseña con el diálogo del navegador. Se mandan solo al origen de la URL base.',
+    usuario: true,
+    pasos: false,
+    etiquetaSecreto: 'Contraseña',
+    etiquetaUrl: 'URL protegida para comprobar el login',
+    ayudaUrl: 'Una página que sin credenciales responde 401.',
+  },
+};
+
+/** El indicador es lo que confirma el ingreso y, en un escaneo, que la sesión sigue activa. */
+export function credencialUsable(credencial: CredencialResumen): boolean {
+  if (credencial.requiereRevision) return false;
+  if (credencial.estrategia !== 'asistido' && !credencial.secretoConfigurado) return false;
+  return credencial.estrategia === 'basica' || credencial.indicadorExito !== null;
+}
+
+function CampoSecreto({
+  etiqueta,
+  campo,
+  errores = [],
+}: {
+  etiqueta: string;
+  campo: CampoSensible;
+  errores?: readonly string[];
+}) {
   return (
-    <Campo etiqueta={etiqueta} ayuda="Se guarda cifrado y nunca se vuelve a mostrar.">
+    <Campo
+      etiqueta={etiqueta}
+      ayuda="Se guarda cifrado y nunca se vuelve a mostrar."
+      errores={errores}
+    >
       {(props) => (
         <EntradaSensible {...props} campo={campo} autocompletar="new-password" className="w-full" />
       )}
@@ -197,6 +287,11 @@ function FormularioCredencial({
   onCancelar: () => void;
 }) {
   const [nombre, setNombre] = useState(credencial?.nombre ?? '');
+  const [rol, setRol] = useState(credencial?.rol ?? '');
+  const [estrategia, setEstrategia] = useState<EstrategiaLogin>(
+    credencial?.estrategia ?? 'formulario',
+  );
+  const config = ESTRATEGIAS[estrategia];
   const [usuario, setUsuario] = useState(credencial?.usuario ?? '');
   const [urlLogin, setUrlLogin] = useState(credencial?.urlLogin ?? '');
   const [pasosLogin, setPasos] = useState<PasoLogin[]>(credencial?.pasosLogin ?? PASOS_POR_DEFECTO);
@@ -207,23 +302,37 @@ function FormularioCredencial({
   const [errores, setErrores] = useState<ErrorValidacion[]>([]);
   const [fallo, setFallo] = useState(false);
 
+  const pideSecreto = !credencial && config.etiquetaSecreto !== null;
   const completa =
     nombre.trim() &&
-    usuario &&
-    urlLogin.trim() &&
-    pasosLogin.every((p) => p.selector.trim()) &&
+    rol.trim() &&
+    (!config.usuario || usuario) &&
+    (config.etiquetaUrl === null || urlLogin.trim()) &&
+    (!config.pasos || pasosLogin.every((p) => p.selector.trim())) &&
     (!indicadorExito ||
       (indicadorExito.tipo === 'url' ? indicadorExito.patron : indicadorExito.selector).trim()) &&
-    (credencial || campoSecreto.tieneTexto);
+    (!pideSecreto || campoSecreto.tieneTexto);
 
   const guardar = async () => {
     setErrores([]);
     setFallo(false);
-    const comunes = { proyectoId, nombre, usuario, urlLogin, pasosLogin, indicadorExito };
+    const comunes = {
+      proyectoId,
+      nombre,
+      rol,
+      estrategia,
+      usuario: config.usuario ? usuario : '',
+      // En el enlace con token, la URL sale del enlace: la deriva el proceso principal.
+      urlLogin: config.etiquetaUrl === null ? (credencial?.urlLogin ?? '') : urlLogin,
+      pasosLogin: config.pasos ? pasosLogin : [],
+      indicadorExito,
+    };
     const res = await window.qatlas.credenciales.guardar(
       credencial
         ? { ...comunes, credencialId: credencial.id }
-        : { ...comunes, secreto: campoSecreto.tomar() },
+        : pideSecreto
+          ? { ...comunes, secreto: campoSecreto.tomar() }
+          : comunes,
     );
     if (!res.ok) setFallo(true);
     else if (res.data.resultado === 'guardada') onListo();
@@ -252,36 +361,95 @@ function FormularioCredencial({
           />
         )}
       </Campo>
-      <Campo etiqueta="Usuario">
+      <Campo
+        etiqueta="Rol"
+        ayuda="Con qué rol entra esta credencial, como admin o lector. Uno por credencial; al lanzar un escaneo elegís con cuál."
+        errores={erroresDe(errores, 'rol')}
+      >
         {(props) => (
           <input
             {...props}
             className={CLASE_ENTRADA}
-            value={usuario}
+            value={rol}
+            maxLength={60}
             autoComplete="off"
-            spellCheck={false}
             onChange={(event) => {
-              setUsuario(event.target.value);
+              setRol(event.target.value);
             }}
           />
         )}
       </Campo>
-      {!credencial && <CampoSecreto etiqueta="Secreto" campo={campoSecreto} />}
-      <Campo etiqueta="URL de login" errores={erroresDe(errores, 'urlLogin')}>
+      <Campo
+        etiqueta="Forma de login"
+        ayuda={
+          credencial
+            ? `${config.ayuda} No se cambia: para otra forma, creá una credencial nueva.`
+            : config.ayuda
+        }
+        errores={erroresDe(errores, 'estrategia')}
+      >
         {(props) => (
-          <input
+          <select
             {...props}
-            className={CLASE_ENTRADA}
-            value={urlLogin}
-            spellCheck={false}
-            autoComplete="off"
+            className={`${CLASE_ENTRADA} w-auto`}
+            value={estrategia}
+            disabled={Boolean(credencial)}
             onChange={(event) => {
-              setUrlLogin(event.target.value);
+              setEstrategia(event.target.value as EstrategiaLogin);
             }}
-          />
+          >
+            {(Object.keys(ESTRATEGIAS) as EstrategiaLogin[]).map((valor) => (
+              <option key={valor} value={valor}>
+                {ESTRATEGIAS[valor].nombre}
+              </option>
+            ))}
+          </select>
         )}
       </Campo>
-      <EditorPasos pasos={pasosLogin} onChange={setPasos} />
+      {config.usuario && (
+        <Campo etiqueta="Usuario" errores={erroresDe(errores, 'usuario')}>
+          {(props) => (
+            <input
+              {...props}
+              className={CLASE_ENTRADA}
+              value={usuario}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setUsuario(event.target.value);
+              }}
+            />
+          )}
+        </Campo>
+      )}
+      {pideSecreto && config.etiquetaSecreto && (
+        <CampoSecreto
+          etiqueta={config.etiquetaSecreto}
+          campo={campoSecreto}
+          errores={erroresDe(errores, 'secreto')}
+        />
+      )}
+      {config.etiquetaUrl !== null && (
+        <Campo
+          etiqueta={config.etiquetaUrl}
+          ayuda={config.ayudaUrl}
+          errores={erroresDe(errores, 'urlLogin')}
+        >
+          {(props) => (
+            <input
+              {...props}
+              className={CLASE_ENTRADA}
+              value={urlLogin}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => {
+                setUrlLogin(event.target.value);
+              }}
+            />
+          )}
+        </Campo>
+      )}
+      {config.pasos && <EditorPasos pasos={pasosLogin} onChange={setPasos} />}
       <EditorIndicador indicador={indicadorExito} onChange={setIndicador} />
       {fallo && <Aviso tipo="peligro">No se pudo guardar. Revisá los datos.</Aviso>}
       <div className="flex flex-wrap gap-2.5">
@@ -304,6 +472,8 @@ const MOTIVOS_FALLO_LOGIN = {
   ocupado: 'El login no se probó: hay otra ejecución en curso.',
   'no-se-pudo-ejecutar':
     'El login no se probó: no se pudo abrir el navegador de pruebas o el proxy.',
+  'ventana-cerrada': 'El login no se completó: la ventana se cerró antes de entrar.',
+  'tiempo-agotado': 'El login no se completó: pasaron 5 minutos sin que se cumpla el indicador.',
 } as const;
 
 function FilaCredencial({
@@ -333,20 +503,26 @@ function FilaCredencial({
     setPrueba(res.ok ? res.data : { resultado: 'fallo', motivo: 'no-se-pudo-ejecutar' });
   };
 
+  const [erroresDelReemplazo, setErroresDelReemplazo] = useState<ErrorValidacion[]>([]);
   const reemplazar = async () => {
     setFallo(false);
+    setErroresDelReemplazo([]);
     const res = await window.qatlas.credenciales.reemplazarSecreto({
       proyectoId,
       credencialId: credencial.id,
       secreto: campoSecreto.tomar(),
     });
-    if (res.ok) {
+    if (!res.ok) {
+      setFallo(true);
+    } else if (res.data.resultado === 'reemplazado') {
       setModo('ver');
       onCambio();
     } else {
-      setFallo(true);
+      setErroresDelReemplazo(res.data.errores);
     }
   };
+  const etiquetaSecreto = ESTRATEGIAS[credencial.estrategia].etiquetaSecreto;
+  const probable = credencialUsable(credencial);
 
   const eliminar = async () => {
     setFallo(false);
@@ -378,11 +554,17 @@ function FilaCredencial({
     <li className="flex flex-col gap-3 rounded-lg border border-border p-4">
       <div className="flex flex-col gap-1">
         <h3 className="font-semibold">{credencial.nombre}</h3>
-        <p className="text-[13.5px] text-muted">
-          {credencial.usuario} · {credencial.urlLogin}
+        <p className="text-[13.5px]">
+          Rol: {credencial.rol} · {ESTRATEGIAS[credencial.estrategia].nombre}
         </p>
+        <p className="text-[13.5px] text-muted">
+          {[credencial.usuario, credencial.urlLogin].filter(Boolean).join(' · ')}
+        </p>
+        {credencial.estrategia === 'asistido' && modo === 'ver' && (
+          <p className="text-[13.5px]">Secreto: ninguno, entrás a mano en la ventana.</p>
+        )}
         {/* Solo fuera del reemplazo: mientras tanto, esta línea no confirmaría nada. */}
-        {modo === 'ver' && (
+        {modo === 'ver' && credencial.estrategia !== 'asistido' && (
           <p className="text-[13.5px]">
             Secreto: Configurado · reemplazado el{' '}
             {new Date(credencial.secretoActualizadoEn).toLocaleDateString('es')}
@@ -404,7 +586,11 @@ function FilaCredencial({
             void reemplazar();
           }}
         >
-          <CampoSecreto etiqueta="Secreto nuevo" campo={campoSecreto} />
+          <CampoSecreto
+            etiqueta={`${etiquetaSecreto ?? 'Secreto'}: valor nuevo`}
+            campo={campoSecreto}
+            errores={erroresDe(erroresDelReemplazo, 'secreto')}
+          />
           <p className="text-[13px] text-muted">
             Las copias de seguridad anteriores conservan el secreto viejo.
           </p>
@@ -425,10 +611,16 @@ function FilaCredencial({
         </form>
       )}
       {fallo && <Aviso tipo="peligro">No se pudo completar la operación.</Aviso>}
-      {modo === 'ver' && credencial.indicadorExito && (
+      {modo === 'ver' && probable && credencial.estrategia !== 'asistido' && (
         <Aviso>
           «Probar login» hace un intento real contra el sistema, sin grabarlo. Un intento fallido
           puede bloquear la cuenta en el sistema probado.
+        </Aviso>
+      )}
+      {modo === 'ver' && probable && credencial.estrategia === 'asistido' && (
+        <Aviso>
+          «Probar login» abre una ventana del navegador de pruebas: entrá ahí como siempre. Tenés 5
+          minutos, y nada de esa ventana se graba.
         </Aviso>
       )}
       {modo === 'ver' && (
@@ -440,27 +632,29 @@ function FilaCredencial({
           >
             Editar credencial
           </Button>
-          <Button
-            onClick={() => {
-              setModo('reemplazar');
-            }}
-          >
-            Reemplazar secreto
-          </Button>
+          {etiquetaSecreto !== null && (
+            <Button
+              onClick={() => {
+                setModo('reemplazar');
+              }}
+            >
+              Reemplazar secreto
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => void eliminar()}>
             Eliminar credencial
           </Button>
           <Button
-            disabled={!credencial.indicadorExito || credencial.requiereRevision || probando}
+            disabled={!probable || probando}
             aria-describedby={ayudaLoginId}
             onClick={() => void probarLogin()}
           >
             {probando ? 'Probando…' : 'Probar login'}
           </Button>
           <span id={ayudaLoginId} className="text-[13px] text-muted">
-            {credencial.indicadorExito
+            {probable
               ? `Máximo ${LIMITE_PRUEBAS_LOGIN.intentos} intentos cada ${LIMITE_PRUEBAS_LOGIN.ventanaMinutos} minutos.`
-              : 'Configurá un indicador de éxito para poder probarlo.'}
+              : 'Configurá un indicador de éxito para poder probarla y escanear con esta credencial.'}
           </span>
         </div>
       )}

@@ -340,6 +340,8 @@ function aEntrada(detalle: ProyectoDetalle): ProyectoEntrada {
     urlBase: detalle.urlBase,
     dominios: detalle.dominios,
     puertosLocales: detalle.puertosLocales,
+    dominiosAutenticacion: detalle.dominiosAutenticacion,
+    sesionMaxMinutos: detalle.sesionMaxMinutos,
     maxRps: detalle.maxRps,
     maxPaginas: detalle.maxPaginas,
     maxProfundidad: detalle.maxProfundidad,

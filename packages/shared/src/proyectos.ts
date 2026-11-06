@@ -36,6 +36,7 @@ export const PROYECTO_POR_DEFECTO = {
   modoDatosSensibles: false,
   sistemaInterno: false,
   permitirLoginHttp: false,
+  sesionMaxMinutos: null,
 } as const;
 
 /** Una prueba de login es un intento real: los fallidos pueden bloquear la cuenta en el sistema probado. */

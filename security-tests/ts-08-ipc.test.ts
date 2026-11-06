@@ -273,6 +273,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     exclusiones: ['logout'],
     modoDatosSensibles: false,
     selectoresSensibles: [],
+    dominiosAutenticacion: [],
+    sesionMaxMinutos: null,
     sistemaInterno: false,
     puertosLocales: [],
     permitirLoginHttp: false,
@@ -281,6 +283,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
   const CREDENCIAL = {
     proyectoId: ID,
     nombre: 'Prueba',
+    rol: 'admin',
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [{ accion: 'click', selector: 'button' }],
@@ -288,6 +292,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
   const RESUMEN_CREDENCIAL = {
     id: OTRO_ID,
     nombre: 'Prueba',
+    rol: 'admin',
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [],
@@ -321,6 +327,12 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     ['aceptar', 'proyectos:aceptarAutorizacion', { id: ID, aceptacion: ACEPTACION }],
     ['credencial nueva', 'credenciales:guardar', { ...CREDENCIAL, secreto: 'x' }],
     ['editar credencial', 'credenciales:guardar', { ...CREDENCIAL, credencialId: OTRO_ID }],
+    // El esquema la deja pasar para el login asistido; el servicio la rechaza en las demás.
+    [
+      'credencial sin secreto',
+      'credenciales:guardar',
+      { ...CREDENCIAL, estrategia: 'asistido', usuario: '' },
+    ],
     [
       'reemplazar',
       'credenciales:reemplazarSecreto',
@@ -378,7 +390,12 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
         aceptacion: { aceptada: true, texto: 'x' },
       },
     ],
-    ['credencial nueva sin secreto', 'credenciales:guardar', CREDENCIAL],
+    [
+      'una estrategia que no existe',
+      'credenciales:guardar',
+      { ...CREDENCIAL, estrategia: 'cookie', secreto: 'x' },
+    ],
+    ['una credencial sin rol', 'credenciales:guardar', { ...CREDENCIAL, rol: ' ', secreto: 'x' }],
     ['credencial con secreto vacío', 'credenciales:guardar', { ...CREDENCIAL, secreto: '' }],
     [
       'editar y mandar el secreto a la vez',
@@ -456,9 +473,9 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
       { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, ultimos4: '1234' }] },
     ],
     [
-      'credencial con secreto sin configurar',
+      'credencial con el secreto adentro',
       'proyectos:obtener',
-      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secretoConfigurado: false }] },
+      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secreto: 'x' }] },
     ],
     [
       'resumen con un campo extra',
@@ -668,6 +685,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     const base = {
       proyectoId: ID_VALIDO,
       nombre: 'Prueba',
+      rol: 'admin',
+      estrategia: 'formulario',
       usuario: 'ana@example.com',
       urlLogin: 'https://app.lexora.test/login',
       pasosLogin: [],
@@ -701,6 +720,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
       exclusiones: [],
       modoDatosSensibles: false,
       selectoresSensibles: [],
+      dominiosAutenticacion: [],
+      sesionMaxMinutos: null,
       sistemaInterno: false,
       permitirLoginHttp: false,
     };
@@ -763,6 +784,8 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
       exclusiones: [],
       modoDatosSensibles: false,
       selectoresSensibles: [],
+      dominiosAutenticacion: [],
+      sesionMaxMinutos: null,
       sistemaInterno: false,
       permitirLoginHttp: false,
     };

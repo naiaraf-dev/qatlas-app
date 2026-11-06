@@ -169,6 +169,8 @@ export class ServicioEjecuciones {
         navegador: NAVEGADOR,
         estado: 'encolada',
         resumen: RESUMEN_VACIO,
+        credencialId: null,
+        rol: null,
       });
       return id;
     });

@@ -20,6 +20,7 @@ const ESTADOS: Record<EjecucionResumen['estado'], string> = {
   finalizada: 'Finalizada',
   fallida: 'Fallida',
   cancelada: 'Cancelada',
+  pausada: 'Pausada',
 };
 
 const MOTIVOS: Record<MotivoFinEjecucion, string> = {

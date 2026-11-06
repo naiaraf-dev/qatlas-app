@@ -308,6 +308,7 @@ describe('validarAlcance (RN-PRY-02)', () => {
       urlBase: 'https://app.lexora.test/',
       dominios: ['app.lexora.test'],
       puertosLocales: [],
+      dominiosAutenticacion: [],
     });
   });
 

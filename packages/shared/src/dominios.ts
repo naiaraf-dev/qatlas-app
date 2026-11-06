@@ -35,15 +35,22 @@ export interface EntradaAlcance {
   dominios: readonly string[];
   sistemaInterno: boolean;
   puertosLocales: readonly number[];
+  dominiosAutenticacion?: readonly string[];
 }
 
 export interface ErrorAlcance {
-  campo: 'urlBase' | 'dominios' | 'puertosLocales';
+  campo: 'urlBase' | 'dominios' | 'puertosLocales' | 'dominiosAutenticacion';
   motivo: MotivoAlcance;
 }
 
 export type ResultadoAlcance =
-  | { ok: true; urlBase: string; dominios: string[]; puertosLocales: number[] }
+  | {
+      ok: true;
+      urlBase: string;
+      dominios: string[];
+      puertosLocales: number[];
+      dominiosAutenticacion: string[];
+    }
   | { ok: false; errores: ErrorAlcance[] };
 
 const LARGO_MAXIMO_HOST = 253;
@@ -233,6 +240,7 @@ export function validarAlcance({
   dominios,
   sistemaInterno,
   puertosLocales,
+  dominiosAutenticacion = [],
 }: EntradaAlcance): ResultadoAlcance {
   const errores: ErrorAlcance[] = [];
   const url = validarUrlBase(urlBase, { sistemaInterno });
@@ -250,6 +258,13 @@ export function validarAlcance({
   if (url.ok && lista.length > 0 && !hostPertenece(url.host, lista)) {
     errores.push({ campo: 'urlBase', motivo: 'url-fuera-de-dominios' });
   }
+  // Los de autenticación, con las mismas reglas: sin comodines amplios ni IPs (ADR 025).
+  const autenticacion = new Set<string>();
+  for (const dominio of dominiosAutenticacion) {
+    const resultado = validarDominio(dominio, { sistemaInterno });
+    if (resultado.ok) autenticacion.add(resultado.valor);
+    else errores.push({ campo: 'dominiosAutenticacion', motivo: resultado.motivo });
+  }
   // Un puerto local sin un host local en la lista no abriría nada: es un error de quien lo cargó.
   if (puertosLocales.length > 0 && !lista.some((d) => !d.startsWith('*.') && esHostLocal(d))) {
     errores.push({ campo: 'puertosLocales', motivo: 'puertos-sin-host-local' });
@@ -261,6 +276,7 @@ export function validarAlcance({
         urlBase: url.url,
         dominios: lista,
         puertosLocales: [...new Set(puertosLocales)].sort((a, b) => a - b),
+        dominiosAutenticacion: [...autenticacion],
       };
 }
 

@@ -28,6 +28,7 @@ const ENTRADA: ProyectoEntrada = {
   puertosLocales: [3000],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
+  dominiosAutenticacion: [],
 };
 const PASOS = [{ accion: 'click' as const, selector: 'button' }];
 
@@ -122,10 +123,15 @@ function lanzar(proyectoId: string): string {
 const estado = (proyectoId: string, id: string) =>
   ejecuciones.listar(proyectoId).find((e) => e.id === id);
 
+let roles = 0;
+
 function guardarCredencial(proyectoId: string, conIndicador = true): string {
+  roles += 1;
   const res = proyectos.guardarCredencial({
     proyectoId,
     nombre: 'Prueba',
+    rol: `rol-${roles}`,
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'http://localhost:5173/login',
     pasosLogin: PASOS,

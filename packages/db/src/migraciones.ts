@@ -199,6 +199,47 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX hallazgo_ocurrencia_hallazgo ON hallazgo_ocurrencia(hallazgo_id);
     `,
   },
+  {
+    version: 6,
+    // SQLite no deja cambiar a NOT NULL ni sacarlo: la credencial se reconstruye. Lo existente pasa a
+    // «formulario», con su nombre como rol (único en el proyecto) y su secreto intacto (ADR 025).
+    sql: `
+      ALTER TABLE proyecto ADD COLUMN dominios_autenticacion TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE proyecto ADD COLUMN sesion_max_minutos INTEGER;
+      ALTER TABLE autorizacion ADD COLUMN dominios_autenticacion_aceptados TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE ejecucion ADD COLUMN credencial_id TEXT;
+      ALTER TABLE ejecucion ADD COLUMN rol TEXT;
+      CREATE TABLE credencial_nueva (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        nombre TEXT NOT NULL,
+        usuario TEXT NOT NULL,
+        secreto BLOB,
+        secreto_actualizado_en TEXT NOT NULL,
+        url_login TEXT NOT NULL,
+        pasos_login TEXT NOT NULL,
+        indicador_exito TEXT,
+        estrategia TEXT NOT NULL,
+        rol TEXT NOT NULL
+      );
+      INSERT INTO credencial_nueva
+        SELECT id, created_at, updated_at, proyecto_id, nombre, usuario, secreto, secreto_actualizado_en,
+          url_login, pasos_login, indicador_exito, 'formulario',
+          -- El rol es único por proyecto: si dos credenciales tenían el mismo nombre, la segunda lleva un número.
+          substr(nombre, 1, 50) || coalesce(' (' || nullif((
+            SELECT count(*) + 1 FROM credencial AS previa
+            WHERE previa.proyecto_id = credencial.proyecto_id
+              AND lower(substr(previa.nombre, 1, 50)) = lower(substr(credencial.nombre, 1, 50))
+              AND previa.id < credencial.id
+          ), 1) || ')', '')
+        FROM credencial;
+      DROP TABLE credencial;
+      ALTER TABLE credencial_nueva RENAME TO credencial;
+      CREATE INDEX credencial_proyecto ON credencial(proyecto_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

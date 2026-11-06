@@ -36,7 +36,7 @@ type NuevaAutorizacion = Omit<
 type NuevaCredencial = Omit<FilaCredencial, Comunes | 'secretoActualizadoEn'>;
 type DatosCredencial = Pick<
   FilaCredencial,
-  'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin' | 'indicadorExito'
+  'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin' | 'indicadorExito' | 'estrategia' | 'rol'
 >;
 
 /** Lista cerrada: un valor del usuario no puede terminar acá. */
@@ -164,11 +164,22 @@ export function actualizarCredencial(
     .run();
 }
 
-export function reemplazarSecretoCredencial(base: BaseCifrada, id: string, secreto: Buffer): void {
+/** `urlLogin` cambia junto con el secreto en el token en la URL: sale del enlace nuevo. */
+export function reemplazarSecretoCredencial(
+  base: BaseCifrada,
+  id: string,
+  secreto: Buffer,
+  urlLogin?: string,
+): void {
   const ahora = new Date().toISOString();
   orm(base)
     .update(credencial)
-    .set({ secreto, secretoActualizadoEn: ahora, updatedAt: ahora })
+    .set({
+      secreto,
+      secretoActualizadoEn: ahora,
+      updatedAt: ahora,
+      ...(urlLogin === undefined ? {} : { urlLogin }),
+    })
     .where(eq(credencial.id, id))
     .run();
 }
