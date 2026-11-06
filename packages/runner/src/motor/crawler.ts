@@ -12,6 +12,7 @@ import {
   hostDe,
   SEVERIDAD,
   severidadDeAccesibilidad,
+  TITULO_COOKIE_SIN_VENCIMIENTO,
   UMBRALES,
   type HallazgoDetectado,
 } from './chequeos';
@@ -462,11 +463,13 @@ export async function rastrear(
         );
         reportar({
           tipo: 'cookie-insegura',
-          severidad: SEVERIDAD['cookie-insegura'],
+          severidad: cookie.deSesion ? SEVERIDAD['cookie-insegura'] : 'informativa',
           url,
           urlOrigen: null,
           clave: cookie.nombre,
-          titulo: `Cookie de sesión sin ${faltan.join(' ni ')}`,
+          titulo: cookie.deSesion
+            ? `Cookie de sesión sin ${faltan.join(' ni ')}`
+            : TITULO_COOKIE_SIN_VENCIMIENTO,
           detalle: '',
         });
       }

@@ -91,6 +91,14 @@
       "clave": "sesion_anonima"
     },
     {
+      "id": "cookie-sin-vencimiento",
+      "tipo": "cookie-insegura",
+      "url": "/login",
+      "severidad": "informativa",
+      "clave": "tema",
+      "detalle": "Cookie sin vencimiento y sin HttpOnly, sin indicio de sesión en el nombre"
+    },
+    {
       "id": "lcp-lento",
       "tipo": "rendimiento",
       "url": "/lcp-lenta",

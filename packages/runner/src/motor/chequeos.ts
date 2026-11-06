@@ -118,9 +118,14 @@ export function consoleErrorRelevante(texto: string, bloqueados: readonly string
 
 export interface CookieAnalizada {
   nombre: string;
+  /** Con indicio de sesión en el nombre, o anti-CSRF: alta. Sin indicio y sin vencimiento: informativa. */
+  deSesion: boolean;
   faltaHttpOnly: boolean;
   faltaSecure: boolean;
 }
+
+export const TITULO_COOKIE_SIN_VENCIMIENTO =
+  'Cookie sin vencimiento y sin HttpOnly; si guarda la sesión, debería tener HttpOnly';
 
 /**
  * Los segmentos de un nombre: se separan por `_`, `-`, `.` y por un cambio de minúscula a mayúscula.
@@ -163,7 +168,8 @@ export function esAntiCsrf(nombre: string): boolean {
 
 /**
  * Criterio de cookie de sesión insegura (ADR 024).
- * - Es de sesión si no vence (sin `Expires` ni `Max-Age`) o si un segmento de su nombre lo sugiere.
+ * - Es de sesión solo si un segmento de su nombre lo sugiere. Una que no vence y no tiene indicio no se
+ *   sabe si guarda la sesión: sin HttpOnly es informativa, nada más.
  * - Le falta HttpOnly: se marca, salvo en una cookie anti-CSRF, que tiene que ser legible por JavaScript.
  * - Le falta Secure: solo en HTTPS, también en una anti-CSRF. En HTTP el problema es el login sin cifrar.
  * - Nunca se guarda el valor: solo el nombre y lo que le falta.
@@ -175,15 +181,21 @@ export function analizarCookie(encabezado: string, https: boolean): CookieAnaliz
   const tiene = (atributo: string) =>
     atributos.some((a) => a.toLowerCase().split('=')[0] === atributo);
   const antiCsrf = esAntiCsrf(nombre);
-  const deSesion =
-    antiCsrf ||
-    (!tiene('expires') && !tiene('max-age')) ||
-    segmentosDeNombre(nombre).some((s) => SEGMENTOS_DE_SESION.has(s));
-  if (!deSesion) return null;
+  const deSesion = antiCsrf || segmentosDeNombre(nombre).some((s) => SEGMENTOS_DE_SESION.has(s));
+  if (!deSesion) {
+    const sinVencimiento = !tiene('expires') && !tiene('max-age');
+    if (!sinVencimiento || tiene('httponly')) return null;
+    return {
+      nombre: nombre.slice(0, 100),
+      deSesion: false,
+      faltaHttpOnly: true,
+      faltaSecure: false,
+    };
+  }
   const faltaHttpOnly = !antiCsrf && !tiene('httponly');
   const faltaSecure = https && !tiene('secure');
   if (!faltaHttpOnly && !faltaSecure) return null;
-  return { nombre: nombre.slice(0, 100), faltaHttpOnly, faltaSecure };
+  return { nombre: nombre.slice(0, 100), deSesion: true, faltaHttpOnly, faltaSecure };
 }
 
 /**

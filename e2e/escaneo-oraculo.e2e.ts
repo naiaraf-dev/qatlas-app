@@ -115,9 +115,15 @@ test('ningún hallazgo sin documentar, y nada sobre las páginas sanas', () => {
   expect(comparacion.inesperados, resumen).toEqual([]);
 });
 
-test('las cookies que no son hallazgos no aparecen: anti-CSRF y «preferences»', () => {
-  const cookies = hallazgos.filter((h) => h.tipo === 'cookie-insegura').map((h) => h.clave);
-  expect(cookies).toEqual(['sesion_anonima']);
+test('las cookies: la de sesión es alta, «tema» informativa, y anti-CSRF y «preferences» no aparecen', () => {
+  const cookies = hallazgos
+    .filter((h) => h.tipo === 'cookie-insegura')
+    .map((h) => `${h.clave}:${h.severidad}`)
+    .sort();
+  expect(cookies).toEqual(['sesion_anonima:alta', 'tema:informativa']);
+  expect(hallazgos.find((h) => h.clave === 'tema')?.titulo).toBe(
+    'Cookie sin vencimiento y sin HttpOnly; si guarda la sesión, debería tener HttpOnly',
+  );
 });
 
 test('el recorrido terminó sin salir del alcance ni escribir', () => {

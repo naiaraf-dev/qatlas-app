@@ -276,6 +276,7 @@ describe('El sitio hace lo que dice el manifiesto', () => {
       'sesion_anonima',
       'XSRF-TOKEN',
       'preferences',
+      'tema',
     ]);
     for (const { nombre } of manifiesto.cookiesSinHallazgo) {
       expect(cookies.some((c) => c.startsWith(`${nombre}=`))).toBe(true);

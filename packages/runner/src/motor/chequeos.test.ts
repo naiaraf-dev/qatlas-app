@@ -3,6 +3,7 @@ import {
   analizarCookie,
   claveDeMensaje,
   esAntiCsrf,
+  TITULO_COOKIE_SIN_VENCIMIENTO,
   segmentosDeNombre,
   coincideExclusion,
   consoleErrorRelevante,
@@ -107,7 +108,12 @@ describe('console.error', () => {
 describe('Cookies de sesión', () => {
   it('una cookie de sesión sin HttpOnly se marca; no se guarda el valor', () => {
     const cookie = analizarCookie('sesion=abc123; Path=/', false);
-    expect(cookie).toEqual({ nombre: 'sesion', faltaHttpOnly: true, faltaSecure: false });
+    expect(cookie).toEqual({
+      nombre: 'sesion',
+      deSesion: true,
+      faltaHttpOnly: true,
+      faltaSecure: false,
+    });
     expect(JSON.stringify(cookie)).not.toContain('abc123');
   });
 
@@ -118,6 +124,7 @@ describe('Cookies de sesión', () => {
   it('en HTTPS se pide Secure', () => {
     expect(analizarCookie('sid=x; Path=/; HttpOnly', true)).toEqual({
       nombre: 'sid',
+      deSesion: true,
       faltaHttpOnly: false,
       faltaSecure: true,
     });
@@ -159,9 +166,28 @@ describe('Cookies de sesión', () => {
   it('una anti-CSRF en HTTPS sin Secure sí lo es', () => {
     expect(analizarCookie('XSRF-TOKEN=x; Path=/', true)).toEqual({
       nombre: 'XSRF-TOKEN',
+      deSesion: true,
       faltaHttpOnly: false,
       faltaSecure: true,
     });
+  });
+
+  it('sin vencimiento y sin indicio en el nombre: informativa si le falta HttpOnly, nada más', () => {
+    expect(analizarCookie('tema=oscuro; Path=/', true)).toEqual({
+      nombre: 'tema',
+      deSesion: false,
+      faltaHttpOnly: true,
+      faltaSecure: false,
+    });
+    expect(analizarCookie('tema=oscuro; Path=/; HttpOnly', true)).toBeNull();
+    expect(TITULO_COOKIE_SIN_VENCIMIENTO).toBe(
+      'Cookie sin vencimiento y sin HttpOnly; si guarda la sesión, debería tener HttpOnly',
+    );
+  });
+
+  it('no vencer ya no alcanza para ser de sesión', () => {
+    expect(analizarCookie('tema=oscuro; Path=/', false)?.deSesion).toBe(false);
+    expect(analizarCookie('sesion=x; Path=/', false)?.deSesion).toBe(true);
   });
 
   it('una cookie con vencimiento y sin nombre de sesión no es de sesión', () => {

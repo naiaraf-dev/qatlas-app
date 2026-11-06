@@ -977,6 +977,7 @@ definir casos.
 | Accesibilidad critical / serious                               | Alta / Media              |
 | Accesibilidad moderate / minor                                 | Baja                      |
 | Cookie de sesión insegura / contenido mixto / login sobre HTTP | Alta                      |
+| Cookie sin vencimiento y sin HttpOnly, sin indicio de sesión    | Informativa               |
 | Script o recurso de dominio externo bloqueado                  | Informativa               |
 | Página lenta, LCP lento, request lenta, página pesada           | Baja                      |
 
