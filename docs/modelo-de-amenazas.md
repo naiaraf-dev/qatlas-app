@@ -139,9 +139,9 @@ principal y lo que le llega al servidor de prueba: no es una captura del sistema
 | E-26 | Hallazgos falsos de la pantalla de login por una sesión vencida                 | Manipulación | Sospecha, confirmación con el indicador, y la página vuelve a la cola sin analizarse (ADR 027)                 | Mitigada |
 | E-27 | Un bucle de logins bloquea la cuenta en el sistema probado                      | Denegación   | Tope de 3 por sesión vencida en una ejecución, y 3 cada 15 minutos por credencial (ADR 027)                    | Mitigada |
 | E-28 | El escaneo cierra su propia sesión                                              | Denegación   | Exclusiones de cierre agregadas solas; la URL de login nunca se visita (RN-ESC-06)                             | Mitigada |
-| E-29 | La contraseña de la básica se manda a otro origen                               | Divulgación  | QAtlas la agrega solo a los pedidos al origen de la URL base, y nunca a lo que se bloquea (ADR 025)            | Mitigada |
+| E-29 | La contraseña de la básica se manda a otro origen                               | Divulgación  | Una redirección a otro origen se la lleva: no se crea ni se lanza hasta la fase 2 (ADR 025)                    | Evitada  |
 | E-30 | La contraseña de la básica o el estado quedan en memoria del runner             | Divulgación  | Un proceso por ejecución, que termina. Mismo límite que E-11                                                   | Parcial  |
-| E-31 | La persona guarda la contraseña en la ventana del asistido                      | Divulgación  | Contexto en memoria y perfil temporal borrado al cerrar; Chromium no guarda sin que se lo pidan. TS-06         | Parcial  |
+| E-31 | La persona guarda la contraseña en la ventana del asistido                      | Divulgación  | Gestor de contraseñas apagado en el perfil temporal, borrado al cerrar. TS-06 (ADR 028)                        | Mitigada |
 | E-32 | Un token o una clave en la URL de una página del sitio                          | Divulgación  | Hallazgo de parámetro sensible; se guarda el nombre, nunca el valor                                            | Mitigada |
 
 ## Limitaciones aceptadas del paquete crypto

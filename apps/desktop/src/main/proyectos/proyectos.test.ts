@@ -730,7 +730,7 @@ describe('Estrategias de login (ADR 025)', () => {
     ).toMatchObject({ resultado: 'guardada' });
   });
 
-  it.each(['formulario', 'sso', 'basica', 'token-url'] as const)(
+  it.each(['formulario', 'sso', 'token-url'] as const)(
     '%s sin secreto se rechaza',
     (estrategia) => {
       const id = crear();
@@ -741,7 +741,7 @@ describe('Estrategias de login (ADR 025)', () => {
     },
   );
 
-  it.each(['formulario', 'sso', 'basica'] as const)('%s sin usuario se rechaza', (estrategia) => {
+  it.each(['formulario', 'sso'] as const)('%s sin usuario se rechaza', (estrategia) => {
     const id = crear();
     expect(
       proyectos.guardarCredencial({
@@ -755,6 +755,50 @@ describe('Estrategias de login (ADR 025)', () => {
       resultado: 'rechazado',
       errores: [{ campo: 'usuario', motivo: 'usuario-requerido' }],
     });
+  });
+
+  it('la básica no se crea: llega en la fase 2', () => {
+    const id = crear({ ...ENTRADA, permitirLoginHttp: true });
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...BASE,
+        estrategia: 'basica',
+        urlLogin: 'https://app.lexora.test/protegida',
+        secreto: SECRETO,
+      }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'estrategia', motivo: 'estrategia-no-disponible' }],
+    });
+    expect(detalle(id).credenciales).toEqual([]);
+    expect(proyectos.datosDeEjecucion(id)?.permitirLoginHttp).toBe(true);
+  });
+
+  it('una básica que ya existe se puede editar, pero en http solo con la opción, también en .test', () => {
+    const id = crear();
+    // Como la que trae una copia de antes: ya no se puede crear.
+    const credencialId = guardarCredencial(id);
+    acceso((base) => {
+      base
+        .prepare("UPDATE credencial SET estrategia = 'basica', pasos_login = '[]' WHERE id = ?")
+        .run(credencialId);
+    });
+    const edicion = {
+      proyectoId: id,
+      credencialId,
+      ...BASE,
+      estrategia: 'basica' as const,
+      urlLogin: 'http://app.lexora.test/protegida',
+    };
+    expect(proyectos.guardarCredencial(edicion)).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'urlLogin', motivo: 'login-sin-cifrar' }],
+    });
+    expect(
+      proyectos.guardarCredencial({ ...edicion, urlLogin: 'https://app.lexora.test/protegida' }),
+    ).toMatchObject({ resultado: 'guardada' });
+    expect(proyectos.datosDeEjecucion(id)?.permitirLoginHttp).toBe(false);
   });
 
   it('el login asistido no guarda ningún secreto, ni usuario, ni pasos', async () => {

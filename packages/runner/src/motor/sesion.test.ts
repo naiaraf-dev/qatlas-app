@@ -3,6 +3,7 @@ import {
   depurarEstado,
   EXCLUSIONES_DE_CIERRE,
   hallazgosDeSecretos,
+  llevaBasica,
   motivoDeSospecha,
   variantesDeSecreto,
   type EstadoSesion,
@@ -153,5 +154,52 @@ describe('Exclusiones de cierre de sesión', () => {
     expect(
       coincideExclusion(['https://app.lexora.test/informes', 'Informes'], EXCLUSIONES_DE_CIERRE),
     ).toBe(false);
+  });
+});
+
+describe('llevaBasica (ADR 025)', () => {
+  const HTTPS = { origen: 'https://app.example.test', permitirHttp: false };
+  const HTTP = { origen: 'http://app.example.test:8080', permitirHttp: false };
+
+  it('en https, solo al origen exacto', () => {
+    expect(llevaBasica('https://app.example.test/panel?x=1', HTTPS)).toBe(true);
+    expect(llevaBasica('https://app.example.test:443/panel', HTTPS)).toBe(true);
+    expect(llevaBasica('https://app.example.test:8443/panel', HTTPS)).toBe(false);
+    expect(llevaBasica('https://otra.example.test/panel', HTTPS)).toBe(false);
+    expect(llevaBasica('https://example.test/panel', HTTPS)).toBe(false);
+    expect(llevaBasica('https://app.example.test.evil.example/', HTTPS)).toBe(false);
+    expect(llevaBasica('wss://app.example.test/socket', HTTPS)).toBe(false);
+  });
+
+  it('nunca baja a http, aunque sea el mismo host', () => {
+    expect(llevaBasica('http://app.example.test/panel', HTTPS)).toBe(false);
+    expect(llevaBasica('http://app.example.test/panel', { ...HTTPS, permitirHttp: true })).toBe(
+      false,
+    );
+  });
+
+  it('en http, nunca sin «Permitir login sin cifrar», tampoco en un equipo local o .test', () => {
+    expect(llevaBasica('http://app.example.test:8080/panel', HTTP)).toBe(false);
+    expect(
+      llevaBasica('http://localhost:8080/', {
+        origen: 'http://localhost:8080',
+        permitirHttp: false,
+      }),
+    ).toBe(false);
+    expect(llevaBasica('http://app.example.test:8080/panel', { ...HTTP, permitirHttp: true })).toBe(
+      true,
+    );
+  });
+
+  it('con la opción, igual solo al origen exacto', () => {
+    const conOpcion = { ...HTTP, permitirHttp: true };
+    expect(llevaBasica('http://app.example.test/panel', conOpcion)).toBe(false);
+    expect(llevaBasica('http://otra.example.test:8080/panel', conOpcion)).toBe(false);
+    expect(llevaBasica('https://app.example.test:8080/panel', conOpcion)).toBe(false);
+  });
+
+  it('una URL que no se puede leer no la lleva', () => {
+    expect(llevaBasica('no es una url', HTTPS)).toBe(false);
+    expect(llevaBasica('', HTTPS)).toBe(false);
   });
 });

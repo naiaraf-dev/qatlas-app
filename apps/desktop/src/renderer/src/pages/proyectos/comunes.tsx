@@ -40,6 +40,7 @@ export const MENSAJES: Record<MotivoValidacion, string> = {
   'secreto-no-corresponde': 'El login asistido no guarda ningún secreto.',
   'usuario-requerido': 'Completá el usuario.',
   'estrategia-fija': 'La forma de login no se cambia. Para otra, creá una credencial nueva.',
+  'estrategia-no-disponible': 'Esa forma de login todavía no se puede usar.',
 };
 
 export function proyectoNuevo(): ProyectoEntrada {

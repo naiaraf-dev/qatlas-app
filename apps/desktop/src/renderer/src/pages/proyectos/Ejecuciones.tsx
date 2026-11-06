@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   credencialUsable,
+  ESTRATEGIAS_PENDIENTES,
   minutosMinimosDeEjecucion,
   type EjecucionResumen,
   type HallazgoVista,
@@ -155,6 +156,14 @@ function Hallazgos({ hallazgos }: { hallazgos: readonly HallazgoVista[] }) {
   );
 }
 
+/** Por qué una credencial no se puede elegir, en pocas palabras. */
+function porQueNoUsable(c: ProyectoDetalle['credenciales'][number]): string {
+  const pendiente = ESTRATEGIAS_PENDIENTES[c.estrategia];
+  if (pendiente) return `autenticación básica: llega en la ${pendiente.llega}`;
+  if (c.requiereRevision) return 'hay que corregir la URL de login';
+  return 'falta el indicador de éxito';
+}
+
 export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
   const [lista, setLista] = useState<EjecucionResumen[]>([]);
   const [bloqueoMinutos, setBloqueoMinutos] = useState<number | null>(null);
@@ -209,6 +218,7 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
           'sin-autorizacion': 'Sin autorización vigente no se puede ejecutar nada.',
           'credencial-no-usable':
             'Esa credencial no se puede usar: revisá su indicador de éxito y su secreto.',
+          'estrategia-no-disponible': `La autenticación básica llega en la fase 2: ${ESTRATEGIAS_PENDIENTES.basica?.motivo ?? ''}`,
         }[res.data.motivo],
       );
     }
@@ -245,7 +255,7 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
             {proyecto.credenciales.map((c) => (
               <option key={c.id} value={c.id} disabled={!credencialUsable(c)}>
                 {c.rol} · {c.nombre}
-                {credencialUsable(c) ? '' : ' (falta el indicador de éxito)'}
+                {credencialUsable(c) ? '' : ` (${porQueNoUsable(c)})`}
               </option>
             ))}
           </select>

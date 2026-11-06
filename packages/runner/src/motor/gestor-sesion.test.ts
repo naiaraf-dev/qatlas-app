@@ -56,6 +56,7 @@ function armar(
       usuario: 'ana@example.com',
       dominiosAutenticacion: [],
       sesionMaxMs: null,
+      permitirLoginHttp: true,
       ...datos,
     },
     politicaDelEscaneo: {

@@ -128,6 +128,7 @@ async function escanear(
       usuario,
       dominiosAutenticacion: escenario.dominiosAutenticacion ?? [],
       sesionMaxMs: null,
+      permitirLoginHttp: true,
     };
     const gestor = new GestorDeSesion(navegador, {
       datos,

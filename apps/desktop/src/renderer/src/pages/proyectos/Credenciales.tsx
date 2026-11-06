@@ -7,7 +7,12 @@ import type {
   IpcResponse,
   PasoLogin,
 } from '@qatlas/shared';
-import { credencialUsable, LIMITE_PRUEBAS_LOGIN } from '@qatlas/shared';
+import {
+  credencialUsable,
+  ESTRATEGIAS_PENDIENTES,
+  estrategiaDisponible,
+  LIMITE_PRUEBAS_LOGIN,
+} from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
@@ -381,9 +386,19 @@ function FormularioCredencial({
       <Campo
         etiqueta="Forma de login"
         ayuda={
-          credencial
-            ? `${config.ayuda} No se cambia: para otra forma, creá una credencial nueva.`
-            : config.ayuda
+          credencial ? (
+            `${config.ayuda} No se cambia: para otra forma, creá una credencial nueva.`
+          ) : (
+            <>
+              {config.ayuda}
+              {Object.entries(ESTRATEGIAS_PENDIENTES).map(([valor, pendiente]) => (
+                <span key={valor} className="block">
+                  {ESTRATEGIAS[valor as EstrategiaLogin].nombre}: llega en: {pendiente.llega}. Por
+                  qué: {pendiente.motivo}
+                </span>
+              ))}
+            </>
+          )
         }
         errores={erroresDe(errores, 'estrategia')}
       >
@@ -398,8 +413,11 @@ function FormularioCredencial({
             }}
           >
             {(Object.keys(ESTRATEGIAS) as EstrategiaLogin[]).map((valor) => (
-              <option key={valor} value={valor}>
+              <option key={valor} value={valor} disabled={!estrategiaDisponible(valor)}>
                 {ESTRATEGIAS[valor].nombre}
+                {estrategiaDisponible(valor)
+                  ? ''
+                  : ` (llega en: ${ESTRATEGIAS_PENDIENTES[valor]?.llega ?? ''})`}
               </option>
             ))}
           </select>
@@ -466,6 +484,7 @@ function FormularioCredencial({
 const MOTIVOS_FALLO_LOGIN = {
   'no-confirmado': 'El login falló: no se cumplió el indicador de éxito.',
   'sin-indicador': 'El login no se probó: falta el indicador de éxito.',
+  'estrategia-no-disponible': 'El login no se probó: esta forma de login todavía no se puede usar.',
   'credencial-a-revisar': 'El login no se probó: hay que corregir la URL de login.',
   'sin-autorizacion': 'El login no se probó: el proyecto no tiene una autorización vigente.',
   ocupado: 'El login no se probó: hay otra ejecución en curso.',
@@ -570,6 +589,14 @@ function FilaCredencial({
           </p>
         )}
       </div>
+      {!estrategiaDisponible(credencial.estrategia) && (
+        <Aviso>
+          Esta credencial no se puede probar ni usar para escanear: «
+          {ESTRATEGIAS[credencial.estrategia].nombre}» llega en la{' '}
+          {ESTRATEGIAS_PENDIENTES[credencial.estrategia]?.llega}. Por qué:{' '}
+          {ESTRATEGIAS_PENDIENTES[credencial.estrategia]?.motivo}
+        </Aviso>
+      )}
       {credencial.requiereRevision && (
         <Aviso>
           La URL de login quedó fuera de los dominios o en http sin la opción habilitada. Hasta

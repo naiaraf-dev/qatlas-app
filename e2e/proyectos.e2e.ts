@@ -139,8 +139,17 @@ test('credenciales: el secreto escrito no se refleja, y se vacía aunque el env�
   await expect(entrada('Secreto')).toHaveAttribute('autocomplete', 'new-password');
   await expect(entrada('Secreto')).toHaveAttribute('spellcheck', 'false');
 
+  // La básica se ve, deshabilitada, con cuándo llega y por qué (ADR 025).
+  await expect(
+    page.getByRole('option', { name: 'Autenticación HTTP básica (llega en: fase 2)' }),
+  ).toBeDisabled();
+  await expect(page.getByText(/podría mandarle la contraseña/)).toBeVisible();
+
   await entrada('URL de login').fill('https://evil.example/login');
   await boton('Guardar credencial').click();
+  // La ayuda del campo está siempre en pantalla y también dice «dentro de los dominios permitidos»:
+  // el error se busca por su alerta. Con getByText, el test pasaba solo si miraba antes de que llegara
+  // la respuesta (un elemento) y fallaba si miraba después (dos).
   await expect(
     page.getByRole('alert').filter({ hasText: 'dentro de los dominios permitidos' }),
   ).toBeVisible();

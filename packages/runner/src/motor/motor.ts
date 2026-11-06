@@ -1,4 +1,7 @@
 import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { decidirUrlSinResolver, type PoliticaDeRed } from '../red/reglas';
 import type { Configuracion } from '../protocolo';
@@ -51,21 +54,64 @@ export function abrirNavegador(configuracion: Configuracion): Promise<Browser> {
 }
 
 /**
- * El navegador con ventana del login asistido: los mismos argumentos y el mismo sandbox, detrás del
- * proxy de login. Solo para que la persona entre; el escaneo nunca corre acá.
+ * El gestor de contraseñas de Chromium, apagado en la ventana del asistido: sin esto ofrece «Guardar
+ * contraseña» al enviar el formulario, y si la persona acepta, la contraseña queda en el perfil. Son
+ * preferencias del perfil (no hay un argumento para esto), y una sonda con
+ * `chrome://password-manager-internals` mostró que con ellas decide «DROP the password» en lugar de
+ * preguntar. La detección de filtraciones también: consultaría un servicio de afuera.
  */
-export function abrirNavegadorVisible(proxy: {
+export const PREFERENCIAS_VENTANA = {
+  credentials_enable_service: false,
+  credentials_enable_autosignin: false,
+  profile: { password_manager_enabled: false, password_manager_leak_detection: false },
+} as const;
+
+export interface NavegadorVisible {
+  /** El único contexto, con la ventana: es el del perfil temporal. */
+  contexto: BrowserContext;
+  /** Cierra la ventana y borra el perfil. */
+  cerrar: () => Promise<void>;
+}
+
+/**
+ * El navegador con ventana del login asistido: los mismos argumentos y el mismo sandbox, detrás del
+ * proxy de login, con un perfil temporal propio para poder apagar el gestor de contraseñas. El perfil
+ * se borra al cerrar. Solo para que la persona entre; el escaneo nunca corre acá.
+ */
+export async function abrirNavegadorVisible(proxy: {
   servidor: string;
   usuario: string;
   clave: string;
-}): Promise<Browser> {
-  return chromium.launch({
-    channel: 'chromium',
-    headless: false,
-    chromiumSandbox: true,
-    args: [...ARGUMENTOS_CHROMIUM],
-    proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave },
-  });
+}): Promise<NavegadorVisible> {
+  const perfil = await mkdtemp(path.join(os.tmpdir(), 'qatlas-asistido-'));
+  const borrarPerfil = () => rm(perfil, { recursive: true, force: true, maxRetries: 5 });
+  try {
+    await mkdir(path.join(perfil, 'Default'));
+    await writeFile(
+      path.join(perfil, 'Default', 'Preferences'),
+      JSON.stringify(PREFERENCIAS_VENTANA),
+    );
+    const contexto = await chromium.launchPersistentContext(perfil, {
+      channel: 'chromium',
+      headless: false,
+      chromiumSandbox: true,
+      args: [...ARGUMENTOS_CHROMIUM],
+      proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave },
+      serviceWorkers: 'block',
+      acceptDownloads: false,
+      permissions: [],
+    });
+    return {
+      contexto,
+      cerrar: async () => {
+        await contexto.close().catch(() => undefined);
+        await borrarPerfil().catch(() => undefined);
+      },
+    };
+  } catch (error) {
+    await borrarPerfil().catch(() => undefined);
+    throw error;
+  }
 }
 
 const METODOS_DE_LECTURA = new Set(['GET', 'HEAD', 'OPTIONS']);

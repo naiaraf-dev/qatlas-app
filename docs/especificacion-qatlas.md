@@ -114,7 +114,7 @@ realiza las acciones que haría un usuario o un tester autorizado.
 | Plantilla de importación  | Configuración guardada que indica qué columna de un Excel corresponde a cada dato de un caso de prueba.                                       |
 | Fuente de log             | Archivo de log o contenedor del sistema probado que QAtlas lee durante una ejecución.                                                         |
 | Runner                    | Proceso aislado que ejecuta las pruebas con Playwright.                                                                                       |
-| Estrategia de login       | Cómo una credencial inicia sesión: formulario, SSO, enlace con token, login asistido o autenticación básica (6.2.1).                        |
+| Estrategia de login       | Cómo una credencial inicia sesión: formulario, SSO, enlace con token o login asistido; la autenticación básica, en la fase 2 (6.2.1). |
 | Dominio de autenticación  | Dominio donde vive el login (un proveedor de identidad, un portal). Se usa solo durante el login; el escaneo nunca lo visita.               |
 | Estado de sesión          | Cookies y almacenamiento del navegador después de un login. Se guarda cifrado y solo en memoria.                                              |
 | IPC                       | Comunicación interna entre los procesos de la aplicación, sin pasar por la red.                                                               |
@@ -961,12 +961,23 @@ autenticación), sin video, traza, HAR ni capturas (ADR 025).
 | SSO con redirección (OpenID Connect, OAuth, SAML) | 1 (semana 6b) | Usuario y contraseña, cifrada | Sigue la redirección al proveedor, que debe estar en los dominios de autenticación, y completa sus pasos allá | Vuelve a entrar sola; la sesión del proveedor no se guarda |
 | Enlace con token (portal) | 1 (semana 6b) | El enlace completo, cifrado; la URL de login sale de él, sin el token | Abre el enlace | Vuelve a entrar con el mismo enlace; si es de un solo uso, pausa y pide uno nuevo |
 | Login asistido (segundo factor, captcha, enlace por correo) | 1 (semana 6b) | Nada | Abre una ventana del navegador de pruebas y la persona entra a mano; QAtlas mira el indicador | Pausa y avisa; al reanudar abre la ventana otra vez |
-| Autenticación HTTP básica | 1 (semana 6b) | Usuario y contraseña, cifrada | QAtlas la pone en cada pedido al origen de la URL base, y a ningún otro | No vence |
+| Autenticación HTTP básica | 2 (estaba en la 1; ver nota) | Usuario y contraseña, cifrada | QAtlas la pone en cada pedido al origen exacto de la URL base, y en http solo con «Permitir login sin cifrar» | No vence |
 | TOTP automático | 2 | La semilla, cifrada como un secreto más | Calcula el código del segundo factor en el momento del login | Vuelve a entrar sola |
 | Token en encabezado (Bearer) | 2 | El token, cifrado | Lo agrega a los pedidos al origen base, como la básica | Pide un token nuevo |
 | Confiar en un certificado por su huella | 2 | La huella, auditada | Acepta solo ese certificado de un sistema interno, nunca "cualquier certificado" | — |
 | Certificado de cliente (mTLS) | 3 | El certificado y su clave, cifrados | El navegador lo presenta solo al origen del proyecto | — |
 | Importar una sesión existente | 3 | El estado importado, cifrado y en memoria, como uno propio | Se elige el archivo con el diálogo del sistema (3.14), nunca una ruta desde la interfaz | Pausa y pide otra |
+
+**Nota sobre la básica.** Pasó a la fase 2 por una fuga encontrada en la
+semana 6b: si el origen base redirige a otro origen, Chromium manda el
+encabezado `Authorization` también al destino, y la ruta que lo pone
+nunca ve ese pedido. Se reproduce con `e2e/basica-encabezado.e2e.ts`.
+Hasta resolverlo, no se puede crear una credencial básica, y una que ya
+existe no se prueba ni se lanza. La interfaz la muestra deshabilitada,
+con «Llega en: fase 2» y el motivo. El ADR 025 detalla la
+reproducción y las dos alternativas descartadas (leer las respuestas
+fuera del sandbox con `route.fetch`, o cortar redirecciones por CDP
+solo en las páginas).
 
 En todas: el escaneo nunca visita la URL de login ni un dominio de
 autenticación, y el estado de sesión se filtra a los dominios del

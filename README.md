@@ -10,7 +10,7 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 | ----------------------------------------------- | ------------------------------------------------- |
 | ![QAtlas en modo claro](docs/captura-claro.png) | ![QAtlas en modo oscuro](docs/captura-oscuro.png) |
 
-> **Estado:** fase 1, semana 6b — estructura base endurecida, bóveda cifrada, proyectos con autorización, runner aislado detrás de un proxy de salida, escaneo automático con su oráculo, y escaneo autenticado con cinco formas de login y roles. Ver el [plan por fases](docs/especificacion-qatlas.md).
+> **Estado:** fase 1, semana 6b — estructura base endurecida, bóveda cifrada, proyectos con autorización, runner aislado detrás de un proxy de salida, escaneo automático con su oráculo, y escaneo autenticado con cuatro formas de login y roles (la autenticación básica, en la fase 2). Ver el [plan por fases](docs/especificacion-qatlas.md).
 
 ## Por qué
 

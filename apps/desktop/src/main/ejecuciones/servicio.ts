@@ -20,6 +20,7 @@ import {
 } from '@qatlas/db';
 import {
   credencialUsable,
+  estrategiaDisponible,
   LIMITE_PRUEBAS_LOGIN,
   LIMITES_SESION,
   type ConnectionEntry,
@@ -121,6 +122,7 @@ function aAutenticacion(credencial: CredencialResumen, datos: DatosDeEjecucion):
     usuario: credencial.usuario,
     dominiosAutenticacion: datos.dominiosAutenticacion,
     sesionMaxMs: datos.sesionMaxMinutos === null ? null : datos.sesionMaxMinutos * 60_000,
+    permitirLoginHttp: datos.permitirLoginHttp,
   };
 }
 
@@ -213,6 +215,9 @@ export class ServicioEjecuciones {
     let rol: string | null = null;
     if (credencialId) {
       const credencial = this.proyectos.datosDeLogin(proyectoId, credencialId);
+      if (credencial && !estrategiaDisponible(credencial.estrategia)) {
+        return { resultado: 'rechazada', motivo: 'estrategia-no-disponible' };
+      }
       if (!credencial || !credencialUsable(credencial)) {
         return { resultado: 'rechazada', motivo: 'credencial-no-usable' };
       }
@@ -384,6 +389,9 @@ export class ServicioEjecuciones {
   ): Promise<IpcResponse<'credenciales:probarLogin'>> {
     const credencial = this.proyectos.datosDeLogin(proyectoId, credencialId);
     if (!credencial) return { resultado: 'fallo', motivo: 'no-se-pudo-ejecutar' };
+    if (!estrategiaDisponible(credencial.estrategia)) {
+      return { resultado: 'fallo', motivo: 'estrategia-no-disponible' };
+    }
     if (credencial.requiereRevision) return { resultado: 'fallo', motivo: 'credencial-a-revisar' };
     if (!credencialUsable(credencial)) {
       return {

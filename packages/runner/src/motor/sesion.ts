@@ -9,6 +9,7 @@ import {
   protegerContexto,
   urlSinQuery,
   type AlRegistrar,
+  type NavegadorVisible,
   type Vigilancia,
 } from './motor';
 
@@ -33,6 +34,8 @@ export interface DatosAutenticacion {
   dominiosAutenticacion: readonly string[];
   /** Cuánto dura la sesión como máximo, si el proyecto lo dice. Se renueva un minuto antes. */
   sesionMaxMs: number | null;
+  /** «Permitir login sin cifrar»: sin esto, la básica nunca va sobre http. */
+  permitirLoginHttp: boolean;
 }
 
 export interface ProxyDeContexto {
@@ -282,7 +285,7 @@ export interface OpcionesDeLogin {
   timeoutMs: number;
   alRegistrar: AlRegistrar;
   /** Abre el navegador con ventana del login asistido, detrás del proxy de login. */
-  abrirVisible: (proxy: ProxyDeContexto) => Promise<Browser>;
+  abrirVisible: (proxy: ProxyDeContexto) => Promise<NavegadorVisible>;
   /** Las cookies y el almacenamiento de la sesión se filtran a este alcance (el del escaneo). */
   politicaDelEscaneo: PoliticaDeRed;
   /** La autenticación básica se manda solo a este origen. */
@@ -295,24 +298,46 @@ export interface CredencialBasica {
   clave: string;
   /** Solo a este origen: nunca a otro dominio del alcance ni a uno de afuera. */
   origen: string;
+  /** Sobre http solo con «Permitir login sin cifrar» (sin la excepción de los equipos locales). */
+  permitirHttp: boolean;
+}
+
+/**
+ * Si un pedido lleva la básica: solo al origen exacto (esquema, host y puerto) y, en http, solo con la
+ * opción. Cada pedido se decide por su propia URL: el que sigue a una redirección es otro pedido, y
+ * Chromium no le pasa los encabezados que le puso una ruta.
+ */
+export function llevaBasica(
+  url: string,
+  basica: Pick<CredencialBasica, 'origen' | 'permitirHttp'>,
+) {
+  let destino: URL;
+  try {
+    destino = new URL(url);
+  } catch {
+    return false;
+  }
+  if (destino.origin !== basica.origen) return false;
+  if (destino.protocol === 'https:') return true;
+  return destino.protocol === 'http:' && basica.permitirHttp;
 }
 
 /**
  * La autenticación básica, puesta por QAtlas en cada pedido al origen base. Las `httpCredentials` de
- * Playwright no llegan detrás de un proxy por contexto: Chromium nunca las manda (lo mostró una sonda).
- * Se registra antes de las protecciones, así corre después de ellas: lo bloqueado nunca la lleva.
+ * Playwright no sirven: con un proxy con usuario, Playwright las reemplaza por las del proxy. Se registra
+ * antes de las protecciones, así corre después de ellas: lo bloqueado nunca la lleva.
+ *
+ * No se usa hasta la fase 2: Chromium arrastra este encabezado a una redirección a otro origen, y esta
+ * ruta no ve ese pedido (ADR 025, `e2e/basica-encabezado.e2e.ts`). El proceso principal no la lanza.
  */
-async function ponerBasica(contexto: BrowserContext, basica: CredencialBasica): Promise<void> {
+export async function ponerBasica(
+  contexto: BrowserContext,
+  basica: CredencialBasica,
+): Promise<void> {
   const valor = `Basic ${Buffer.from(`${basica.usuario}:${basica.clave}`, 'utf8').toString('base64')}`;
   await contexto.route('**/*', async (ruta) => {
     const solicitud = ruta.request();
-    let origen: string;
-    try {
-      origen = new URL(solicitud.url()).origin;
-    } catch {
-      origen = '';
-    }
-    if (origen !== basica.origen) {
+    if (!llevaBasica(solicitud.url(), basica)) {
       await ruta.fallback();
       return;
     }
@@ -351,7 +376,12 @@ export async function iniciarSesion(
     if (datos.estrategia === 'asistido') return await loginAsistido(opciones);
     const basica =
       datos.estrategia === 'basica'
-        ? { usuario: datos.usuario, clave: texto, origen: opciones.origenBase }
+        ? {
+            usuario: datos.usuario,
+            clave: texto,
+            origen: opciones.origenBase,
+            permitirHttp: datos.permitirLoginHttp,
+          }
         : undefined;
     const contexto = await contextoDeLogin(navegador, opciones.proxy, basica);
     try {
@@ -464,7 +494,7 @@ async function loginAsistido(opciones: OpcionesDeLogin): Promise<ResultadoLogin>
   const visible = await opciones.abrirVisible(opciones.proxy);
   const escritas = new ContrasenasEscritas();
   try {
-    const contexto = await contextoDeLogin(visible, null);
+    const { contexto } = visible;
     await protegerContexto(contexto, opciones.politica, {
       soloLectura: false,
       alRegistrar: opciones.alRegistrar,
@@ -472,7 +502,8 @@ async function loginAsistido(opciones: OpcionesDeLogin): Promise<ResultadoLogin>
     contexto.on('request', (solicitud) => {
       escritas.alEnviar(solicitud);
     });
-    const pagina = await contexto.newPage();
+    // El perfil persistente abre con una pestaña: es la ventana.
+    const pagina = contexto.pages()[0] ?? (await contexto.newPage());
     let cerrada = false;
     pagina.on('close', () => {
       cerrada = true;
@@ -496,7 +527,7 @@ async function loginAsistido(opciones: OpcionesDeLogin): Promise<ResultadoLogin>
     return { resultado: 'fallo' };
   } finally {
     escritas.vaciar();
-    await visible.close().catch(() => undefined);
+    await visible.cerrar();
   }
 }
 

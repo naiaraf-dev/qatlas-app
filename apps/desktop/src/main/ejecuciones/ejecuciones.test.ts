@@ -1112,6 +1112,7 @@ describe('Escaneo autenticado (ADR 025 a 027)', () => {
         estrategia: 'formulario',
         dominiosAutenticacion: ['idp.example.test'],
         sesionMaxMs: null,
+        permitirLoginHttp: false,
       },
       sesionPrevia: null,
     });
@@ -1358,5 +1359,34 @@ describe('Escaneo autenticado (ADR 025 a 027)', () => {
       resultado: 'rechazada',
       motivo: 'credencial-no-usable',
     });
+  });
+});
+
+describe('Básica: llega en la fase 2 (ADR 025)', () => {
+  /** Una credencial básica de antes, como la que trae una copia: con secreto e indicador. */
+  function basicaExistente(proyectoId: string): string {
+    const id = guardarCredencial(proyectoId);
+    boveda.conAcceso((base) => {
+      base
+        .prepare("UPDATE credencial SET estrategia = 'basica', pasos_login = '[]' WHERE id = ?")
+        .run(id);
+    });
+    return id;
+  }
+
+  it('no se lanza ni se prueba, lo dice, y no abre ningún proceso', async () => {
+    const proyecto = crearProyecto();
+    const credencial = basicaExistente(proyecto);
+    expect(proyectos.obtener(proyecto)?.credenciales[0]?.estrategia).toBe('basica');
+    expect(ejecuciones.lanzarEscaneo(proyecto, credencial)).toEqual({
+      resultado: 'rechazada',
+      motivo: 'estrategia-no-disponible',
+    });
+    expect(await ejecuciones.probarLogin(proyecto, credencial)).toEqual({
+      resultado: 'fallo',
+      motivo: 'estrategia-no-disponible',
+    });
+    expect(registro).toEqual([]);
+    expect(ejecuciones.listar(proyecto)).toEqual([]);
   });
 });

@@ -54,6 +54,7 @@ const AUTENTICACION = {
   usuario: 'ana@example.com',
   dominiosAutenticacion: [],
   sesionMaxMs: null,
+  permitirLoginHttp: true,
 };
 
 describe('El código del motor no abre red ni procesos por su cuenta', () => {
@@ -232,10 +233,34 @@ describe('Configuración del navegador', () => {
   });
 
   it('el navegador con ventana tiene el mismo sandbox y los mismos argumentos', () => {
-    const visible = /export function abrirNavegadorVisible[\s\S]*?\n}\n/.exec(motor)?.[0] ?? '';
+    const visible =
+      /export async function abrirNavegadorVisible[\s\S]*?\n}\n/.exec(motor)?.[0] ?? '';
     expect(visible).toContain('chromiumSandbox: true');
     expect(visible).toContain('args: [...ARGUMENTOS_CHROMIUM]');
     expect(visible).toContain('headless: false');
+    // Es un perfil persistente: el contexto lo crea acá, con lo mismo que los demás.
+    expect(visible).toContain("serviceWorkers: 'block'");
+    expect(visible).toContain('acceptDownloads: false');
+    expect(visible).toContain('permissions: []');
+  });
+
+  it('la ventana del asistido tiene el gestor de contraseñas apagado, y su perfil se borra (ADR 028)', () => {
+    const visible =
+      /export async function abrirNavegadorVisible[\s\S]*?\n}\n/.exec(motor)?.[0] ?? '';
+    const preferencias =
+      /export const PREFERENCIAS_VENTANA = \{[\s\S]*?\n\} as const;/.exec(motor)?.[0] ?? '';
+    for (const clave of [
+      'credentials_enable_service: false',
+      'credentials_enable_autosignin: false',
+      'password_manager_enabled: false',
+      'password_manager_leak_detection: false',
+    ]) {
+      expect(preferencias).toContain(clave);
+    }
+    expect(preferencias).not.toContain('true');
+    expect(visible).toContain('JSON.stringify(PREFERENCIAS_VENTANA)');
+    expect(visible).toContain('launchPersistentContext(perfil');
+    expect(visible.match(/borrarPerfil\(\)/g)?.length).toBe(2);
   });
 
   it('el navegador nunca se descarga solo', () => {

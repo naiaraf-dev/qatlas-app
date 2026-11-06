@@ -30,6 +30,7 @@ import {
   type FilaProyecto,
 } from '@qatlas/db';
 import {
+  estrategiaDisponible,
   normalizarNombreProyecto,
   renderizarDeclaracion,
   verificarAutorizacion,
@@ -55,6 +56,7 @@ export interface DatosDeEjecucion {
   puertosLocales: number[];
   dominiosAutenticacion: string[];
   sesionMaxMinutos: number | null;
+  permitirLoginHttp: boolean;
   maxRps: number;
   maxPaginas: number;
   maxProfundidad: number;
@@ -551,6 +553,10 @@ export class ServicioProyectos {
       if (anterior && anterior.estrategia !== estrategia) {
         return rechazar('estrategia', 'estrategia-fija');
       }
+      // Una forma pendiente no se crea; la que ya existe se puede editar, pero no se usa.
+      if (!anterior && !estrategiaDisponible(estrategia)) {
+        return rechazar('estrategia', 'estrategia-no-disponible');
+      }
       if (estrategia === 'asistido' && secretoNuevo !== undefined) {
         return rechazar('secreto', 'secreto-no-corresponde');
       }
@@ -575,6 +581,15 @@ export class ServicioProyectos {
         permitirLoginHttp: proyecto.permitirLoginHttp,
       });
       if (!login.ok) return rechazar('urlLogin', login.motivo);
+      // La básica va en cada pedido, no solo en el login: sobre http hace falta la opción, también en
+      // los equipos locales y en .test (el runner lo vuelve a decidir pedido por pedido).
+      if (
+        estrategia === 'basica' &&
+        new URL(login.url).protocol === 'http:' &&
+        !proyecto.permitirLoginHttp
+      ) {
+        return rechazar('urlLogin', 'login-sin-cifrar');
+      }
 
       const datos = {
         nombre: nombre.trim(),
@@ -710,6 +725,7 @@ export class ServicioProyectos {
         puertosLocales: fila.puertosLocales,
         dominiosAutenticacion: fila.dominiosAutenticacion,
         sesionMaxMinutos: fila.sesionMaxMinutos,
+        permitirLoginHttp: fila.permitirLoginHttp,
         maxRps: fila.maxRps,
         maxPaginas: fila.maxPaginas,
         maxProfundidad: fila.maxProfundidad,

@@ -113,6 +113,8 @@ export const MotivoValidacion = z.enum([
   'declaracion-distinta',
   'rol-repetido',
   'estrategia-fija',
+  // La forma de login existe pero todavía no se puede usar (ESTRATEGIAS_PENDIENTES).
+  'estrategia-no-disponible',
   'secreto-requerido',
   'secreto-no-corresponde',
   'usuario-requerido',
@@ -553,6 +555,7 @@ export const ipcContract = {
           motivo: z.enum([
             'no-confirmado',
             'sin-indicador',
+            'estrategia-no-disponible',
             'credencial-a-revisar',
             'sin-autorizacion',
             'ocupado',
@@ -574,7 +577,12 @@ export const ipcContract = {
       z
         .object({
           resultado: z.literal('rechazada'),
-          motivo: z.enum(['ya-en-curso', 'sin-autorizacion', 'credencial-no-usable']),
+          motivo: z.enum([
+            'ya-en-curso',
+            'sin-autorizacion',
+            'credencial-no-usable',
+            'estrategia-no-disponible',
+          ]),
         })
         .strict(),
     ]),

@@ -16,7 +16,7 @@ import { registerHooks } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import type { Browser } from 'playwright-core';
+import { chromium, type BrowserContext } from 'playwright-core';
 import { EXCLUSIONES_POR_DEFECTO, PROYECTO_POR_DEFECTO } from '@qatlas/shared';
 import type { MensajeAlRunner, MensajeDelRunner } from '@qatlas/runner';
 import {
@@ -31,7 +31,11 @@ import type {
   ProcesoRunner,
   ServicioEjecuciones,
 } from '../apps/desktop/src/main/ejecuciones/servicio';
-import { abrirNavegadorVisible } from '../packages/runner/src/motor/motor';
+import {
+  abrirNavegadorVisible,
+  ARGUMENTOS_CHROMIUM,
+  type NavegadorVisible,
+} from '../packages/runner/src/motor/motor';
 import { crearRunner } from '../packages/runner/src/motor/runner';
 import { iniciarProxy } from '../packages/runner/src/red/proxy';
 import { restaurarEntorno, vigilarEntorno } from './entorno';
@@ -87,6 +91,32 @@ registerHooks({
       contexto,
     ),
 });
+/** Los perfiles de la ventana del asistido que hay en una carpeta temporal. */
+const perfilesDeVentana = (carpeta: string): string[] =>
+  readdirSync(carpeta).filter((nombre) => nombre.startsWith('qatlas-asistido-'));
+
+const CREDENCIAL_PROXY = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
+
+/**
+ * Entra con el formulario del sandbox en una pestaña del contexto, con la página interna del gestor de
+ * contraseñas abierta en otra, y devuelve lo que el gestor registró: su decisión al enviar.
+ */
+async function decisionDelGestor(contexto: BrowserContext, origen: string): Promise<string> {
+  const internos = await contexto.newPage();
+  await internos.goto('chrome://password-manager-internals/');
+  const pagina = await contexto.newPage();
+  await pagina.goto(`${origen}/app/login`);
+  await pagina.locator('#usuario').fill(USUARIOS_APP.admin.usuario);
+  await pagina.locator('#clave').fill(CANARIO);
+  await pagina.locator('button[type=submit]').click();
+  await pagina.locator('#menu-usuario').waitFor();
+  // Después de la navegación, el gestor decide si ofrece guardar: esa línea llega sola.
+  await expect
+    .poll(() => internos.locator('body').innerText(), { timeout: 15_000 })
+    .toContain('AskUserOrSavePassword');
+  return internos.locator('body').innerText();
+}
+
 const servicios = async () => ({
   ...(await import('../apps/desktop/src/main/boveda/servicio')),
   ...(await import('../apps/desktop/src/main/proyectos/servicio')),
@@ -130,7 +160,7 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
     };
   }
 
-  let visible: Browser | undefined;
+  let visible: NavegadorVisible | undefined;
   const boveda = new ServicioBoveda({ carpeta: carpetaBoveda });
   let ejecuciones: ServicioEjecuciones | undefined;
   try {
@@ -218,8 +248,10 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
     await expect
       .poll(() => sitio.registro.rutas.includes('/app/login-mfa'), { timeout: 60_000 })
       .toBe(true);
-    const pagina = visible?.contexts()[0]?.pages()[0];
+    const pagina = visible?.contexto.pages()[0];
     if (!pagina) throw new Error('No se abrió la ventana');
+    // El perfil de la ventana es propio y va al temporal (se borra al cerrar, paso 6).
+    expect(perfilesDeVentana(temporal)).toHaveLength(1);
     await pagina.locator('#usuario').fill(USUARIOS_APP.admin.usuario);
     await pagina.locator('#clave').fill(CANARIO);
     await pagina.locator('button[type=submit]').click();
@@ -269,11 +301,70 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
     // 6. Los logs, y el temporal después de cerrar la ventana.
     expect(logs.join('\n')).not.toContain(CANARIO);
     expect(archivosConCanario(temporal)).toEqual([]);
+    expect(perfilesDeVentana(temporal)).toEqual([]);
   } finally {
     Object.assign(console, originales);
-    await visible?.close().catch(() => undefined);
+    await visible?.cerrar();
     boveda.bloquear();
     restaurarEntorno(entornoAntes);
     rmSync(raiz, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test('la ventana del asistido no ofrece guardar la contraseña: el gestor de Chromium está apagado', async () => {
+  const origen = `http://${HOST_SITIO}:${sitio.puerto}`;
+  const proxy = await iniciarProxy({
+    politica: {
+      urlBase: `${origen}/app/inicio`,
+      dominios: [HOST_SITIO],
+      sistemaInterno: false,
+      puertosLocales: [],
+    },
+    credencial: CREDENCIAL_PROXY,
+    alRegistrar: () => undefined,
+    resolver,
+  });
+  const datosProxy = { servidor: `http://127.0.0.1:${proxy.puerto}`, ...CREDENCIAL_PROXY };
+  try {
+    // Control positivo: el mismo login, con un perfil persistente sin esas preferencias, sí lo ofrece
+    // (los contextos de `launch` son de incógnito: ahí el gestor no registra nada). Si la página interna
+    // dejara de registrar la decisión, este test fallaría acá.
+    const perfilNormal = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts06-normal-'));
+    try {
+      const normal = await chromium.launchPersistentContext(perfilNormal, {
+        channel: 'chromium',
+        headless: false,
+        chromiumSandbox: true,
+        args: [...ARGUMENTOS_CHROMIUM],
+        proxy: {
+          server: datosProxy.servidor,
+          username: datosProxy.usuario,
+          password: datosProxy.clave,
+        },
+      });
+      try {
+        const registro = await decisionDelGestor(normal, origen);
+        expect(registro).toContain('Decision: ASK the user');
+        expect(registro).toContain('Show password prompt');
+      } finally {
+        await normal.close();
+      }
+    } finally {
+      rmSync(perfilNormal, { recursive: true, force: true, maxRetries: 3 });
+    }
+
+    const visible = await abrirNavegadorVisible(datosProxy);
+    try {
+      const registro = await decisionDelGestor(visible.contexto, origen);
+      expect(registro).toContain('Saving disabled');
+      expect(registro).toContain('Decision: DROP the password');
+      expect(registro).not.toContain('ASK the user');
+      expect(registro).not.toContain('Show password prompt');
+      expect(registro).toContain('Leak detection disabled');
+    } finally {
+      await visible.cerrar();
+    }
+  } finally {
+    await proxy.cerrar();
   }
 });

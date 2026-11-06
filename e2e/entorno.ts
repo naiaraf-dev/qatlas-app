@@ -6,9 +6,18 @@ export function diferenciasDeEntorno(
   despues: Readonly<Record<string, string | undefined>>,
 ): string[] {
   return [...new Set([...Object.keys(antes), ...Object.keys(despues)])]
+    .filter((nombre) => !DEL_RUNNER_DE_PLAYWRIGHT.has(nombre))
     .filter((nombre) => antes[nombre] !== despues[nombre])
     .sort();
 }
+
+/**
+ * Las que pone Playwright, no el test. `BROWSERSLIST_IGNORE_OLD_DATA`: la define cada vez que transpila un
+ * archivo que no está en su caché, y un `import()` dentro de un test (TS-06 carga así los servicios) lo
+ * hace después de la foto del entorno. Pasaba solo cuando el archivo había cambiado desde la corrida
+ * anterior.
+ */
+const DEL_RUNNER_DE_PLAYWRIGHT = new Set(['BROWSERSLIST_IGNORE_OLD_DATA']);
 
 /**
  * Falla si un test deja `process.env` distinto de como lo encontró. El punto de referencia es uno solo,

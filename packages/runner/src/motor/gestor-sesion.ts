@@ -6,6 +6,7 @@ import {
   indicadorCumplido,
   urlSinQuery,
   type AlRegistrar,
+  type NavegadorVisible,
   type Vigilancia,
 } from './motor';
 import {
@@ -55,7 +56,7 @@ export interface OpcionesGestor {
   alRegistrar: AlRegistrar;
   timeoutMs: number;
   urlBase: string;
-  abrirVisible: (proxy: ProxyDeContexto) => Promise<Browser>;
+  abrirVisible: (proxy: ProxyDeContexto) => Promise<NavegadorVisible>;
   /**
    * Pide los datos del login al proceso principal y espera. `reintento`: el anterior falló y el proceso
    * principal decide si hay otro (después de una pausa) o no. Null: no hay login.
@@ -258,6 +259,7 @@ export class GestorDeSesion implements SesionDelRastreo {
             usuario: this.opciones.datos.usuario,
             clave: this.claveBasica,
             origen: new URL(this.opciones.urlBase).origin,
+            permitirHttp: this.opciones.datos.permitirLoginHttp,
           }
         : undefined;
     this.contexto = await contextoConSesion(

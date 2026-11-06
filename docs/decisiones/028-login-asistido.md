@@ -9,8 +9,17 @@ semilla TOTP llega en la fase 2, cifrada como un secreto más). Mientras tanto, 
 ## Decisión
 
 **La ventana.** El runner abre un Chromium con ventana, aparte del navegador del escaneo, con los mismos argumentos,
-el sandbox de Chromium encendido y detrás del proxy de login. Un contexto en memoria, sin video, traza, HAR ni
-capturas. QAtlas mira el indicador de éxito cada medio segundo, hasta 5 minutos. Si la persona cierra la ventana, el
+el sandbox de Chromium encendido y detrás del proxy de login. Sin video, traza, HAR ni capturas.
+
+**Sin «Guardar contraseña».** La ventana usa un perfil temporal propio (`launchPersistentContext`), creado en el
+temporal del sistema y borrado al cerrar, con el gestor de contraseñas apagado en sus preferencias:
+`credentials_enable_service`, `credentials_enable_autosignin`, `profile.password_manager_enabled` y
+`profile.password_manager_leak_detection` en falso. No hay un argumento de Chromium para esto, y los contextos de
+`launch` son de incógnito, así que las preferencias no se pueden poner ahí. Una sonda con
+`chrome://password-manager-internals` mostró la diferencia. Con el perfil de siempre, al enviar el login decide «ASK
+the user» y «Show password prompt». Con estas preferencias, decide «Saving disabled» y «DROP the password».
+`e2e/ts-06-login-asistido.e2e.ts` lo comprueba así, con el control positivo, y comprueba que el perfil de la ventana
+existe mientras está abierta y desaparece al cerrar. QAtlas mira el indicador de éxito cada medio segundo, hasta 5 minutos. Si la persona cierra la ventana, el
 login se cancela («ventana-cerrada»); a mitad del escaneo, la ejecución se pausa (ADR 027).
 
 **Lo que se escribe no queda.** Mientras la ventana está abierta, QAtlas toma lo que hay en los campos de contraseña
@@ -35,6 +44,6 @@ Vitest y en electron-vite, se resuelve a la variante con SQLCipher con `register
 
 ## Consecuencias
 
-- Si la persona elige «Guardar contraseña» en la ventana, Chromium la guarda en el perfil temporal, que se borra al
-  cerrar. QAtlas no lo puede impedir sin una política del sistema operativo.
+- El perfil temporal de la ventana se escribe en disco mientras está abierta, como el de cualquier contexto de
+  Chromium: lo que el sitio guarda (cookies, almacenamiento) está ahí hasta que se cierra y se borra.
 - En Linux sin pantalla, el asistido no se puede usar. En CI corre con `xvfb-run`.

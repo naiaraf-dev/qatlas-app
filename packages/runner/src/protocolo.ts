@@ -59,6 +59,8 @@ export const Autenticacion = z
     usuario: z.string().max(320),
     dominiosAutenticacion: z.array(z.string().max(300)).max(20),
     sesionMaxMs: z.number().int().positive().nullable(),
+    /** «Permitir login sin cifrar» del proyecto: sin esto, la básica nunca va sobre http. */
+    permitirLoginHttp: z.boolean(),
   })
   .strict();
 export type Autenticacion = z.infer<typeof Autenticacion>;
