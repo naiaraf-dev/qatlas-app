@@ -141,7 +141,9 @@ test('credenciales: el secreto escrito no se refleja, y se vac√≠a aunque el env√
 
   await entrada('URL de login').fill('https://evil.example/login');
   await boton('Guardar credencial').click();
-  await expect(page.getByText('dentro de los dominios permitidos')).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'dentro de los dominios permitidos' }),
+  ).toBeVisible();
   await expect(entrada('Secreto')).toHaveValue('');
   await expect(boton('Guardar credencial')).toBeDisabled();
   expect(await page.content()).not.toContain(SECRETO);
