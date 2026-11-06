@@ -92,7 +92,10 @@ const lanzador: LanzadorDeProcesos = {
   },
 };
 
-const terminado = (paginasVisitadas: number, linksExcluidos: number): MensajeDelRunner => ({
+const terminado = (
+  paginasVisitadas: number,
+  linksExcluidos: number,
+): Extract<MensajeDelRunner, { tipo: 'escaneo-terminado' }> => ({
   tipo: 'escaneo-terminado',
   paginasVisitadas,
   linksExcluidos,
@@ -543,7 +546,7 @@ describe('Resultados del escaneo', () => {
       noRecorridosExclusiones: 5,
       urlsDescartadas: 6,
       websocketDescartados: 7,
-    } as MensajeDelRunner);
+    });
     expect(estado(proyecto, id)?.resumen).toMatchObject({
       paginasVisitadas: 3,
       linksExcluidos: 2,
