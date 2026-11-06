@@ -34,10 +34,11 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   confirmación, límites y pausa, parámetros sensibles, TS-06 y la zona con login del sandbox. Ver las ADR 025 a 029
   y el catálogo de estrategias en la especificación (6.2.1).
 - Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
-- El runner es  (runner.ts); entrada-runner.ts solo lo conecta al . Un E2E que necesita
-  manejar la ventana del login asistido corre los servicios y el runner en su proceso ().
+- El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
+  manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).
 - El estado de sesión nunca va a la base ni a disco. Un cambio que deja sin valor una sesión avisa con el callback
-  de  ().
+  de `ServicioProyectos` (`descartarSesiones`).
+- Los E2E cargan con `tsconfig.e2e.json` (sin el mapeo de better-sqlite3 a sus tipos). Node 22.15 o más nuevo.
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
