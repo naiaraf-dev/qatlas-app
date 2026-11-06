@@ -133,6 +133,14 @@ const datosVacios = (): Datos => ({
   pendientes: [],
 });
 
+const nombreDeHost = (texto: string): string => {
+  try {
+    return new URL(texto).hostname;
+  } catch {
+    return '';
+  }
+};
+
 /** El proxy marca sus propios rechazos: no son errores del sitio. */
 const ENCABEZADO_BLOQUEO = 'x-qatlas-bloqueado';
 
@@ -160,7 +168,8 @@ function escuchar(pagina: Page, datos: () => Datos): void {
   pagina.on('requestfailed', (solicitud: Request) => {
     datos().fallidas.push({ url: solicitud.url(), error: solicitud.failure()?.errorText ?? '' });
     if (solicitud.isNavigationRequest() && solicitud.frame() === pagina.mainFrame()) {
-      datos().navegacionesFallidas.push(hostDe(solicitud.url()));
+      // Solo el nombre: los dominios de autenticación se declaran sin puerto.
+      datos().navegacionesFallidas.push(nombreDeHost(solicitud.url()));
     }
   });
   pagina.on('requestfinished', (solicitud: Request) => {

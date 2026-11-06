@@ -39,7 +39,10 @@ function navegadorFalso(indicadorVisible: () => boolean) {
 
 function armar(
   datos: Partial<DatosAutenticacion>,
-  { indicador = () => true, denegar = new Set<MotivoLogin>() } = {},
+  {
+    indicador = () => true,
+    denegar = new Set<MotivoLogin>(),
+  }: { indicador?: () => boolean; denegar?: Set<MotivoLogin> } = {},
 ) {
   let ahora = Date.parse('2026-11-01T12:00:00.000Z');
   const pedidos: MotivoLogin[] = [];
@@ -181,7 +184,7 @@ describe('GestorDeSesion (ADR 026 y 027)', () => {
     expect(gestor.tiempoFuera()).toBe(4 * MINUTO);
   });
 
-  it('con la básica no hay sesión que vencer, y la URL de login nunca se visita', () => {
+  it('con la básica no hay sesión que vencer ni pantalla de login', () => {
     const { gestor } = armar({ estrategia: 'basica' });
     expect(
       gestor.sospechar({
@@ -192,7 +195,8 @@ describe('GestorDeSesion (ADR 026 y 027)', () => {
         formularioDeLogin: false,
       }),
     ).toBe(false);
-    expect(gestor.esUrlDeLogin('https://app.lexora.test/login?x=1')).toBe(true);
-    expect(gestor.esUrlDeLogin('https://app.lexora.test/panel')).toBe(false);
+    // Su URL es una página protegida más: se recorre.
+    expect(gestor.esUrlDeLogin('https://app.lexora.test/login')).toBe(false);
+    expect(armar({}).gestor.esUrlDeLogin('https://app.lexora.test/login?x=1')).toBe(true);
   });
 });

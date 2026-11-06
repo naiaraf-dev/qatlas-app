@@ -132,6 +132,8 @@ export class GestorDeSesion implements SesionDelRastreo {
   }
 
   esUrlDeLogin(url: string): boolean {
+    // En la básica no hay pantalla de login: la URL es solo una página protegida para comprobar.
+    if (this.opciones.datos.estrategia === 'basica') return false;
     try {
       return urlSinQuery(url) === urlSinQuery(this.opciones.datos.urlLogin);
     } catch {
@@ -253,9 +255,9 @@ export class GestorDeSesion implements SesionDelRastreo {
     const basica =
       this.opciones.datos.estrategia === 'basica'
         ? {
-            username: this.opciones.datos.usuario,
-            password: this.claveBasica,
-            origin: new URL(this.opciones.urlBase).origin,
+            usuario: this.opciones.datos.usuario,
+            clave: this.claveBasica,
+            origen: new URL(this.opciones.urlBase).origin,
           }
         : undefined;
     this.contexto = await contextoConSesion(

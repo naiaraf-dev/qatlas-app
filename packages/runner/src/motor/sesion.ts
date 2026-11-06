@@ -290,20 +290,52 @@ export interface OpcionesDeLogin {
   ahora?: () => number;
 }
 
-const contextoDeLogin = (
+export interface CredencialBasica {
+  usuario: string;
+  clave: string;
+  /** Solo a este origen: nunca a otro dominio del alcance ni a uno de afuera. */
+  origen: string;
+}
+
+/**
+ * La autenticación básica, puesta por QAtlas en cada pedido al origen base. Las `httpCredentials` de
+ * Playwright no llegan detrás de un proxy por contexto: Chromium nunca las manda (lo mostró una sonda).
+ * Se registra antes de las protecciones, así corre después de ellas: lo bloqueado nunca la lleva.
+ */
+async function ponerBasica(contexto: BrowserContext, basica: CredencialBasica): Promise<void> {
+  const valor = `Basic ${Buffer.from(`${basica.usuario}:${basica.clave}`, 'utf8').toString('base64')}`;
+  await contexto.route('**/*', async (ruta) => {
+    const solicitud = ruta.request();
+    let origen: string;
+    try {
+      origen = new URL(solicitud.url()).origin;
+    } catch {
+      origen = '';
+    }
+    if (origen !== basica.origen) {
+      await ruta.fallback();
+      return;
+    }
+    await ruta.fallback({ headers: { ...solicitud.headers(), authorization: valor } });
+  });
+}
+
+const contextoDeLogin = async (
   navegador: Browser,
   proxy: ProxyDeContexto | null,
-  httpCredentials?: { username: string; password: string; origin: string },
-): Promise<BrowserContext> =>
-  navegador.newContext({
+  basica?: CredencialBasica,
+): Promise<BrowserContext> => {
+  const contexto = await navegador.newContext({
     ...(proxy
       ? { proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave } }
       : {}),
-    ...(httpCredentials ? { httpCredentials } : {}),
     serviceWorkers: 'block',
     acceptDownloads: false,
     permissions: [],
   });
+  if (basica) await ponerBasica(contexto, basica);
+  return contexto;
+};
 
 /**
  * Entra con la estrategia de la credencial. Ningún contexto de login graba video, traza ni HAR (TS-06).
@@ -319,7 +351,7 @@ export async function iniciarSesion(
     if (datos.estrategia === 'asistido') return await loginAsistido(opciones);
     const basica =
       datos.estrategia === 'basica'
-        ? { username: datos.usuario, password: texto, origin: opciones.origenBase }
+        ? { usuario: datos.usuario, clave: texto, origen: opciones.origenBase }
         : undefined;
     const contexto = await contextoDeLogin(navegador, opciones.proxy, basica);
     try {
@@ -476,16 +508,16 @@ export async function contextoConSesion(
   opciones: {
     soloLectura: boolean;
     alRegistrar: AlRegistrar;
-    basica?: { username: string; password: string; origin: string } | undefined;
+    basica?: CredencialBasica | undefined;
   },
 ): Promise<{ contexto: BrowserContext; vigilancia: Vigilancia }> {
   const contexto = await navegador.newContext({
     ...(estado ? { storageState: estado } : {}),
-    ...(opciones.basica ? { httpCredentials: opciones.basica } : {}),
     serviceWorkers: 'block',
     acceptDownloads: false,
     permissions: [],
   });
+  if (opciones.basica) await ponerBasica(contexto, opciones.basica);
   const vigilancia = await protegerContexto(contexto, politica, opciones);
   return { contexto, vigilancia };
 }

@@ -67,6 +67,7 @@ describe('El código del motor no abre red ni procesos por su cuenta', () => {
       'entrada-runner.ts',
       'gestor-sesion.ts',
       'motor.ts',
+      'runner.ts',
       'sesion.ts',
       'urls.ts',
     ]);

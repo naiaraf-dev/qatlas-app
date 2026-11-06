@@ -335,5 +335,170 @@
       "url": "/login",
       "detalle": "No es de sesión: vence y su nombre no lo sugiere, aunque contenga «ses»"
     }
-  ]
+  ],
+  "autenticado": {
+    "descripcion": "La zona con login (semana 6b). Cada escenario es un escaneo autenticado que empieza en su inicio, con su estrategia y su rol. Las páginas son las que el escaneo tiene que visitar con la sesión activa; noVisita, las que nunca. Los hallazgos son todos los que puede dar el escenario: ninguno sale de la pantalla de login.",
+    "noVisitaNunca": [
+      "/app/login",
+      "/app/login-mfa",
+      "/app/salir",
+      "/app/sso",
+      "/app/callback",
+      "/app/entrar"
+    ],
+    "escenarios": {
+      "admin": {
+        "estrategia": "formulario",
+        "inicio": "/app/inicio",
+        "paginas": {
+          "/app/inicio": 200,
+          "/app/informes": 200,
+          "/app/compartir": 200,
+          "/app/admin": 200,
+          "/app/admin/usuarios": 200
+        },
+        "hallazgos": [
+          {
+            "id": "auth-parametro-token",
+            "tipo": "parametro-sensible",
+            "url": "/app/compartir",
+            "severidad": "media",
+            "clave": "token",
+            "detalle": "El link para compartir lleva el token en la URL"
+          }
+        ]
+      },
+      "lector": {
+        "estrategia": "formulario",
+        "inicio": "/app/inicio",
+        "paginas": {
+          "/app/inicio": 200,
+          "/app/informes": 200,
+          "/app/compartir": 200,
+          "/app/admin": 403
+        },
+        "noVisita": ["/app/admin/usuarios"],
+        "hallazgos": [
+          {
+            "id": "auth-parametro-token-lector",
+            "tipo": "parametro-sensible",
+            "url": "/app/compartir",
+            "severidad": "media",
+            "clave": "token",
+            "detalle": "El mismo link, con el otro rol"
+          },
+          {
+            "id": "auth-403-lector",
+            "tipo": "error-http",
+            "url": "/app/admin",
+            "origen": "/app/inicio",
+            "severidad": "media",
+            "clave": "403",
+            "detalle": "El lector no puede ver Administración: un 403 con la sesión activa se reporta como siempre, y no dispara un login"
+          }
+        ]
+      },
+      "sso": {
+        "estrategia": "sso",
+        "inicio": "/app/inicio",
+        "urlLogin": "/app/sso",
+        "dominiosAutenticacion": ["idp.sandbox.test"],
+        "rol": "admin",
+        "paginas": {
+          "/app/inicio": 200,
+          "/app/informes": 200,
+          "/app/compartir": 200,
+          "/app/admin": 200,
+          "/app/admin/usuarios": 200
+        },
+        "hallazgos": [
+          {
+            "id": "auth-parametro-token-sso",
+            "tipo": "parametro-sensible",
+            "url": "/app/compartir",
+            "severidad": "media",
+            "clave": "token",
+            "detalle": "El mismo link, entrando por el proveedor de identidad"
+          }
+        ]
+      },
+      "enlace": {
+        "estrategia": "token-url",
+        "inicio": "/app/inicio",
+        "urlLogin": "/app/entrar",
+        "dominiosAutenticacion": ["portal.sandbox.test"],
+        "rol": "lector",
+        "paginas": {
+          "/app/inicio": 200,
+          "/app/informes": 200,
+          "/app/compartir": 200,
+          "/app/admin": 403
+        },
+        "hallazgos": [
+          {
+            "id": "auth-parametro-token-enlace",
+            "tipo": "parametro-sensible",
+            "url": "/app/compartir",
+            "severidad": "media",
+            "clave": "token",
+            "detalle": "El mismo link, entrando con el enlace del portal"
+          },
+          {
+            "id": "auth-403-enlace",
+            "tipo": "error-http",
+            "url": "/app/admin",
+            "origen": "/app/inicio",
+            "severidad": "media",
+            "clave": "403",
+            "detalle": "El lector no puede ver Administración: un 403 con la sesión activa se reporta como siempre, y no dispara un login"
+          }
+        ]
+      },
+      "asistido": {
+        "estrategia": "asistido",
+        "inicio": "/app/inicio",
+        "urlLogin": "/app/login-mfa",
+        "rol": "admin",
+        "paginas": {
+          "/app/inicio": 200,
+          "/app/informes": 200,
+          "/app/compartir": 200,
+          "/app/admin": 200,
+          "/app/admin/usuarios": 200
+        },
+        "hallazgos": [
+          {
+            "id": "auth-parametro-token-asistido",
+            "tipo": "parametro-sensible",
+            "url": "/app/compartir",
+            "severidad": "media",
+            "clave": "token",
+            "detalle": "El mismo link, con el login asistido"
+          },
+          {
+            "id": "auth-clave-en-storage",
+            "tipo": "secreto-en-almacenamiento",
+            "url": "/app/login-mfa",
+            "severidad": "alta",
+            "clave": "localStorage:clave-recordada",
+            "detalle": "La pantalla de login guarda la contraseña en localStorage; se saca del estado de sesión y se reporta sin el valor"
+          }
+        ]
+      },
+      "basica": {
+        "estrategia": "basica",
+        "inicio": "/basica/",
+        "urlLogin": "/basica/",
+        "paginas": {
+          "/basica": 200,
+          "/basica/informe": 200
+        },
+        "hallazgos": []
+      }
+    },
+    "vencimiento": {
+      "descripcion": "Con maximoPaginas, la sesión vence sola a mitad del escaneo, sin depender del tiempo: el escaneo vuelve a entrar y recorre todo igual.",
+      "maximoPaginas": 4
+    }
+  }
 }
