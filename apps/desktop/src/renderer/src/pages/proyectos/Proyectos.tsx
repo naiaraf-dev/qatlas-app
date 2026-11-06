@@ -207,6 +207,7 @@ function Detalle({
           <Dato etiqueta="Máximo de páginas">{proyecto.maxPaginas}</Dato>
           <Dato etiqueta="Profundidad">{proyecto.maxProfundidad}</Dato>
           <Dato etiqueta="Timeout por página">{proyecto.timeoutPaginaSegundos} s</Dato>
+          <Dato etiqueta="Tiempo máximo">{proyecto.maxMinutos} min</Dato>
           <Dato etiqueta="Modo solo lectura">{siNo(proyecto.soloLectura)}</Dato>
           <Dato etiqueta="Modo datos sensibles">{siNo(proyecto.modoDatosSensibles)}</Dato>
         </dl>
@@ -343,6 +344,7 @@ function aEntrada(detalle: ProyectoDetalle): ProyectoEntrada {
     maxPaginas: detalle.maxPaginas,
     maxProfundidad: detalle.maxProfundidad,
     timeoutPaginaSegundos: detalle.timeoutPaginaSegundos,
+    maxMinutos: detalle.maxMinutos,
     soloLectura: detalle.soloLectura,
     exclusiones: detalle.exclusiones,
     modoDatosSensibles: detalle.modoDatosSensibles,

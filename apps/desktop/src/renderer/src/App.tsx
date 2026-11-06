@@ -137,7 +137,12 @@ function Principal({
       )}
       {page === 'boveda' && <Boveda />}
       {page !== 'inicio' && page !== 'proyectos' && page !== 'privacidad' && page !== 'boveda' && (
-        <Proximamente page={page} />
+        <Proximamente
+          page={page}
+          onIrAProyectos={() => {
+            navegar('proyectos');
+          }}
+        />
       )}
     </Shell>
   );

@@ -4,6 +4,7 @@ export const LIMITES_PROYECTO = {
   maxPaginas: { min: 1, max: 10000 },
   maxProfundidad: { min: 1, max: 50 },
   timeoutPaginaSegundos: { min: 1, max: 300 },
+  maxMinutos: { min: 1, max: 240 },
 } as const;
 
 /** SEG-05: el crawler nunca visita ni clickea lo que coincida. */
@@ -30,6 +31,7 @@ export const PROYECTO_POR_DEFECTO = {
   maxPaginas: 200,
   maxProfundidad: 5,
   timeoutPaginaSegundos: 30,
+  maxMinutos: 30,
   soloLectura: true,
   modoDatosSensibles: false,
   sistemaInterno: false,
@@ -40,8 +42,13 @@ export const PROYECTO_POR_DEFECTO = {
 export const LIMITE_PRUEBAS_LOGIN = { intentos: 3, ventanaMinutos: 15 } as const;
 
 /** Lo mínimo que tarda un escaneo si usa todas sus páginas. Sirve para avisar antes de lanzarlo. */
-export function minutosMinimosDeEjecucion(limites: { maxPaginas: number; maxRps: number }): number {
-  return limites.maxPaginas / limites.maxRps / 60;
+export function minutosMinimosDeEjecucion(limites: {
+  maxPaginas: number;
+  maxRps: number;
+  maxMinutos: number;
+}): number {
+  // RN-ESC-05: el tiempo máximo corta antes, si llega primero.
+  return Math.min(limites.maxPaginas / limites.maxRps / 60, limites.maxMinutos);
 }
 
 /** Clave de unicidad del nombre: sin distinguir mayúsculas, también con acentos y eñes. */

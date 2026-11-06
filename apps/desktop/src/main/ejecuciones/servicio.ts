@@ -1,7 +1,12 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { sinQuery } from '@qatlas/runner';
 import {
   actualizarEjecucion,
   agregarConexiones,
+  agregarHallazgo,
+  agregarPaginaVisitada,
+  leerHallazgosDeEjecucion,
+  leerPaginasVisitadas,
   insertarEjecucion,
   leerConexionesDeEjecucion,
   leerEjecucion,
@@ -17,8 +22,10 @@ import {
   LIMITE_PRUEBAS_LOGIN,
   type ConnectionEntry,
   type EjecucionResumen,
+  type HallazgoVista,
   type IpcResponse,
   type MotivoFinEjecucion,
+  type ProgresoEjecucion,
   type ResumenEjecucion,
 } from '@qatlas/shared';
 import type { Configuracion, MensajeAlRunner, MensajeDelRunner } from '@qatlas/runner';
@@ -63,7 +70,19 @@ const RESUMEN_VACIO: ResumenEjecucion = {
   conexionesPermitidas: 0,
   conexionesBloqueadas: 0,
   motivo: null,
+  hallazgos: 0,
+  detenido: null,
+  noRecorridosSoloLectura: 0,
+  noRecorridosExclusiones: 0,
+  urlsDescartadas: 0,
+  websocketDescartados: 0,
 };
+
+/** Lo que ata un dato cifrado a su fila (ADR 021). */
+export const contextoDetalle = (proyectoId: string, ocurrenciaId: string): string =>
+  `hallazgo/${proyectoId}/${ocurrenciaId}/detalle`;
+export const contextoUrlPagina = (proyectoId: string, ejecucionId: string): string =>
+  `pagina/${proyectoId}/${ejecucionId}/url`;
 
 interface EnCurso {
   id: string;
@@ -80,6 +99,7 @@ interface EnCurso {
   }[];
   guardadas: number;
   terminada: boolean;
+  paginaActual: string | null;
   /** Lo que espera `probarLogin`. */
   alTerminar?: (funciono: boolean | null) => void;
 }
@@ -93,7 +113,8 @@ function aResumen(fila: FilaEjecucion): EjecucionResumen {
     estado: fila.estado,
     inicio: fila.inicio,
     fin: fila.fin,
-    resumen: fila.resumen as ResumenEjecucion,
+    // Las de semanas anteriores no tienen los campos nuevos.
+    resumen: { ...RESUMEN_VACIO, ...(fila.resumen as Partial<ResumenEjecucion>) },
   };
 }
 
@@ -110,6 +131,7 @@ export class ServicioEjecuciones {
     private readonly proyectos: ServicioProyectos,
     private readonly lanzador: LanzadorDeProcesos,
     private readonly ahora: () => number = Date.now,
+    private readonly alProgreso: (progreso: ProgresoEjecucion) => void = () => undefined,
   ) {}
 
   /** Lo que quedó sin terminar no se relanza solo: no sale tráfico sin una acción del usuario. */
@@ -161,8 +183,38 @@ export class ServicioEjecuciones {
     return this.boveda.conAcceso((base) => {
       const fila = leerEjecucion(base, ejecucionId);
       if (!fila) return null;
+      const hallazgos = leerHallazgosDeEjecucion(base, ejecucionId);
+      const detalles = this.proyectos.descifrarDatos(
+        fila.proyectoId,
+        hallazgos.flatMap((h) =>
+          h.detalleCifrado
+            ? [
+                {
+                  contexto: contextoDetalle(fila.proyectoId, h.ocurrenciaId),
+                  sellado: h.detalleCifrado,
+                },
+              ]
+            : [],
+        ),
+      );
+      let siguienteDetalle = 0;
       return {
         ejecucion: aResumen(fila),
+        hallazgos: hallazgos.map((h) => ({
+          id: h.id,
+          tipo: h.tipo as HallazgoVista['tipo'],
+          severidad: h.severidad as HallazgoVista['severidad'],
+          titulo: h.titulo,
+          url: h.url,
+          urlOrigen: h.urlOrigen,
+          detalle: h.detalleCifrado ? (detalles[siguienteDetalle++] ?? '').slice(0, 2000) : '',
+        })),
+        paginas: leerPaginasVisitadas(base, ejecucionId).map((p) => ({
+          url: p.url,
+          status: p.statusHttp,
+          tiempoCargaMs: p.tiempoCargaMs,
+          profundidad: p.profundidad,
+        })),
         conexiones: leerConexionesDeEjecucion(base, ejecucionId).map(
           ({ fecha, proceso, destino, permitida, regla }) => ({
             fecha,
@@ -316,6 +368,7 @@ export class ServicioEjecuciones {
       pendientes: [],
       guardadas: 0,
       terminada: false,
+      paginaActual: null,
     };
     this.actual = enCurso;
     this.boveda.conAcceso((base) => {
@@ -338,6 +391,8 @@ export class ServicioEjecuciones {
         tipo: 'escaneo',
         configuracion,
         maxPaginas: datos.maxPaginas,
+        maxProfundidad: datos.maxProfundidad,
+        maxMinutos: datos.maxMinutos,
         maxRps: datos.maxRps,
         soloLectura: datos.soloLectura,
         exclusiones: datos.exclusiones,
@@ -409,11 +464,25 @@ export class ServicioEjecuciones {
       case 'conexion':
         this.anotar(enCurso, mensaje.proceso, mensaje);
         return;
-      case 'escaneo-terminado':
-        enCurso.resumen.paginasVisitadas = mensaje.paginasVisitadas;
-        enCurso.resumen.linksExcluidos = mensaje.linksExcluidos;
+      case 'pagina':
+        this.guardarPagina(enCurso, mensaje);
+        return;
+      case 'hallazgo':
+        this.guardarHallazgo(enCurso, mensaje.hallazgo);
+        return;
+      case 'escaneo-terminado': {
+        Object.assign(enCurso.resumen, {
+          paginasVisitadas: mensaje.paginasVisitadas,
+          linksExcluidos: mensaje.linksExcluidos,
+          detenido: mensaje.detenido,
+          noRecorridosSoloLectura: mensaje.noRecorridosSoloLectura,
+          noRecorridosExclusiones: mensaje.noRecorridosExclusiones,
+          urlsDescartadas: mensaje.urlsDescartadas,
+          websocketDescartados: mensaje.websocketDescartados,
+        });
         this.finalizar(enCurso, 'finalizada', null);
         return;
+      }
       case 'login-terminado':
         enCurso.alTerminar?.(mensaje.funciono);
         this.finalizar(enCurso, 'finalizada', null);
@@ -426,6 +495,86 @@ export class ServicioEjecuciones {
       case 'rechazado':
         this.finalizar(enCurso, 'fallida', 'runner-caido');
     }
+  }
+
+  private guardarPagina(
+    enCurso: EnCurso,
+    pagina: Extract<MensajeDelRunner, { tipo: 'pagina' }>,
+  ): void {
+    enCurso.paginaActual = sinQuery(pagina.url);
+    enCurso.resumen.paginasVisitadas += 1;
+    try {
+      const completa =
+        enCurso.paginaActual === pagina.url
+          ? null
+          : this.proyectos.cifrarDato(
+              enCurso.proyectoId,
+              contextoUrlPagina(enCurso.proyectoId, enCurso.id),
+              pagina.url,
+            );
+      this.boveda.conAcceso((base) => {
+        agregarPaginaVisitada(base, {
+          proyectoId: enCurso.proyectoId,
+          ejecucionId: enCurso.id,
+          url: enCurso.paginaActual as string,
+          urlCompletaCifrada: completa,
+          statusHttp: pagina.status,
+          tiempoCargaMs: pagina.tiempoCargaMs === null ? null : Math.round(pagina.tiempoCargaMs),
+          profundidad: pagina.profundidad,
+        });
+      });
+    } catch {
+      // Bóveda cerrada: la ejecución se está cancelando.
+    }
+    this.informar(enCurso);
+  }
+
+  private guardarHallazgo(
+    enCurso: EnCurso,
+    hallazgo: Extract<MensajeDelRunner, { tipo: 'hallazgo' }>['hallazgo'],
+  ): void {
+    enCurso.resumen.hallazgos += 1;
+    const ocurrenciaId = randomUUID();
+    try {
+      const detalleCifrado = hallazgo.detalle
+        ? this.proyectos.cifrarDato(
+            enCurso.proyectoId,
+            contextoDetalle(enCurso.proyectoId, ocurrenciaId),
+            hallazgo.detalle,
+          )
+        : null;
+      this.boveda.conAcceso((base) => {
+        agregarHallazgo(
+          base,
+          {
+            proyectoId: enCurso.proyectoId,
+            ejecucionId: enCurso.id,
+            tipo: hallazgo.tipo,
+            severidad: hallazgo.severidad,
+            titulo: hallazgo.titulo,
+            descripcion: hallazgo.titulo,
+            url: hallazgo.url,
+            clave: hallazgo.clave,
+          },
+          { id: ocurrenciaId, urlOrigen: hallazgo.urlOrigen, detalleCifrado },
+        );
+      });
+    } catch {
+      // Bóveda cerrada: la ejecución se está cancelando.
+    }
+    this.informar(enCurso);
+  }
+
+  /** El progreso en vivo, para la interfaz (EJE). */
+  private informar(enCurso: EnCurso, estado: ProgresoEjecucion['estado'] = 'en-curso'): void {
+    this.alProgreso({
+      ejecucionId: enCurso.id,
+      estado,
+      paginaActual: enCurso.paginaActual,
+      paginasVisitadas: enCurso.resumen.paginasVisitadas,
+      hallazgos: enCurso.resumen.hallazgos,
+      conexionesBloqueadas: enCurso.resumen.conexionesBloqueadas,
+    });
   }
 
   private anotar(
@@ -504,6 +653,7 @@ export class ServicioEjecuciones {
     } catch {
       // Con la bóveda ya cerrada: al desbloquear queda marcada como interrumpida.
     }
+    this.informar(enCurso, estado);
     this.liberarProcesos(enCurso);
     enCurso.alTerminar?.(null);
     if (this.actual === enCurso) this.actual = null;

@@ -34,6 +34,8 @@ export interface SandboxActivo {
     intentosLogin: string[];
     /** Cada página pedida, en orden. Sirve de señal: el navegador llegó hasta acá. */
     rutas: string[];
+    /** Lo que una página mandó por WebSocket. En solo lectura, nada. */
+    wsMensajes: string[];
   };
   cerrar(): Promise<void>;
 }

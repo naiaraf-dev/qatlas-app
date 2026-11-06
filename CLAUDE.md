@@ -26,7 +26,12 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Fase 1, semana 5 terminada: `packages/runner` (proxy de salida en su `utilityProcess`, runner por
   ejecución, agente de Node), ejecuciones con cola, `credenciales:probarLogin`, monitor de conexiones,
   TS-03, TS-04 y TS-05. Ver las ADR 016 a 020.
-- Próximo: semana 6, crawler y chequeos; login sin grabación (TS-06). TS-05 sobre botones se completa ahí.
+- Fase 1, semana 6a terminada: crawler y chequeos del escaneo (ESC), `pagina_visitada`, `hallazgo` y
+  `hallazgo_ocurrencia` con el detalle cifrado, evento `ejecuciones:progreso`, TS-05 completo y el oráculo
+  del sandbox. Ver las ADR 021 a 024.
+- Próximo: semana 6b, login real y escaneo autenticado; TS-06.
+- El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
+  un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
 - Cada tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO` (un test lo verifica), y un canal IPC
   nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
@@ -38,6 +43,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a
   nivel del sistema operativo (ADR 017).
+- Pendiente (sin semana): confiar en el certificado de un sistema interno por su huella exacta, como opción por
+  proyecto, explícita y auditada. Nunca «aceptar cualquier certificado».
 - Pendiente: correr el E2E del CI de Linux dentro de un network namespace sin salida, para probar a nivel
   del sistema operativo que la app no abre conexiones no autorizadas (ADR 016).
 
@@ -47,6 +54,7 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - IPC solo por el contrato de `packages/shared/src/ipc-contract.ts` (Zod).
 - Vitest para unitarios y seguridad; Playwright para E2E de la app.
 - Motor de pruebas: `playwright-core` en versión exacta, con Chromium fijado por su hash (ADR 020).
+- Accesibilidad: `axe-core` en versión exacta, inyectado en un mundo aislado (ADR 021).
 - Criptografía: `crypto` de Node (AES-256-GCM, HKDF) + `argon2` (versión exacta, ADR 005).
 - SQLite + SQLCipher (better-sqlite3-multiple-ciphers, versión exacta, ADR 006) + Drizzle, sin
   drizzle-kit. Contraseñas: `@zxcvbn-ts` (ADR 008). Dominios: `tldts` (ADR 011).

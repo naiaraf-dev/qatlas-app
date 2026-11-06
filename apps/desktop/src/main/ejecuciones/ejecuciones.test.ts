@@ -9,6 +9,7 @@ import {
   type ProyectoEntrada,
 } from '@qatlas/shared';
 import type { MensajeAlRunner, MensajeDelRunner } from '@qatlas/runner';
+import type { ProgresoEjecucion } from '@qatlas/shared';
 import { leerAuditoria } from '@qatlas/db';
 import { conectarActividad, DetectorInactividad } from '../boveda/inactividad';
 import { ServicioBoveda } from '../boveda/servicio';
@@ -41,6 +42,7 @@ let caerProxy: (() => void) | undefined;
 let alRegistrarProxy:
   ((r: { destino: string; permitida: boolean; regla: string }) => void) | undefined;
 let proxyYaCaido: boolean;
+let progresos: ProgresoEjecucion[];
 let runnerActual: { emitir: (m: MensajeDelRunner) => void; salir: () => void } | undefined;
 
 const lanzador: LanzadorDeProcesos = {
@@ -85,6 +87,17 @@ const lanzador: LanzadorDeProcesos = {
     registro.push('perfil-borrado');
   },
 };
+
+const terminado = (paginasVisitadas: number, linksExcluidos: number): MensajeDelRunner => ({
+  tipo: 'escaneo-terminado',
+  paginasVisitadas,
+  linksExcluidos,
+  detenido: null,
+  noRecorridosSoloLectura: 0,
+  noRecorridosExclusiones: 0,
+  urlsDescartadas: 0,
+  websocketDescartados: 0,
+});
 
 const pausa = () =>
   new Promise((listo) => {
@@ -142,7 +155,10 @@ beforeEach(async () => {
     },
   });
   proyectos = new ServicioProyectos(boveda);
-  ejecuciones = new ServicioEjecuciones(boveda, proyectos, lanzador);
+  progresos = [];
+  ejecuciones = new ServicioEjecuciones(boveda, proyectos, lanzador, Date.now, (p) =>
+    progresos.push(p),
+  );
   await boveda.crear(CONTRASENA, false);
 });
 
@@ -265,7 +281,7 @@ describe('RN-EJE-01 y la cola', () => {
     expect(estado(b, segunda)?.estado).toBe('encolada');
     expect(registro.filter((r) => r === 'runner')).toHaveLength(1);
 
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 2, linksExcluidos: 1 });
+    runnerActual?.emitir(terminado(2, 1));
     await pausa();
     expect(estado(a, primera)).toMatchObject({
       estado: 'finalizada',
@@ -278,7 +294,7 @@ describe('RN-EJE-01 y la cola', () => {
     const proyecto = crearProyecto();
     lanzar(proyecto);
     await pausa();
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 1, linksExcluidos: 0 });
+    runnerActual?.emitir(terminado(1, 0));
     expect(ejecuciones.lanzarEscaneo(proyecto).resultado).toBe('encolada');
   });
 
@@ -389,6 +405,192 @@ describe('Bloqueo', () => {
   });
 });
 
+describe('Resultados del escaneo', () => {
+  const DETALLE = 'CANARIO-detalle-de-consola-que-no-va-en-claro';
+  const hallazgo = (
+    extra: Partial<Extract<MensajeDelRunner, { tipo: 'hallazgo' }>['hallazgo']> = {},
+  ) =>
+    ({
+      tipo: 'hallazgo',
+      hallazgo: {
+        tipo: 'console-error',
+        severidad: 'baja',
+        url: 'http://localhost:5173/consola',
+        urlOrigen: null,
+        clave: 'Error #',
+        titulo: 'console.error en la página',
+        detalle: DETALLE,
+        ...extra,
+      },
+    }) satisfies MensajeDelRunner;
+  const pagina = (url: string): MensajeDelRunner => ({
+    tipo: 'pagina',
+    url,
+    status: 200,
+    tiempoCargaMs: 120,
+    profundidad: 1,
+  });
+
+  const filasEnClaro = () =>
+    boveda.conAcceso((base) =>
+      JSON.stringify([
+        base.prepare('SELECT * FROM hallazgo').all(),
+        base.prepare('SELECT id, url, url_origen FROM hallazgo_ocurrencia').all(),
+        base.prepare('SELECT id, url FROM pagina_visitada').all(),
+      ]),
+    );
+
+  it('cada página queda registrada y el progreso se informa en vivo', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(pagina('http://localhost:5173/'));
+    runnerActual?.emitir(pagina('http://localhost:5173/panel'));
+    expect(progresos.at(-1)).toEqual({
+      ejecucionId: id,
+      estado: 'en-curso',
+      paginaActual: 'http://localhost:5173/panel',
+      paginasVisitadas: 2,
+      hallazgos: 0,
+      conexionesBloqueadas: 0,
+    });
+    runnerActual?.emitir(terminado(2, 0));
+    expect(progresos.at(-1)?.estado).toBe('finalizada');
+    expect(ejecuciones.detalle(id)?.paginas).toEqual([
+      { url: 'http://localhost:5173/', status: 200, tiempoCargaMs: 120, profundidad: 1 },
+      { url: 'http://localhost:5173/panel', status: 200, tiempoCargaMs: 120, profundidad: 1 },
+    ]);
+  });
+
+  it('una página con query: en claro va sin ella; la completa, cifrada', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(pagina('http://localhost:5173/buscar?token=CANARIO-token-en-query'));
+    expect(ejecuciones.detalle(id)?.paginas[0]?.url).toBe('http://localhost:5173/buscar');
+    expect(filasEnClaro()).not.toContain('CANARIO-token-en-query');
+    boveda.conAcceso((base) => {
+      const fila = base.prepare('SELECT url_completa_cifrada AS c FROM pagina_visitada').get() as {
+        c: Buffer;
+      };
+      expect(fila.c.includes(Buffer.from('CANARIO'))).toBe(false);
+    });
+  });
+
+  it('el detalle de un hallazgo se guarda cifrado y se muestra descifrado', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(hallazgo());
+    expect(progresos.at(-1)?.hallazgos).toBe(1);
+    expect(filasEnClaro()).not.toContain(DETALLE);
+    boveda.conAcceso((base) => {
+      const { c } = base.prepare('SELECT detalle_cifrado AS c FROM hallazgo_ocurrencia').get() as {
+        c: Buffer;
+      };
+      expect(c.includes(Buffer.from('CANARIO'))).toBe(false);
+    });
+    expect(ejecuciones.detalle(id)?.hallazgos).toEqual([
+      {
+        id: expect.any(String) as string,
+        tipo: 'console-error',
+        severidad: 'baja',
+        titulo: 'console.error en la página',
+        url: 'http://localhost:5173/consola',
+        urlOrigen: null,
+        detalle: DETALLE,
+      },
+    ]);
+  });
+
+  it('la estructura de la semana 8 queda lista: clave guardada, huella vacía, estado nuevo', async () => {
+    const proyecto = crearProyecto();
+    lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(hallazgo({ tipo: 'accesibilidad', clave: 'image-alt', detalle: '' }));
+    boveda.conAcceso((base) => {
+      expect(
+        base
+          .prepare('SELECT clave, huella, estado, primera_vez_en IS NOT NULL AS f FROM hallazgo')
+          .get(),
+      ).toEqual({ clave: 'image-alt', huella: null, estado: 'nuevo', f: 1 });
+      expect(base.prepare('SELECT detalle_cifrado FROM hallazgo_ocurrencia').get()).toEqual({
+        detalle_cifrado: null,
+      });
+    });
+  });
+
+  it('el resumen guarda lo que el escaneo no cubrió', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(hallazgo());
+    runnerActual?.emitir({
+      ...terminado(3, 2),
+      detenido: 'max-tiempo',
+      noRecorridosSoloLectura: 4,
+      noRecorridosExclusiones: 5,
+      urlsDescartadas: 6,
+      websocketDescartados: 7,
+    } as MensajeDelRunner);
+    expect(estado(proyecto, id)?.resumen).toMatchObject({
+      paginasVisitadas: 3,
+      linksExcluidos: 2,
+      hallazgos: 1,
+      detenido: 'max-tiempo',
+      noRecorridosSoloLectura: 4,
+      noRecorridosExclusiones: 5,
+      urlsDescartadas: 6,
+      websocketDescartados: 7,
+    });
+  });
+
+  it('una ejecución de antes de esta semana se lee con los campos nuevos en cero', () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    boveda.conAcceso((base) => {
+      base.prepare('UPDATE ejecucion SET resumen = ? WHERE id = ?').run(
+        JSON.stringify({
+          paginasVisitadas: 1,
+          linksExcluidos: 0,
+          conexionesPermitidas: 0,
+          conexionesBloqueadas: 0,
+          motivo: null,
+        }),
+        id,
+      );
+    });
+    expect(estado(proyecto, id)?.resumen).toMatchObject({ hallazgos: 0, detenido: null });
+  });
+
+  it('el escaneo manda al runner la profundidad y el tiempo máximo del proyecto', async () => {
+    lanzar(crearProyecto());
+    await pausa();
+    expect(mensajes.find((m) => m.tipo === 'escaneo')).toMatchObject({
+      maxProfundidad: 5,
+      maxMinutos: 30,
+    });
+  });
+
+  it('eliminar el proyecto purga páginas, hallazgos y ocurrencias, y el detalle queda ilegible', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(pagina('http://localhost:5173/'));
+    runnerActual?.emitir(hallazgo());
+    runnerActual?.emitir(terminado(1, 0));
+    proyectos.eliminar(proyecto, 'Lexora');
+    expect(ejecuciones.detalle(id)).toBeNull();
+    boveda.conAcceso((base) => {
+      for (const tabla of ['hallazgo', 'hallazgo_ocurrencia', 'pagina_visitada']) {
+        expect((base.prepare(`SELECT count(*) AS n FROM ${tabla}`).get() as { n: number }).n).toBe(
+          0,
+        );
+      }
+    });
+  });
+});
+
 describe('Monitor de conexiones', () => {
   it('cada conexión queda registrada con su regla, y el resumen las cuenta', async () => {
     const proyecto = crearProyecto();
@@ -407,7 +609,7 @@ describe('Monitor de conexiones', () => {
       permitida: false,
       regla: 'fuera-de-dominios',
     });
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 1, linksExcluidos: 0 });
+    runnerActual?.emitir(terminado(1, 0));
 
     const detalle = ejecuciones.detalle(id);
     expect(detalle?.ejecucion.resumen).toMatchObject({
@@ -426,7 +628,7 @@ describe('Monitor de conexiones', () => {
     const proyecto = crearProyecto();
     const id = lanzar(proyecto);
     await pausa();
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 1, linksExcluidos: 0 });
+    runnerActual?.emitir(terminado(1, 0));
     alRegistrarProxy?.({
       destino: 'tarde.example:80',
       permitida: false,
@@ -454,7 +656,7 @@ describe('Monitor de conexiones', () => {
     for (let i = 0; i < 2100; i++) {
       alRegistrarProxy?.({ destino: 'evil.example:80', permitida: false, regla: 'x' });
     }
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 1, linksExcluidos: 0 });
+    runnerActual?.emitir(terminado(1, 0));
     expect(estado(proyecto, id)?.resumen.conexionesBloqueadas).toBe(2100);
     expect(ejecuciones.conexionesRecientes(500)).toHaveLength(500);
     boveda.conAcceso((base) => {
@@ -468,7 +670,7 @@ describe('Monitor de conexiones', () => {
     const id = lanzar(proyecto);
     await pausa();
     alRegistrarProxy?.({ destino: 'evil.example:80', permitida: false, regla: 'x' });
-    runnerActual?.emitir({ tipo: 'escaneo-terminado', paginasVisitadas: 1, linksExcluidos: 0 });
+    runnerActual?.emitir(terminado(1, 0));
     proyectos.eliminar(proyecto, 'Lexora');
     expect(ejecuciones.detalle(id)).toBeNull();
     expect(ejecuciones.conexionesRecientes(10)).toEqual([]);

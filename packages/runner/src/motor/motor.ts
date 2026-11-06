@@ -61,20 +61,28 @@ function hostYPuerto(texto: string): string {
   }
 }
 
+/** Lo que la segunda capa cortó en la página actual, para no confundirlo con un error del sitio. */
+export interface Vigilancia {
+  bloqueadas: () => string[];
+  reiniciar: () => void;
+  /** Mensajes de WebSocket que la página quiso mandar y no salieron, por solo lectura. */
+  websocketDescartados: () => number;
+}
+
 /**
- * Off-the-record: cookies, almacenamiento y caché quedan en memoria (ADR 018). Segunda capa: lo que
- * el proxy bloquearía se corta antes, y los service workers no se registran.
+ * Las protecciones de un contexto, aparte de cómo se crea: los tests que necesitan aceptar un
+ * certificado de prueba crean el suyo y le aplican exactamente esto.
+ *
+ * Segunda capa: lo que el proxy bloquearía se corta antes, también por puerto. En solo lectura se
+ * cortan las escrituras HTTP y los mensajes que la página manda por WebSocket.
  */
-export async function abrirContexto(
-  navegador: Browser,
+export async function protegerContexto(
+  contexto: BrowserContext,
   politica: PoliticaDeRed,
   { soloLectura, alRegistrar }: { soloLectura: boolean; alRegistrar: AlRegistrar },
-): Promise<BrowserContext> {
-  const contexto = await navegador.newContext({
-    serviceWorkers: 'block',
-    acceptDownloads: false,
-    permissions: [],
-  });
+): Promise<Vigilancia> {
+  let bloqueadas: string[] = [];
+  let descartados = 0;
   await contexto.route('**/*', async (ruta) => {
     const solicitud = ruta.request();
     const url = solicitud.url();
@@ -84,6 +92,7 @@ export async function abrirContexto(
     }
     const decision = decidirUrlSinResolver(url, politica);
     if (!decision.permitida) {
+      bloqueadas.push(url);
       alRegistrar({ destino: hostYPuerto(url), permitida: false, regla: decision.regla });
       await ruta.abort('blockedbyclient');
       return;
@@ -97,91 +106,51 @@ export async function abrirContexto(
   });
   await contexto.routeWebSocket(/.*/, (socket) => {
     const decision = decidirUrlSinResolver(socket.url(), politica);
-    if (decision.permitida) {
-      socket.connectToServer();
+    if (!decision.permitida) {
+      bloqueadas.push(socket.url());
+      alRegistrar({ destino: hostYPuerto(socket.url()), permitida: false, regla: decision.regla });
+      void socket.close();
       return;
     }
-    alRegistrar({ destino: hostYPuerto(socket.url()), permitida: false, regla: decision.regla });
-    void socket.close();
+    const servidor = socket.connectToServer();
+    socket.onMessage((mensaje) => {
+      if (soloLectura) {
+        descartados += 1;
+        return;
+      }
+      servidor.send(mensaje);
+    });
   });
-  return contexto;
+  return {
+    bloqueadas: () => bloqueadas,
+    reiniciar: () => {
+      bloqueadas = [];
+    },
+    websocketDescartados: () => descartados,
+  };
 }
 
-export function coincideExclusion(
-  { href, texto }: { href: string; texto: string },
-  exclusiones: readonly string[],
-): boolean {
-  const lugar = `${href} ${texto}`.toLowerCase();
-  return exclusiones.some((exclusion) => lugar.includes(exclusion.toLowerCase()));
+/**
+ * Off-the-record: cookies, almacenamiento y caché quedan en memoria (ADR 018). Los service workers no
+ * se registran y las descargas se bloquean.
+ */
+export async function abrirContexto(
+  navegador: Browser,
+  politica: PoliticaDeRed,
+  opciones: { soloLectura: boolean; alRegistrar: AlRegistrar },
+): Promise<{ contexto: BrowserContext; vigilancia: Vigilancia }> {
+  const contexto = await navegador.newContext({
+    serviceWorkers: 'block',
+    acceptDownloads: false,
+    permissions: [],
+  });
+  return { contexto, vigilancia: await protegerContexto(contexto, politica, opciones) };
 }
 
 const esperar = (ms: number) =>
   new Promise((listo) => {
     setTimeout(listo, ms);
   });
-
-export interface OpcionesEscaneo {
-  urlBase: string;
-  politica: PoliticaDeRed;
-  maxPaginas: number;
-  maxRps: number;
-  exclusiones: readonly string[];
-  timeoutPaginaMs: number;
-}
-
-export interface ResultadoEscaneo {
-  paginasVisitadas: number;
-  linksExcluidos: number;
-}
-
-async function visitar(pagina: Page, url: string, timeout: number): Promise<boolean> {
-  try {
-    await pagina.goto(url, { timeout, waitUntil: 'load' });
-    return true;
-  } catch {
-    // Un destino bloqueado o caído no corta la ejecución: el registro ya dice qué pasó.
-    return false;
-  }
-}
-
-/**
- * Lo mínimo de esta semana: abre la URL base y sigue los links de esa página, sin clics ni formularios.
- * El crawler de verdad llega en la semana 6.
- */
-export async function escanear(
-  contexto: BrowserContext,
-  { urlBase, politica, maxPaginas, maxRps, exclusiones, timeoutPaginaMs }: OpcionesEscaneo,
-): Promise<ResultadoEscaneo> {
-  const pagina = await contexto.newPage();
-  if (!(await visitar(pagina, urlBase, timeoutPaginaMs))) {
-    return { paginasVisitadas: 0, linksExcluidos: 0 };
-  }
-  const links = await pagina
-    .locator('a[href]')
-    .evaluateAll((anclas) =>
-      anclas.map((a) => ({ href: (a as HTMLAnchorElement).href, texto: a.textContent })),
-    );
-
-  let paginasVisitadas = 1;
-  let linksExcluidos = 0;
-  const vistas = new Set([urlBase]);
-  const pausa = 1000 / maxRps;
-  for (const link of links) {
-    if (paginasVisitadas >= maxPaginas) break;
-    if (vistas.has(link.href)) continue;
-    vistas.add(link.href);
-    if (coincideExclusion(link, exclusiones)) {
-      linksExcluidos += 1;
-      continue;
-    }
-    if (!decidirUrlSinResolver(link.href, politica).permitida) continue;
-    if (await visitar(pagina, link.href, timeoutPaginaMs)) paginasVisitadas += 1;
-    // Después de visitar: lo que la página dispara al cargar también llega al registro.
-    await esperar(pausa);
-  }
-  await pagina.close();
-  return { paginasVisitadas, linksExcluidos };
-}
 
 function aPatron(glob: string): RegExp {
   const escapado = glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*+/g, '[^?#]*');

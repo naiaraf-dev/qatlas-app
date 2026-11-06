@@ -753,8 +753,9 @@ campo. Los campos JSON se guardan como texto.
 | autorizacion          | proyecto_id, texto_aceptado, version_texto, fecha, url_base_aceptada, dominios_aceptados (JSON), sistema_interno_aceptado, invalidada_en, verificacion_dominio | 1        |
 | credencial            | proyecto_id, nombre, usuario, secreto (C), secreto_actualizado_en, url_login, pasos_login (JSON: acciones tipadas, sin valores) | 1        |
 | ejecucion             | proyecto_id, tipo, objetivo_id, navegador, estado, inicio, fin, resumen (JSON), programacion_id                                                                                                                                                    | 1        |
-| pagina_visitada       | ejecucion_id, url, status_http, tiempo_carga_ms, profundidad                                                                                                                                                                                       | 1        |
-| hallazgo              | ejecucion_id, proyecto_id, tipo, severidad, titulo, descripcion, url, huella, estado, primera_vez_en, ultima_vez_en, caso_id, paso_indice                                                                                                          | 1        |
+| pagina_visitada       | proyecto_id, ejecucion_id, url (sin query), url_completa_cifrada (C, con la clave del proyecto), status_http, tiempo_carga_ms, profundidad                                                                                                                                                                                       | 1        |
+| hallazgo              | ejecucion_id, proyecto_id, tipo, severidad, titulo, descripcion, url, huella, estado, primera_vez_en, ultima_vez_en, caso_id, paso_indice, clave (ADR 023)                                                                                                          | 1        |
+| hallazgo_ocurrencia   | proyecto_id, hallazgo_id, ejecucion_id, url, url_origen, detalle_cifrado (C, con la clave del proyecto). Cada aparición de un hallazgo en una ejecución (ADR 023) | 1        |
 | evidencia             | hallazgo_id, ejecucion_id o resultado_paso_id, tipo (screenshot, captura_anotada, video, gif, traza, consola, har, log), ruta_archivo_cifrado, nonce, tamaño, redacciones (JSON), alertas_secretos (JSON)                                          | 1        |
 | reporte_bug           | proyecto_id, titulo, pasos, esperado, obtenido, severidad, entorno (JSON), estado                                                                                                                                                                  | 1        |
 | reporte_hallazgo      | reporte_id, hallazgo_id                                                                                                                                                                                                                            | 1        |
@@ -934,7 +935,8 @@ definir casos.
 
 - **Errores de JavaScript** y console.error.
 
-- **Accesibilidad** con axe-core (WCAG 2.1 A y AA).
+- **Accesibilidad** con axe-core (WCAG 2.1 A y AA), en un mundo aislado:
+  la página probada no lo ve ni lo puede alterar (ADR 021).
 
 - **Rendimiento básico:** tiempo de carga, LCP, peso de página, requests
   lentas.
@@ -950,15 +952,19 @@ definir casos.
 - RN-ESC-01: el crawler nunca sale de los dominios permitidos.
 
 - RN-ESC-02: en modo solo lectura se abortan requests de escritura salvo
-  el login.
+  el login, se descartan los mensajes que la página manda por WebSocket
+  (y se cuentan) y el crawler no hace clics (ADR 022).
 
 - RN-ESC-03: nunca se visitan URLs ni se clickean elementos de la lista
   de exclusiones.
 
 - RN-ESC-04: una URL se analiza una sola vez por escaneo.
 
-- RN-ESC-05: se detiene al alcanzar el máximo de páginas o de tiempo, y
-  lo informa.
+- RN-ESC-05: se detiene al alcanzar el máximo de páginas o de tiempo
+  (`max_minutos` del proyecto, 30 por defecto), y lo informa. El resumen
+  dice también la cobertura no alcanzada: botones sin tocar por solo
+  lectura, elementos excluidos, URLs descartadas por parecer infinitas y
+  mensajes de WebSocket descartados.
 
 ### Severidad automática
 
@@ -971,8 +977,12 @@ definir casos.
 | Accesibilidad critical / serious                               | Alta / Media              |
 | Accesibilidad moderate / minor                                 | Baja                      |
 | Cookie de sesión insegura / contenido mixto / login sobre HTTP | Alta                      |
+| Cookie sin vencimiento y sin HttpOnly, sin indicio de sesión    | Informativa               |
 | Script o recurso de dominio externo bloqueado                  | Informativa               |
-| Página lenta                                                   | Baja                      |
+| Página lenta, LCP lento, request lenta, página pesada           | Baja                      |
+
+Los criterios de cada chequeo, los umbrales de rendimiento y lo que no
+cuenta como error del sitio están en el ADR 024.
 
 ## 6.4 Ejecuciones (EJE)
 

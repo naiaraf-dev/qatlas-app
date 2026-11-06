@@ -55,6 +55,8 @@ export interface DatosDeEjecucion {
   puertosLocales: number[];
   maxRps: number;
   maxPaginas: number;
+  maxProfundidad: number;
+  maxMinutos: number;
   timeoutPaginaSegundos: number;
   soloLectura: boolean;
   exclusiones: string[];
@@ -99,6 +101,7 @@ const CAMPOS_EDITABLES = [
   'maxPaginas',
   'maxProfundidad',
   'timeoutPaginaSegundos',
+  'maxMinutos',
   'exclusiones',
   'selectoresSensibles',
 ] as const;
@@ -127,6 +130,7 @@ function aEntrada(fila: FilaProyecto): ProyectoEntrada {
     maxPaginas: fila.maxPaginas,
     maxProfundidad: fila.maxProfundidad,
     timeoutPaginaSegundos: fila.timeoutPaginaSegundos,
+    maxMinutos: fila.maxMinutos,
     soloLectura: fila.soloLectura,
     exclusiones: fila.exclusiones,
     modoDatosSensibles: fila.modoDatosSensibles,
@@ -153,6 +157,7 @@ function aColumnas(
     maxPaginas: entrada.maxPaginas,
     maxProfundidad: entrada.maxProfundidad,
     timeoutPaginaSegundos: entrada.timeoutPaginaSegundos,
+    maxMinutos: entrada.maxMinutos,
     soloLectura: entrada.soloLectura,
     exclusiones: entrada.exclusiones,
     modoDatosSensibles: entrada.modoDatosSensibles,
@@ -577,6 +582,8 @@ export class ServicioProyectos {
         puertosLocales: fila.puertosLocales,
         maxRps: fila.maxRps,
         maxPaginas: fila.maxPaginas,
+        maxProfundidad: fila.maxProfundidad,
+        maxMinutos: fila.maxMinutos,
         timeoutPaginaSegundos: fila.timeoutPaginaSegundos,
         soloLectura: fila.soloLectura,
         exclusiones: fila.exclusiones,
@@ -590,6 +597,46 @@ export class ServicioProyectos {
       const proyecto = leerProyecto(base, proyectoId);
       const fila = leerCredencial(base, proyectoId, credencialId);
       return proyecto && fila ? aResumenCredencial(proyecto, fila) : null;
+    });
+  }
+
+  /**
+   * Cifra un dato de una ejecución con la clave del proyecto: si el proyecto se elimina, queda ilegible
+   * (ADR 009). Para lo que puede traer contenido de la página, hasta la redacción de la semana 7.
+   */
+  cifrarDato(proyectoId: string, contexto: string, texto: string): Buffer {
+    return this.boveda.conAcceso((base, maestra) => {
+      const proyecto = this.proyectoExistente(base, proyectoId);
+      const clave = abrirClaveProyecto(maestra, proyectoId, proyecto.claveProyectoCifrada);
+      const bytes = Buffer.alloc(Buffer.byteLength(texto, 'utf8'));
+      bytes.write(texto, 'utf8');
+      try {
+        return cifrarCampo(clave, contexto, bytes);
+      } finally {
+        borrar(clave, bytes);
+      }
+    });
+  }
+
+  descifrarDatos(
+    proyectoId: string,
+    datos: readonly { contexto: string; sellado: Buffer }[],
+  ): string[] {
+    return this.boveda.conAcceso((base, maestra) => {
+      const proyecto = this.proyectoExistente(base, proyectoId);
+      const clave = abrirClaveProyecto(maestra, proyectoId, proyecto.claveProyectoCifrada);
+      try {
+        return datos.map(({ contexto, sellado }) => {
+          const bytes = descifrarCampo(clave, contexto, sellado);
+          try {
+            return bytes.toString('utf8');
+          } finally {
+            borrar(bytes);
+          }
+        });
+      } finally {
+        borrar(clave);
+      }
     });
   }
 

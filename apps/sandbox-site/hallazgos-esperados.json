@@ -1,13 +1,14 @@
 {
-  "version": 1,
-  "descripcion": "Oráculo del escáner: cada problema plantado en sandbox-site. Las URLs son relativas a la URL base.",
+  "version": 2,
+  "descripcion": "Oráculo del escáner: cada problema plantado en sandbox-site, con la severidad de la tabla de 6.3. Las URLs son relativas a la URL base. «clave» es la regla, el código, la cookie o el host. «requiere» indica lo que el caso necesita para aparecer: «nombre» (un host que no es contexto seguro, como sandbox.test) o «https».",
   "hallazgos": [
     {
       "id": "http-500",
       "tipo": "error-http",
       "url": "/error-500",
-      "severidad": "alta",
-      "detalle": "Responde 500"
+      "severidad": "critica",
+      "detalle": "Responde 500",
+      "clave": "500"
     },
     {
       "id": "js-excepcion",
@@ -22,7 +23,8 @@
       "url": "/no-existe-1",
       "origen": "/links-rotos",
       "severidad": "media",
-      "detalle": "Link interno que responde 404"
+      "detalle": "Link interno que responde 404",
+      "clave": "404"
     },
     {
       "id": "link-roto-2",
@@ -30,13 +32,14 @@
       "url": "/carpeta/no-existe-2",
       "origen": "/links-rotos",
       "severidad": "media",
-      "detalle": "Link interno que responde 404"
+      "detalle": "Link interno que responde 404",
+      "clave": "404"
     },
     {
       "id": "consola-error",
       "tipo": "console-error",
       "url": "/consola",
-      "severidad": "media",
+      "severidad": "baja",
       "detalle": "console.error al cargar"
     },
     {
@@ -44,46 +47,144 @@
       "tipo": "accesibilidad",
       "url": "/accesibilidad",
       "severidad": "alta",
-      "regla": "image-alt",
-      "detalle": "Imagen sin texto alternativo"
+      "detalle": "Imagen sin texto alternativo",
+      "clave": "image-alt"
     },
     {
       "id": "a11y-boton-sin-nombre",
       "tipo": "accesibilidad",
       "url": "/accesibilidad",
       "severidad": "alta",
-      "regla": "button-name",
-      "detalle": "Botón sin nombre accesible"
+      "detalle": "Botón sin nombre accesible",
+      "clave": "button-name"
     },
     {
       "id": "a11y-campo-sin-etiqueta",
       "tipo": "accesibilidad",
       "url": "/accesibilidad",
       "severidad": "alta",
-      "regla": "label",
-      "detalle": "Campo sin etiqueta"
+      "detalle": "Campo sin etiqueta",
+      "clave": "label"
     },
     {
       "id": "a11y-contraste",
       "tipo": "accesibilidad",
       "url": "/accesibilidad",
       "severidad": "media",
-      "regla": "color-contrast",
-      "detalle": "Texto con contraste insuficiente"
+      "detalle": "Texto con contraste insuficiente",
+      "clave": "color-contrast"
     },
     {
       "id": "pagina-lenta",
       "tipo": "rendimiento",
       "url": "/lenta",
       "severidad": "baja",
-      "detalle": "Tarda 3 segundos en responder"
+      "detalle": "Tarda 3 segundos en responder",
+      "clave": "carga"
     },
     {
       "id": "cookie-insegura",
       "tipo": "cookie-insegura",
       "url": "/login",
       "severidad": "alta",
-      "detalle": "Cookie de sesión sin Secure ni HttpOnly"
+      "detalle": "Cookie de sesión anónima sin HttpOnly, al abrir el login",
+      "clave": "sesion_anonima"
+    },
+    {
+      "id": "cookie-sin-vencimiento",
+      "tipo": "cookie-insegura",
+      "url": "/login",
+      "severidad": "informativa",
+      "clave": "tema",
+      "detalle": "Cookie sin vencimiento y sin HttpOnly, sin indicio de sesión en el nombre"
+    },
+    {
+      "id": "lcp-lento",
+      "tipo": "rendimiento",
+      "url": "/lcp-lenta",
+      "severidad": "baja",
+      "clave": "lcp",
+      "detalle": "La imagen principal tarda 4,5 s: LCP por encima de 4 s"
+    },
+    {
+      "id": "lcp-carga",
+      "tipo": "rendimiento",
+      "url": "/lcp-lenta",
+      "severidad": "baja",
+      "clave": "carga",
+      "detalle": "La misma imagen retrasa el evento load"
+    },
+    {
+      "id": "lcp-request-lenta",
+      "tipo": "rendimiento",
+      "url": "/lcp-lenta",
+      "severidad": "baja",
+      "clave": "request-lenta",
+      "detalle": "La imagen tarda más de 2 s"
+    },
+    {
+      "id": "login-sin-cifrar",
+      "tipo": "login-sin-cifrar",
+      "url": "/login",
+      "severidad": "alta",
+      "requiere": "nombre",
+      "detalle": "Formulario con contraseña en una página que no es un contexto seguro"
+    },
+    {
+      "id": "contenido-mixto",
+      "tipo": "contenido-mixto",
+      "url": "/mixto",
+      "severidad": "alta",
+      "requiere": "https",
+      "detalle": "Página HTTPS que pide un script por HTTP"
+    },
+    {
+      "id": "bloqueado-script",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/fuga",
+      "severidad": "informativa",
+      "clave": "analitica.fuga.test",
+      "detalle": "Script de otro dominio"
+    },
+    {
+      "id": "bloqueado-pixel",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/fuga",
+      "severidad": "informativa",
+      "clave": "pixel.fuga.example",
+      "detalle": "Imagen de otro dominio"
+    },
+    {
+      "id": "bloqueado-fetch",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/fuga",
+      "severidad": "informativa",
+      "clave": "api.fuga.invalid",
+      "detalle": "fetch a otro dominio"
+    },
+    {
+      "id": "bloqueado-redireccion",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/redirige-afuera",
+      "severidad": "informativa",
+      "clave": "redireccion.fuga.test",
+      "detalle": "Redirección a otro dominio"
+    },
+    {
+      "id": "bloqueado-websocket",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/websocket-externo",
+      "severidad": "informativa",
+      "clave": "ws.fuga.example",
+      "detalle": "WebSocket a otro dominio"
+    },
+    {
+      "id": "bloqueado-puerto",
+      "tipo": "recurso-externo-bloqueado",
+      "url": "/puerto-no-declarado",
+      "severidad": "informativa",
+      "clave": "127.0.0.1",
+      "detalle": "Otro servicio local, en un puerto no declarado"
     }
   ],
   "soloLectura": [
@@ -202,6 +303,37 @@
       "origen": "/quic",
       "host": "quic.fuga.test",
       "detalle": "HTTP3 sobre UDP, hacia el receptor del sandbox"
+    }
+  ],
+  "paginasSanas": ["/sana", "/sana/otra"],
+  "trampasDeUrls": [
+    {
+      "id": "calendario",
+      "prefijo": "/calendario/",
+      "maximo": 10
+    },
+    {
+      "id": "busqueda",
+      "prefijo": "/buscar",
+      "maximo": 20
+    }
+  ],
+  "spa": {
+    "origen": "/spa",
+    "rutaPorClic": "/spa/detalle",
+    "escrituras": ["/api/guardar", "/api/eliminar"],
+    "detalle": "Botones que navegan y que escriben, sin links"
+  },
+  "cookiesSinHallazgo": [
+    {
+      "nombre": "XSRF-TOKEN",
+      "url": "/login",
+      "detalle": "Anti-CSRF: sin HttpOnly a propósito, para que la lea el JavaScript del sitio"
+    },
+    {
+      "nombre": "preferences",
+      "url": "/login",
+      "detalle": "No es de sesión: vence y su nombre no lo sugiere, aunque contenga «ses»"
     }
   ]
 }

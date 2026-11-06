@@ -44,6 +44,7 @@ export const proyecto = sqliteTable('proyecto', {
   maxPaginas: integer('max_paginas').notNull(),
   maxProfundidad: integer('max_profundidad').notNull(),
   timeoutPaginaSegundos: integer('timeout_pagina_segundos').notNull(),
+  maxMinutos: integer('max_minutos').notNull(),
   soloLectura: integer('solo_lectura', { mode: 'boolean' }).notNull(),
   exclusiones: text('exclusiones', { mode: 'json' }).$type<string[]>().notNull(),
   modoDatosSensibles: integer('modo_datos_sensibles', { mode: 'boolean' }).notNull(),
@@ -85,6 +86,65 @@ export const credencial = sqliteTable('credencial', {
   urlLogin: text('url_login').notNull(),
   pasosLogin: text('pasos_login', { mode: 'json' }).$type<unknown[]>().notNull(),
   indicadorExito: text('indicador_exito', { mode: 'json' }).$type<unknown>(),
+});
+
+/** Una por página analizada. La URL va sin query en claro; la completa, cifrada con la clave del proyecto. */
+export const paginaVisitada = sqliteTable('pagina_visitada', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  ejecucionId: text('ejecucion_id')
+    .notNull()
+    .references(() => ejecucion.id),
+  url: text('url').notNull(),
+  urlCompletaCifrada: blob('url_completa_cifrada', { mode: 'buffer' }),
+  statusHttp: integer('status_http'),
+  tiempoCargaMs: integer('tiempo_carga_ms'),
+  profundidad: integer('profundidad').notNull(),
+});
+
+/**
+ * La identidad de un problema, por proyecto (sección 5). Esta semana, una por aparición: la huella, la
+ * fusión y los estados llegan en la semana 8, con `clave` ya guardada para no volver a escanear.
+ */
+export const hallazgo = sqliteTable('hallazgo', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  ejecucionId: text('ejecucion_id')
+    .notNull()
+    .references(() => ejecucion.id),
+  tipo: text('tipo').notNull(),
+  severidad: text('severidad').notNull(),
+  titulo: text('titulo').notNull(),
+  descripcion: text('descripcion').notNull(),
+  url: text('url').notNull(),
+  clave: text('clave').notNull(),
+  huella: text('huella'),
+  estado: text('estado').notNull(),
+  primeraVezEn: text('primera_vez_en').notNull(),
+  ultimaVezEn: text('ultima_vez_en').notNull(),
+  casoId: text('caso_id'),
+  pasoIndice: integer('paso_indice'),
+});
+
+/** Cada aparición de un hallazgo en una ejecución. Lo que puede traer contenido de la página, cifrado. */
+export const hallazgoOcurrencia = sqliteTable('hallazgo_ocurrencia', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  hallazgoId: text('hallazgo_id')
+    .notNull()
+    .references(() => hallazgo.id),
+  ejecucionId: text('ejecucion_id')
+    .notNull()
+    .references(() => ejecucion.id),
+  url: text('url').notNull(),
+  urlOrigen: text('url_origen'),
+  detalleCifrado: blob('detalle_cifrado', { mode: 'buffer' }),
 });
 
 /** Sin referencia a la credencial: eliminarla no borra el rastro de los intentos ya hechos. */

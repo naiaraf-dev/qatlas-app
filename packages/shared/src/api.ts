@@ -1,4 +1,4 @@
-import type { IpcRequest, IpcResponse, IpcResult } from './ipc-contract.js';
+import type { IpcRequest, IpcResponse, IpcResult, ProgresoEjecucion } from './ipc-contract.js';
 
 /**
  * API que el preload expone en `window.qatlas`.
@@ -82,5 +82,7 @@ export interface QatlasApi {
     detalle(
       req: IpcRequest<'ejecuciones:detalle'>,
     ): Promise<IpcResult<IpcResponse<'ejecuciones:detalle'>>>;
+    /** Devuelve la función para dejar de escuchar. */
+    alProgreso(oyente: (progreso: ProgresoEjecucion) => void): () => void;
   };
 }

@@ -49,7 +49,9 @@ La seguridad no se agrega al final: es lo primero que se construye y se verifica
 | Runner en su proceso, sin claves, con entorno cerrado (no es un sandbox del sistema operativo)       | ✅ parcial  |
 | Navegador de pruebas con su sandbox encendido, perfil en memoria y segunda capa de bloqueo           | ✅          |
 | Monitor de conexiones: cada una, permitida o bloqueada, con su regla, sin rutas                      | ✅          |
-| Solo lectura y exclusiones en el navegador (los botones se completan con el crawler, semana 6)       | ✅ parcial  |
+| Solo lectura y exclusiones: escrituras HTTP, WebSocket salientes, links y botones (TS-05)            | ✅          |
+| Escaneo: el sitio probado no ve ni puede alterar los chequeos (mundo aislado)                        | ✅          |
+| Detalle de los hallazgos cifrado con la clave del proyecto, hasta la redacción                       | ✅          |
 | Redacción y detector de secretos; test del secreto canario                                           | ⏳ semana 7 |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·

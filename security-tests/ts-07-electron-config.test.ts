@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ipcEventos } from '@qatlas/shared';
 import {
   REQUIRED_PREFERENCE_VALUES,
   SECURE_WEB_PREFERENCES,
@@ -75,7 +76,18 @@ describe('TS-07 · Preload', () => {
   it('no expone ipcRenderer completo', () => {
     expect(preload?.code).toBeDefined();
     expect(preload?.code).not.toMatch(/exposeInMainWorld\([^)]*ipcRenderer\s*[,)]/);
-    expect(preload?.code).not.toMatch(/ipcRenderer\.(on|send|sendSync)\(/);
+    expect(preload?.code).not.toMatch(/ipcRenderer\.(send|sendSync)\(/);
+  });
+
+  it('solo escucha los eventos declarados, y le pasa a la interfaz los datos, no el evento', () => {
+    const escuchas = [
+      ...(preload?.code ?? '').matchAll(/ipcRenderer\.(on|removeListener)\('([^']+)'/g),
+    ];
+    expect(escuchas.length).toBeGreaterThan(0);
+    for (const [, , canal] of escuchas) expect(Object.keys(ipcEventos)).toContain(canal);
+    // Ningún `on` con un nombre que no sea un literal: no hay forma de escuchar cualquier canal.
+    expect(preload?.code).not.toMatch(/ipcRenderer\.on\((?!')/);
+    expect(preload?.code).toMatch(/oyente\(progreso as never\)/);
   });
 
   it('solo importa tipos de @qatlas/shared (sin código en tiempo de ejecución)', () => {

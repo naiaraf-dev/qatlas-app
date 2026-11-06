@@ -90,6 +90,12 @@ un formulario, al servicio de autocompletar (`AutofillServerCommunication`). El 
 monitor con destinos que el sitio nunca pidió. Se apagan por argumento, y un E2E verifica que no aparezca ningún destino
 inesperado. Una versión nueva de Chromium puede traer otro: el proxy lo va a bloquear y ese test lo va a mostrar.
 
+## Agregado en la semana 6
+
+- El proxy marca sus propios 403 con `x-qatlas-bloqueado`: el crawler no los confunde con un error del sitio.
+- La segunda capa del navegador decide también por puerto, con la misma regla del proxy (ADR 024).
+- En solo lectura, la segunda capa descarta los mensajes que la página manda por WebSocket (ADR 022).
+
 ## Límites
 
 - **Domain fronting:** dentro de un túnel permitido se puede hablar con otro host. Verlo exigiría interceptar TLS.

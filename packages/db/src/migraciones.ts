@@ -148,6 +148,57 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX intento_login_credencial ON intento_login(credencial_id, fecha);
     `,
   },
+  {
+    version: 5,
+    sql: `
+      ALTER TABLE proyecto ADD COLUMN max_minutos INTEGER NOT NULL DEFAULT 30;
+      CREATE TABLE pagina_visitada (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        ejecucion_id TEXT NOT NULL REFERENCES ejecucion(id),
+        url TEXT NOT NULL,
+        url_completa_cifrada BLOB,
+        status_http INTEGER,
+        tiempo_carga_ms INTEGER,
+        profundidad INTEGER NOT NULL
+      );
+      CREATE TABLE hallazgo (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        ejecucion_id TEXT NOT NULL REFERENCES ejecucion(id),
+        tipo TEXT NOT NULL,
+        severidad TEXT NOT NULL,
+        titulo TEXT NOT NULL,
+        descripcion TEXT NOT NULL,
+        url TEXT NOT NULL,
+        clave TEXT NOT NULL,
+        huella TEXT,
+        estado TEXT NOT NULL,
+        primera_vez_en TEXT NOT NULL,
+        ultima_vez_en TEXT NOT NULL,
+        caso_id TEXT,
+        paso_indice INTEGER
+      );
+      CREATE TABLE hallazgo_ocurrencia (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        hallazgo_id TEXT NOT NULL REFERENCES hallazgo(id),
+        ejecucion_id TEXT NOT NULL REFERENCES ejecucion(id),
+        url TEXT NOT NULL,
+        url_origen TEXT,
+        detalle_cifrado BLOB
+      );
+      CREATE INDEX pagina_visitada_ejecucion ON pagina_visitada(ejecucion_id);
+      CREATE INDEX hallazgo_ejecucion ON hallazgo(ejecucion_id);
+      CREATE INDEX hallazgo_ocurrencia_hallazgo ON hallazgo_ocurrencia(hallazgo_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

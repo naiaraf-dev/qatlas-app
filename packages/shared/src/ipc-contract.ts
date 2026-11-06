@@ -136,6 +136,8 @@ export const ProyectoEntrada = z
     maxPaginas: entero(LIMITES_PROYECTO.maxPaginas),
     maxProfundidad: entero(LIMITES_PROYECTO.maxProfundidad),
     timeoutPaginaSegundos: entero(LIMITES_PROYECTO.timeoutPaginaSegundos),
+    // RN-ESC-05. No cambia el alcance: no invalida la autorización.
+    maxMinutos: entero(LIMITES_PROYECTO.maxMinutos),
     soloLectura: z.boolean(),
     exclusiones: z.array(z.string().trim().min(1).max(200)).max(200),
     modoDatosSensibles: z.boolean(),
@@ -264,13 +266,23 @@ export const MotivoFinEjecucion = z.enum([
 ]);
 export type MotivoFinEjecucion = z.infer<typeof MotivoFinEjecucion>;
 
+const Cantidad = z.number().int().nonnegative();
+
 export const ResumenEjecucion = z
   .object({
-    paginasVisitadas: z.number().int().nonnegative(),
-    linksExcluidos: z.number().int().nonnegative(),
-    conexionesPermitidas: z.number().int().nonnegative(),
-    conexionesBloqueadas: z.number().int().nonnegative(),
+    paginasVisitadas: Cantidad,
+    linksExcluidos: Cantidad,
+    conexionesPermitidas: Cantidad,
+    conexionesBloqueadas: Cantidad,
     motivo: MotivoFinEjecucion.nullable(),
+    hallazgos: Cantidad,
+    // RN-ESC-05: por qué se detuvo antes de recorrer todo. `null` si no quedó nada por recorrer.
+    detenido: z.enum(['max-paginas', 'max-tiempo']).nullable(),
+    // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
+    noRecorridosSoloLectura: Cantidad,
+    noRecorridosExclusiones: Cantidad,
+    urlsDescartadas: Cantidad,
+    websocketDescartados: Cantidad,
   })
   .strict();
 export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
@@ -286,6 +298,60 @@ export const EjecucionResumen = z
   })
   .strict();
 export type EjecucionResumen = z.infer<typeof EjecucionResumen>;
+
+export const TipoHallazgo = z.enum([
+  'error-http',
+  'link-roto',
+  'recurso-con-error',
+  'error-javascript',
+  'console-error',
+  'accesibilidad',
+  'rendimiento',
+  'cookie-insegura',
+  'contenido-mixto',
+  'login-sin-cifrar',
+  'recurso-externo-bloqueado',
+]);
+export type TipoHallazgo = z.infer<typeof TipoHallazgo>;
+
+export const SeveridadHallazgo = z.enum(['critica', 'alta', 'media', 'baja', 'informativa']);
+export type SeveridadHallazgo = z.infer<typeof SeveridadHallazgo>;
+
+export const HallazgoVista = z
+  .object({
+    id: IdEntidad,
+    tipo: TipoHallazgo,
+    severidad: SeveridadHallazgo,
+    titulo: z.string().max(300),
+    url: z.string().max(2048),
+    urlOrigen: z.string().max(2048).nullable(),
+    // Puede traer contenido de la página: se guarda cifrado y se muestra solo acá (ADR 021).
+    detalle: z.string().max(2000),
+  })
+  .strict();
+export type HallazgoVista = z.infer<typeof HallazgoVista>;
+
+export const PaginaVista = z
+  .object({
+    url: z.string().max(2048),
+    status: z.number().int().nullable(),
+    tiempoCargaMs: z.number().int().nullable(),
+    profundidad: Cantidad,
+  })
+  .strict();
+
+/** Lo que el proceso principal manda a la interfaz mientras corre una ejecución. */
+export const ProgresoEjecucion = z
+  .object({
+    ejecucionId: IdEntidad,
+    estado: EstadoEjecucion,
+    paginaActual: z.string().max(2048).nullable(),
+    paginasVisitadas: Cantidad,
+    hallazgos: Cantidad,
+    conexionesBloqueadas: Cantidad,
+  })
+  .strict();
+export type ProgresoEjecucion = z.infer<typeof ProgresoEjecucion>;
 
 export const ConexionEjecucion = z
   .object({
@@ -465,7 +531,12 @@ export const ipcContract = {
   'ejecuciones:detalle': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),
     response: z
-      .object({ ejecucion: EjecucionResumen, conexiones: z.array(ConexionEjecucion) })
+      .object({
+        ejecucion: EjecucionResumen,
+        conexiones: z.array(ConexionEjecucion),
+        hallazgos: z.array(HallazgoVista),
+        paginas: z.array(PaginaVista),
+      })
       .strict()
       .nullable(),
   },
@@ -492,6 +563,15 @@ export type IpcRequest<C extends IpcChannel> = z.input<IpcContract[C]['request']
 export type IpcResponse<C extends IpcChannel> = z.output<IpcContract[C]['response']>;
 
 export const IPC_CHANNELS = Object.keys(ipcContract) as IpcChannel[];
+
+/**
+ * Eventos del proceso principal a la interfaz. El principal valida lo que manda con el esquema; la
+ * interfaz solo se suscribe por las funciones del preload.
+ */
+export const ipcEventos = {
+  'ejecuciones:progreso': ProgresoEjecucion,
+} as const;
+export type IpcEvento = keyof typeof ipcEventos;
 
 /** Respuesta envuelta: los errores llegan a la interfaz sin detalles internos. */
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcErrorCode };

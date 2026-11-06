@@ -38,6 +38,8 @@ const ESCANEO = {
   tipo: 'escaneo',
   configuracion: CONFIGURACION,
   maxPaginas: 1,
+  maxProfundidad: 1,
+  maxMinutos: 1,
   maxRps: 1,
   soloLectura: true,
   exclusiones: [],
@@ -48,9 +50,12 @@ describe('El código del motor no abre red ni procesos por su cuenta', () => {
 
   it('hay código que revisar', () => {
     expect(motor.map((f) => f.nombre).sort()).toEqual([
+      'chequeos.ts',
+      'crawler.ts',
       'diagnostico.ts',
       'entrada-runner.ts',
       'motor.ts',
+      'urls.ts',
     ]);
   });
 
@@ -86,8 +91,14 @@ describe('Nada del paquete del runner toca la bóveda', () => {
     const { dependencies } = JSON.parse(
       readFileSync(path.join(RAIZ, 'packages/runner/package.json'), 'utf8'),
     ) as { dependencies: Record<string, string> };
-    expect(Object.keys(dependencies).sort()).toEqual(['@qatlas/shared', 'playwright-core', 'zod']);
+    expect(Object.keys(dependencies).sort()).toEqual([
+      '@qatlas/shared',
+      'axe-core',
+      'playwright-core',
+      'zod',
+    ]);
     expect(dependencies['playwright-core']).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(dependencies['axe-core']).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });
 
@@ -162,6 +173,21 @@ describe('Configuración del navegador', () => {
 
   it('el navegador nunca se descarga solo', () => {
     expect(motor).not.toMatch(/\binstall\b|registry/);
+  });
+});
+
+describe('Accesibilidad en un mundo aislado (ADR 021)', () => {
+  const crawler = readFileSync(path.join(RUNNER, 'motor/crawler.ts'), 'utf8');
+
+  it('axe se inyecta con CDP en un mundo aislado, nunca en el de la página', () => {
+    expect(crawler).toContain('Page.createIsolatedWorld');
+    expect(crawler).not.toMatch(
+      /addScriptTag|addInitScript|page\.evaluate\(axe|@axe-core\/playwright/,
+    );
+  });
+
+  it('el escaneo no lee el contenido de la página para mandarlo, salvo en el detalle', () => {
+    expect(crawler).not.toMatch(/\.content\(\)|innerHTML|outerHTML/);
   });
 });
 
