@@ -599,7 +599,7 @@ export class ServicioEjecuciones {
       const sellado = this.proyectos.cifrarDato(
         enCurso.proyectoId,
         contextoSesion(enCurso.proyectoId, enCurso.credencialId),
-        JSON.stringify(sesion),
+        JSON.stringify({ estado: sesion.estado, urlComprobacion: sesion.urlComprobacion }),
       );
       this.sesiones.set(`${enCurso.proyectoId}/${enCurso.credencialId}`, {
         sellado,

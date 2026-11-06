@@ -65,6 +65,8 @@ export interface OpcionesGestor {
   informarSesion: (resultado: ResultadoLogin) => void;
   alHallazgo: (hallazgo: HallazgoDetectado) => void;
   ahora?: () => number;
+  /** El login; los tests lo reemplazan para no depender de un navegador. */
+  entrar?: typeof iniciarSesion;
 }
 
 export interface SesionPrevia {
@@ -212,7 +214,7 @@ export class GestorDeSesion implements SesionDelRastreo {
           // escaneo, y se va con él (ADR 025).
           this.claveBasica = new TextDecoder().decode(datosLogin.secreto);
         }
-        const resultado = await iniciarSesion(this.navegador, {
+        const resultado = await (this.opciones.entrar ?? iniciarSesion)(this.navegador, {
           datos: this.opciones.datos,
           proxy: datosLogin.proxy,
           politica: datosLogin.politica,
