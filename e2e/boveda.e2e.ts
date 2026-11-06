@@ -212,19 +212,28 @@ test('desbloqueo: una contraseña incorrecta da un error sin detalles internos',
   await expect(entrada('Contraseña maestra')).toHaveValue('');
 });
 
+/**
+ * Un evento del sistema operativo llega como una tarea nueva del proceso principal. `app.evaluate` no:
+ * usa el inspector de Node, que puede correr en medio de código sincrónico, por ejemplo durante una
+ * consulta a la base. Así se simula como llega de verdad.
+ */
+async function emitirDelSistema(evento: 'lock-screen' | 'suspend'): Promise<void> {
+  await app.evaluate(({ powerMonitor }, nombre) => {
+    setImmediate(() => {
+      powerMonitor.emit(nombre);
+    });
+  }, evento);
+}
+
 test('bloqueo al bloquear el sistema operativo y al suspender', async () => {
   await desbloquear();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await app.evaluate(({ powerMonitor }) => {
-    powerMonitor.emit('lock-screen');
-  });
+  await emitirDelSistema('lock-screen');
   await expect(titulo('Bóveda bloqueada')).toBeVisible();
 
   await desbloquear();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await app.evaluate(({ powerMonitor }) => {
-    powerMonitor.emit('suspend');
-  });
+  await emitirDelSistema('suspend');
   await expect(titulo('Bóveda bloqueada')).toBeVisible();
   await desbloquear();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
