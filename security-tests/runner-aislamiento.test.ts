@@ -43,6 +43,17 @@ const ESCANEO = {
   maxRps: 1,
   soloLectura: true,
   exclusiones: [],
+  autenticacion: null,
+  sesionPrevia: null,
+};
+const AUTENTICACION = {
+  estrategia: 'formulario',
+  urlLogin: 'http://localhost:5173/login',
+  pasos: [],
+  indicador: { tipo: 'aparece', selector: '#x' },
+  usuario: 'ana@example.com',
+  dominiosAutenticacion: [],
+  sesionMaxMs: null,
 };
 
 describe('El código del motor no abre red ni procesos por su cuenta', () => {
@@ -54,7 +65,9 @@ describe('El código del motor no abre red ni procesos por su cuenta', () => {
       'crawler.ts',
       'diagnostico.ts',
       'entrada-runner.ts',
+      'gestor-sesion.ts',
       'motor.ts',
+      'sesion.ts',
       'urls.ts',
     ]);
   });
@@ -120,29 +133,64 @@ describe('Contrato con el runner', () => {
   });
 
   it('lo que vuelve del login es solo un resultado: ningún contenido de la página', () => {
-    expect(MensajeDelRunner.safeParse({ tipo: 'login-terminado', funciono: true }).success).toBe(
-      true,
-    );
+    expect(
+      MensajeDelRunner.safeParse({ tipo: 'login-terminado', resultado: 'funciono' }).success,
+    ).toBe(true);
     for (const campo of ['html', 'texto', 'url', 'titulo', 'error', 'captura']) {
       expect(
-        MensajeDelRunner.safeParse({ tipo: 'login-terminado', funciono: false, [campo]: 'x' })
+        MensajeDelRunner.safeParse({ tipo: 'login-terminado', resultado: 'fallo', [campo]: 'x' })
           .success,
+      ).toBe(false);
+      expect(
+        MensajeDelRunner.safeParse({ tipo: 'sesion', resultado: 'fallo', [campo]: 'x' }).success,
       ).toBe(false);
     }
   });
 
-  it('el secreto solo se acepta en bytes y solo en el login', () => {
-    const login = {
-      tipo: 'login',
+  it('el secreto solo se acepta en bytes, y solo en la prueba y en los datos de un login', () => {
+    const probar = {
+      tipo: 'probar-login',
       configuracion: CONFIGURACION,
-      urlLogin: 'http://localhost:5173/login',
-      pasos: [],
-      indicador: { tipo: 'aparece', selector: '#x' },
-      usuario: 'ana@example.com',
+      autenticacion: AUTENTICACION,
+      politicaDelEscaneo: CONFIGURACION.politica,
       secreto: new Uint8Array([1]),
     };
-    expect(MensajeAlRunner.safeParse(login).success).toBe(true);
-    expect(MensajeAlRunner.safeParse({ ...login, secreto: 'texto' }).success).toBe(false);
+    const datos = {
+      tipo: 'datos-login',
+      proxy: CONFIGURACION.proxy,
+      politica: CONFIGURACION.politica,
+      secreto: new Uint8Array([1]),
+    };
+    for (const mensaje of [probar, datos]) {
+      expect(MensajeAlRunner.safeParse(mensaje).success).toBe(true);
+      expect(MensajeAlRunner.safeParse({ ...mensaje, secreto: null }).success).toBe(true);
+      expect(MensajeAlRunner.safeParse({ ...mensaje, secreto: 'texto' }).success).toBe(false);
+    }
+    // La autenticación del escaneo no tiene dónde llevarlo.
+    expect(
+      MensajeAlRunner.safeParse({
+        ...ESCANEO,
+        autenticacion: { ...AUTENTICACION, secreto: 'x' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('el estado de sesión que vuelve tiene forma fija y límites', () => {
+    const estado = { cookies: [], origins: [] };
+    const sesion = { tipo: 'sesion', resultado: 'ok', estado, urlComprobacion: 'http://x.test/' };
+    expect(MensajeDelRunner.safeParse(sesion).success).toBe(true);
+    expect(
+      MensajeDelRunner.safeParse({ ...sesion, estado: { ...estado, indexedDB: [] } }).success,
+    ).toBe(false);
+    expect(
+      MensajeDelRunner.safeParse({
+        ...sesion,
+        estado: {
+          cookies: [],
+          origins: [{ origin: 'x', localStorage: [{ name: 'a', value: 'x'.repeat(70_000) }] }],
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -167,8 +215,26 @@ describe('Configuración del navegador', () => {
     expect(motor).toContain('acceptDownloads: false');
   });
 
-  it('no graba nada: sin video ni traza en el código del motor (EVI-01)', () => {
-    expect(motor).not.toMatch(/recordVideo|recordHar|tracing\.start|\.screenshot\(/);
+  it('no graba nada: sin video, traza, HAR ni capturas en el motor (EVI-01, TS-06)', () => {
+    for (const { nombre, texto } of fuentes(path.join(RUNNER, 'motor'))) {
+      expect(texto, nombre).not.toMatch(/recordVideo|recordHar|tracing\.start|\.screenshot\(/);
+    }
+  });
+
+  it('cada contexto, también los de login y la ventana del asistido, bloquea service workers y descargas', () => {
+    const sesion = readFileSync(path.join(RUNNER, 'motor/sesion.ts'), 'utf8');
+    const contextos = sesion.match(/\.newContext\(\{[^}]*\}/gs) ?? [];
+    expect(sesion.match(/\.newContext\(/g)?.length).toBe(2);
+    expect(sesion.match(/serviceWorkers: 'block'/g)?.length).toBe(2);
+    expect(sesion.match(/acceptDownloads: false/g)?.length).toBe(2);
+    expect(contextos.length).toBeGreaterThan(0);
+  });
+
+  it('el navegador con ventana tiene el mismo sandbox y los mismos argumentos', () => {
+    const visible = /export function abrirNavegadorVisible[\s\S]*?\n}\n/.exec(motor)?.[0] ?? '';
+    expect(visible).toContain('chromiumSandbox: true');
+    expect(visible).toContain('args: [...ARGUMENTOS_CHROMIUM]');
+    expect(visible).toContain('headless: false');
   });
 
   it('el navegador nunca se descarga solo', () => {

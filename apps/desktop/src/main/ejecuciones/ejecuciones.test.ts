@@ -459,6 +459,7 @@ describe('Resultados del escaneo', () => {
       paginasVisitadas: 2,
       hallazgos: 0,
       conexionesBloqueadas: 0,
+      espera: null,
     });
     runnerActual?.emitir(terminado(2, 0));
     expect(progresos.at(-1)?.estado).toBe('finalizada');
@@ -700,7 +701,7 @@ describe('Monitor de conexiones', () => {
 describe('Probar login', () => {
   const responderLogin = async (funciono: boolean) => {
     await pausa();
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: funciono ? 'funciono' : 'fallo' });
   };
 
   it('sin indicador de éxito no se abre nada', async () => {
@@ -758,10 +759,10 @@ describe('Probar login', () => {
     await responderLogin(true);
     await resultado;
     const conSecreto = mensajes.filter(
-      (m) => m.tipo === 'login' && Buffer.from(m.secreto).toString() === SECRETO,
+      (m) => m.tipo === 'probar-login' && Buffer.from(m.secreto ?? []).toString() === SECRETO,
     );
     expect(conSecreto).toHaveLength(1);
-    expect(mensajes.filter((m) => m.tipo !== 'login')).toEqual([{ tipo: 'cancelar' }]);
+    expect(mensajes.filter((m) => m.tipo !== 'probar-login')).toEqual([{ tipo: 'cancelar' }]);
   });
 
   it('si el proxy no arranca, el secreto ni se descifra', async () => {
@@ -803,10 +804,10 @@ describe('Probar login: límite de intentos', () => {
   async function intentar(servicio: ServicioEjecuciones, proyecto: string, credencial: string) {
     const resultado = servicio.probarLogin(proyecto, credencial);
     await pausa();
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'fallo' });
     return resultado;
   }
-  const logins = () => mensajes.filter((m) => m.tipo === 'login');
+  const logins = () => mensajes.filter((m) => m.tipo === 'probar-login');
 
   beforeEach(() => {
     ahora = Date.parse('2026-11-01T12:00:00.000Z');
@@ -841,7 +842,7 @@ describe('Probar login: límite de intentos', () => {
     for (let i = 0; i < 3; i++) {
       const resultado = servicio.probarLogin(proyecto, credencial);
       await pausa();
-      runnerActual?.emitir({ tipo: 'login-terminado', funciono: true });
+      runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'funciono' });
       expect(await resultado).toEqual({ resultado: 'funciono' });
     }
     expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');
@@ -920,7 +921,7 @@ describe('Probar login: límite de intentos', () => {
     );
     expect(filas.n).toBe(1);
     expect(logins()).toHaveLength(1);
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'fallo' });
     await resultado;
   });
 

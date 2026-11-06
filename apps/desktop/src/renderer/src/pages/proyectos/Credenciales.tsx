@@ -7,7 +7,7 @@ import type {
   IpcResponse,
   PasoLogin,
 } from '@qatlas/shared';
-import { LIMITE_PRUEBAS_LOGIN } from '@qatlas/shared';
+import { credencialUsable, LIMITE_PRUEBAS_LOGIN } from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
@@ -245,13 +245,6 @@ export const ESTRATEGIAS: Record<
     ayudaUrl: 'Una página que sin credenciales responde 401.',
   },
 };
-
-/** El indicador es lo que confirma el ingreso y, en un escaneo, que la sesión sigue activa. */
-export function credencialUsable(credencial: CredencialResumen): boolean {
-  if (credencial.requiereRevision) return false;
-  if (credencial.estrategia !== 'asistido' && !credencial.secretoConfigurado) return false;
-  return credencial.estrategia === 'basica' || credencial.indicadorExito !== null;
-}
 
 function CampoSecreto({
   etiqueta,

@@ -290,7 +290,7 @@ test('RN-EJE-01: mientras corre, no se lanza otra del mismo proyecto', async () 
   await expect(boton('Lanzar ejecución')).toBeDisabled();
   const segunda = await page.evaluate(async (id) => {
     const { qatlas } = window as unknown as { qatlas: QatlasApi };
-    return qatlas.ejecuciones.lanzarEscaneo({ proyectoId: id as string });
+    return qatlas.ejecuciones.lanzarEscaneo({ proyectoId: id as string, credencialId: null });
   }, proyectoId);
   expect(segunda).toEqual({ ok: true, data: { resultado: 'rechazada', motivo: 'ya-en-curso' } });
   await boton('Cancelar ejecución').click();

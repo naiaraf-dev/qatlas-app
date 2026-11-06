@@ -295,6 +295,13 @@ export const MotivoFinEjecucion = z.enum([
   'bloqueo',
   'interrumpida',
   'usuario',
+  // Escaneo autenticado (ADR 027).
+  'login-fallido',
+  'limite-logins',
+  'ventana-cerrada',
+  'tiempo-agotado',
+  'pausa-vencida',
+  'credencial-no-disponible',
 ]);
 export type MotivoFinEjecucion = z.infer<typeof MotivoFinEjecucion>;
 
@@ -309,12 +316,17 @@ export const ResumenEjecucion = z
     motivo: MotivoFinEjecucion.nullable(),
     hallazgos: Cantidad,
     // RN-ESC-05: por qué se detuvo antes de recorrer todo. `null` si no quedó nada por recorrer.
-    detenido: z.enum(['max-paginas', 'max-tiempo']).nullable(),
+    detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
     // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
     noRecorridosSoloLectura: Cantidad,
     noRecorridosExclusiones: Cantidad,
     urlsDescartadas: Cantidad,
     websocketDescartados: Cantidad,
+    // Escaneo autenticado: todos los logins, los que se hicieron porque la sesión venció y las
+    // renovaciones planificadas por la duración máxima de la sesión.
+    logins: Cantidad,
+    loginsInesperados: Cantidad,
+    renovaciones: Cantidad,
   })
   .strict();
 export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
@@ -327,6 +339,8 @@ export const EjecucionResumen = z
     inicio: z.string().nullable(),
     fin: z.string().nullable(),
     resumen: ResumenEjecucion,
+    // Con qué rol se escaneó. Null: anónimo.
+    rol: z.string().nullable(),
   })
   .strict();
 export type EjecucionResumen = z.infer<typeof EjecucionResumen>;
@@ -343,6 +357,9 @@ export const TipoHallazgo = z.enum([
   'contenido-mixto',
   'login-sin-cifrar',
   'recurso-externo-bloqueado',
+  // Semana 6b: un token o una clave en la URL, y el sitio guardando la contraseña en el navegador.
+  'parametro-sensible',
+  'secreto-en-almacenamiento',
 ]);
 export type TipoHallazgo = z.infer<typeof TipoHallazgo>;
 
@@ -381,6 +398,9 @@ export const ProgresoEjecucion = z
     paginasVisitadas: Cantidad,
     hallazgos: Cantidad,
     conexionesBloqueadas: Cantidad,
+    // Lo que la ejecución espera de la persona: entrar en la ventana, volver a entrar después de una
+    // pausa, o un enlace nuevo. Null: nada.
+    espera: z.enum(['login-asistido', 'sesion-vencida', 'enlace-vencido']).nullable(),
   })
   .strict();
 export type ProgresoEjecucion = z.infer<typeof ProgresoEjecucion>;
@@ -546,17 +566,23 @@ export const ipcContract = {
         .strict(),
     ]),
   },
+  // Con `credencialId`, un escaneo autenticado con ese rol; null, anónimo.
   'ejecuciones:lanzarEscaneo': {
-    request: z.object({ proyectoId: IdEntidad }).strict(),
+    request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad.nullable() }).strict(),
     response: z.discriminatedUnion('resultado', [
       z.object({ resultado: z.literal('encolada'), ejecucionId: IdEntidad }).strict(),
       z
         .object({
           resultado: z.literal('rechazada'),
-          motivo: z.enum(['ya-en-curso', 'sin-autorizacion']),
+          motivo: z.enum(['ya-en-curso', 'sin-autorizacion', 'credencial-no-usable']),
         })
         .strict(),
     ]),
+  },
+  // Una ejecución pausada sigue: vuelve a entrar (login asistido o enlace nuevo).
+  'ejecuciones:reanudar': {
+    request: z.object({ ejecucionId: IdEntidad }).strict(),
+    response: z.object({ resultado: z.enum(['reanudada', 'no-pausada']) }).strict(),
   },
   'ejecuciones:cancelar': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),

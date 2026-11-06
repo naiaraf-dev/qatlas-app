@@ -45,6 +45,58 @@ const Configuracion = z
   .strict();
 export type Configuracion = z.infer<typeof Configuracion>;
 
+const ProxyDeContexto = z
+  .object({ servidor: z.string().max(100), usuario: z.string(), clave: z.string() })
+  .strict();
+
+/** Cómo se entra (ADR 025). Ningún campo lleva un secreto: ese viaja aparte, solo para el login. */
+export const Autenticacion = z
+  .object({
+    estrategia: z.enum(['formulario', 'sso', 'token-url', 'asistido', 'basica']),
+    urlLogin: z.string().max(2048),
+    pasos: z.array(PasoLogin).max(30),
+    indicador: IndicadorExito.nullable(),
+    usuario: z.string().max(320),
+    dominiosAutenticacion: z.array(z.string().max(300)).max(20),
+    sesionMaxMs: z.number().int().positive().nullable(),
+  })
+  .strict();
+export type Autenticacion = z.infer<typeof Autenticacion>;
+
+/** El estado de sesión, con límites: lo arma el runner, pero sale de un sitio no confiable. */
+export const EstadoSesion = z
+  .object({
+    cookies: z
+      .array(
+        z
+          .object({
+            name: z.string().max(300),
+            value: z.string().max(8192),
+            domain: z.string().max(300),
+            path: z.string().max(2048),
+            expires: z.number(),
+            httpOnly: z.boolean(),
+            secure: z.boolean(),
+            sameSite: z.enum(['Strict', 'Lax', 'None']),
+          })
+          .strict(),
+      )
+      .max(300),
+    origins: z
+      .array(
+        z
+          .object({
+            origin: z.string().max(2048),
+            localStorage: z
+              .array(z.object({ name: z.string().max(300), value: z.string().max(65536) }).strict())
+              .max(300),
+          })
+          .strict(),
+      )
+      .max(50),
+  })
+  .strict();
+
 export const MensajeAlRunner = z.discriminatedUnion('tipo', [
   z
     .object({
@@ -56,20 +108,40 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
       maxRps: z.number().int().positive(),
       soloLectura: z.boolean(),
       exclusiones: z.array(z.string().max(200)).max(200),
+      // Null: escaneo anónimo.
+      autenticacion: Autenticacion.nullable(),
+      // La sesión de un login anterior con la misma credencial, si sigue en memoria (ADR 026).
+      sesionPrevia: z
+        .object({
+          estado: EstadoSesion,
+          urlComprobacion: z.string().max(2048),
+          edadMs: z.number().int().nonnegative(),
+        })
+        .strict()
+        .nullable(),
     })
     .strict(),
-  // El secreto llega solo acá, y solo para el login.
+  // Probar login: la configuración trae el proxy de login. El secreto llega solo en un login.
   z
     .object({
-      tipo: z.literal('login'),
+      tipo: z.literal('probar-login'),
       configuracion: Configuracion,
-      urlLogin: z.string().max(2048),
-      pasos: z.array(PasoLogin).max(30),
-      indicador: IndicadorExito,
-      usuario: z.string().max(320),
-      secreto: z.instanceof(Uint8Array),
+      autenticacion: Autenticacion,
+      politicaDelEscaneo: Politica,
+      secreto: z.instanceof(Uint8Array).nullable(),
     })
     .strict(),
+  // La respuesta a «necesita-login»: el proxy de login, recién levantado, y el secreto.
+  z
+    .object({
+      tipo: z.literal('datos-login'),
+      proxy: ProxyDeContexto,
+      politica: Politica,
+      secreto: z.instanceof(Uint8Array).nullable(),
+    })
+    .strict(),
+  // No hay login: límite, login fallido o pausa cancelada. El proceso principal sabe por qué.
+  z.object({ tipo: z.literal('login-denegado') }).strict(),
   z.object({ tipo: z.literal('cancelar') }).strict(),
 ]);
 export type MensajeAlRunner = z.infer<typeof MensajeAlRunner>;
@@ -116,7 +188,7 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
       tipo: z.literal('escaneo-terminado'),
       paginasVisitadas: Cantidad,
       linksExcluidos: Cantidad,
-      detenido: z.enum(['max-paginas', 'max-tiempo']).nullable(),
+      detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
       noRecorridosSoloLectura: Cantidad,
       noRecorridosExclusiones: Cantidad,
       urlsDescartadas: Cantidad,
@@ -124,7 +196,37 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
     })
     .strict(),
   // Solo un resultado: ningún contenido de la página cruza este canal (EVI-01).
-  z.object({ tipo: z.literal('login-terminado'), funciono: z.boolean() }).strict(),
+  z
+    .object({
+      tipo: z.literal('login-terminado'),
+      resultado: z.enum(['funciono', 'fallo', 'ventana-cerrada', 'tiempo-agotado']),
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('necesita-login'),
+      motivo: z.enum(['inicial', 'planificada', 'vencida']),
+      // El anterior falló: el proceso principal decide si hay otro.
+      reintento: z.boolean(),
+    })
+    .strict(),
+  // El estado, para guardarlo cifrado en memoria. Nunca a la base ni al disco (ADR 026).
+  z.discriminatedUnion('resultado', [
+    z
+      .object({
+        tipo: z.literal('sesion'),
+        resultado: z.literal('ok'),
+        estado: EstadoSesion,
+        urlComprobacion: z.string().max(2048),
+      })
+      .strict(),
+    z
+      .object({
+        tipo: z.literal('sesion'),
+        resultado: z.enum(['fallo', 'ventana-cerrada', 'tiempo-agotado']),
+      })
+      .strict(),
+  ]),
   // La causa y el detalle van al log del proceso principal, no a la interfaz.
   z
     .object({

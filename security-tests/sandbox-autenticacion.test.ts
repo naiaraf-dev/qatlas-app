@@ -29,11 +29,9 @@ afterEach(async () => {
   sitio = undefined;
 });
 
-async function levantar(sesion?: {
-  inactividadMs?: number;
-  maximoMs?: number;
-  maximoPaginas?: number;
-}) {
+async function levantar(
+  sesion: { inactividadMs?: number; maximoMs?: number; maximoPaginas?: number } = {},
+) {
   reloj = 1_000_000;
   sitio = await iniciarSandbox({ puerto: 0, sesion, ahora: () => reloj });
   return sitio;

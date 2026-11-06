@@ -50,6 +50,24 @@ export function abrirNavegador(configuracion: Configuracion): Promise<Browser> {
   });
 }
 
+/**
+ * El navegador con ventana del login asistido: los mismos argumentos y el mismo sandbox, detrás del
+ * proxy de login. Solo para que la persona entre; el escaneo nunca corre acá.
+ */
+export function abrirNavegadorVisible(proxy: {
+  servidor: string;
+  usuario: string;
+  clave: string;
+}): Promise<Browser> {
+  return chromium.launch({
+    channel: 'chromium',
+    headless: false,
+    chromiumSandbox: true,
+    args: [...ARGUMENTOS_CHROMIUM],
+    proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave },
+  });
+}
+
 const METODOS_DE_LECTURA = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function hostYPuerto(texto: string): string {
@@ -147,23 +165,23 @@ export async function abrirContexto(
   return { contexto, vigilancia: await protegerContexto(contexto, politica, opciones) };
 }
 
-const esperar = (ms: number) =>
+export const esperar = (ms: number) =>
   new Promise((listo) => {
     setTimeout(listo, ms);
   });
 
-function aPatron(glob: string): RegExp {
+export function aPatron(glob: string): RegExp {
   const escapado = glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*+/g, '[^?#]*');
   return new RegExp(`^${escapado}$`);
 }
 
 /** Sin query ni fragmento: un parámetro no puede hacer que una pantalla de error parezca un éxito. */
-function urlSinQuery(texto: string): string {
+export function urlSinQuery(texto: string): string {
   const url = new URL(texto);
   return url.origin + url.pathname;
 }
 
-async function indicadorCumplido(pagina: Page, indicador: IndicadorExito): Promise<boolean> {
+export async function indicadorCumplido(pagina: Page, indicador: IndicadorExito): Promise<boolean> {
   if (indicador.tipo === 'url') return aPatron(indicador.patron).test(urlSinQuery(pagina.url()));
   const visibles = await pagina.locator(indicador.selector).first().isVisible();
   return indicador.tipo === 'aparece' ? visibles : !visibles;
@@ -188,9 +206,25 @@ export interface OpcionesLogin {
  */
 export async function probarLogin(
   contexto: BrowserContext,
-  { urlLogin, pasos, indicador, usuario, secreto, timeoutMs }: OpcionesLogin,
+  opciones: OpcionesLogin,
 ): Promise<boolean> {
   const pagina = await contexto.newPage();
+  try {
+    return await loginEnPagina(pagina, opciones);
+  } finally {
+    opciones.secreto.fill(0);
+    await pagina.close().catch(() => undefined);
+  }
+}
+
+/**
+ * El login por formulario en una página que queda abierta: el estado de sesión se toma después. No
+ * borra el secreto ni cierra la página; eso es de quien llama.
+ */
+export async function loginEnPagina(
+  pagina: Page,
+  { urlLogin, pasos, indicador, usuario, secreto, timeoutMs }: OpcionesLogin,
+): Promise<boolean> {
   pagina.setDefaultTimeout(timeoutMs);
   try {
     await pagina.goto(urlLogin, { timeout: timeoutMs, waitUntil: 'load' });
@@ -215,8 +249,5 @@ export async function probarLogin(
   } catch {
     // Sin el mensaje: un error de Playwright puede traer texto de la página.
     return false;
-  } finally {
-    secreto.fill(0);
-    await pagina.close().catch(() => undefined);
   }
 }

@@ -129,7 +129,9 @@ function buildImplementations(deps: IpcDependencies): Implementations {
       proyectos.eliminarCredencial(proyectoId, credencialId),
     'credenciales:probarLogin': ({ proyectoId, credencialId }) =>
       ejecuciones.probarLogin(proyectoId, credencialId),
-    'ejecuciones:lanzarEscaneo': ({ proyectoId }) => ejecuciones.lanzarEscaneo(proyectoId),
+    'ejecuciones:lanzarEscaneo': ({ proyectoId, credencialId }) =>
+      ejecuciones.lanzarEscaneo(proyectoId, credencialId),
+    'ejecuciones:reanudar': ({ ejecucionId }) => ejecuciones.reanudar(ejecucionId),
     'ejecuciones:cancelar': ({ ejecucionId }) => ejecuciones.cancelar(ejecucionId),
     'ejecuciones:listar': ({ proyectoId }) => ejecuciones.listar(proyectoId),
     'ejecuciones:detalle': ({ ejecucionId }) => ejecuciones.detalle(ejecucionId),

@@ -240,7 +240,8 @@ export function leerEjecucionesActivas(base: BaseCifrada): FilaEjecucion[] {
   return orm(base)
     .select()
     .from(ejecucion)
-    .where(inArray(ejecucion.estado, ['encolada', 'en-curso']))
+    // Pausada cuenta como activa: retiene la cola (RN-EJE-01).
+    .where(inArray(ejecucion.estado, ['encolada', 'en-curso', 'pausada']))
     .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
     .all();
 }

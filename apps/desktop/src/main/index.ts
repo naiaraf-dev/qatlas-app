@@ -198,7 +198,10 @@ async function cargarServicios(): Promise<{
       inactividad.registrarActividad(performance.now());
     },
   });
-  const proyectos = new Proyectos(boveda);
+  // Un cambio de credencial o de alcance deja sin valor la sesión guardada de ese proyecto (ADR 026).
+  const proyectos = new Proyectos(boveda, (proyectoId) => {
+    dependientes.ejecuciones?.descartarSesiones(proyectoId);
+  });
   const ejecuciones = new Ejecuciones(
     boveda,
     proyectos,

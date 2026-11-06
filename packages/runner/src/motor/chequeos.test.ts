@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  parametrosSensibles,
   analizarCookie,
   claveDeMensaje,
   esAntiCsrf,
@@ -252,5 +253,22 @@ describe('Varios', () => {
     expect(coincideExclusion(['Quitar todo', 'eliminar-todo'], ['eliminar'])).toBe(true);
     expect(coincideExclusion(['Ver detalle'], ['eliminar'])).toBe(false);
     expect(coincideExclusion(['CERRAR SESIÓN'], ['cerrar sesión'])).toBe(true);
+  });
+});
+
+describe('parametrosSensibles (semana 6b)', () => {
+  it.each([
+    ['https://x.test/a?token=abc', ['token:media']],
+    ['https://x.test/a?access_token=abc&vista=1', ['access_token:media']],
+    ['https://x.test/a?apiKey=abc', ['apiKey:media']],
+    ['https://x.test/a?api_key=abc', ['api_key:media']],
+    ['https://x.test/a?sessionId=1&SID=2', ['sessionId:media', 'SID:media']],
+    ['https://x.test/cb?code=abc&state=xyz', ['code:informativa']],
+    ['https://x.test/a?code=abc', ['code:media']],
+    ['https://x.test/a?tokenizer=1&authors=2&pagina=3', []],
+    ['https://x.test/a', []],
+    ['no es una url', []],
+  ])('%s', (url, esperado) => {
+    expect(parametrosSensibles(url).map((p) => `${p.nombre}:${p.severidad}`)).toEqual(esperado);
   });
 });

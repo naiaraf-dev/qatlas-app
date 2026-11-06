@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  credencialUsable,
   minutosMinimosDeEjecucion,
   type EjecucionResumen,
   type HallazgoVista,
@@ -32,9 +33,26 @@ const MOTIVOS: Record<MotivoFinEjecucion, string> = {
   bloqueo: 'Se canceló porque la bóveda se bloqueó.',
   interrumpida: 'La aplicación se cerró antes de que terminara.',
   usuario: 'La cancelaste.',
+  'login-fallido': 'No se pudo entrar con la credencial: no se cumplió el indicador de éxito.',
+  'limite-logins':
+    'Se detuvo para no bloquear la cuenta: llegó al máximo de logins (3 por sesión vencida en una ejecución, o 3 cada 15 minutos por credencial).',
+  'ventana-cerrada': 'La ventana del login asistido se cerró antes de entrar.',
+  'tiempo-agotado': 'Pasaron 5 minutos en la ventana del login asistido sin entrar.',
+  'pausa-vencida': 'Estuvo pausada 15 minutos sin que nadie la reanudara.',
+  'credencial-no-disponible': 'La credencial ya no existe o no se puede usar.',
 };
 
-const activa = ({ estado }: EjecucionResumen) => estado === 'encolada' || estado === 'en-curso';
+const activa = ({ estado }: EjecucionResumen) =>
+  estado === 'encolada' || estado === 'en-curso' || estado === 'pausada';
+
+const ESPERAS: Record<NonNullable<ProgresoEjecucion['espera']>, string> = {
+  'login-asistido':
+    'Entrá en la ventana del navegador de pruebas que se abrió. Tenés 5 minutos. Lo que hagas ahí no cuenta como actividad en QAtlas: si la bóveda se bloquea, la ejecución se cancela.',
+  'sesion-vencida':
+    'Pausada: la sesión venció. Reanudá para abrir la ventana y volver a entrar. Lo recorrido no se pierde; a los 15 minutos sin reanudar, se cancela.',
+  'enlace-vencido':
+    'Pausada: el enlace de entrada ya no sirve. Reemplazá el enlace en la credencial y reanudá. A los 15 minutos sin reanudar, se cancela.',
+};
 
 type Detalle = NonNullable<IpcResponse<'ejecuciones:detalle'>>;
 
@@ -68,6 +86,10 @@ function Cobertura({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
       `${resumen.urlsDescartadas} URLs descartadas por parecer infinitas, como un calendario.`,
     resumen.websocketDescartados > 0 &&
       `${resumen.websocketDescartados} mensajes de WebSocket descartados por el modo solo lectura. No es un error del sitio.`,
+    resumen.detenido === 'sesion' &&
+      'Se detuvo porque no se pudo volver a entrar: quedaron páginas sin recorrer.',
+    resumen.logins > 0 &&
+      `Logins: ${resumen.logins} (${resumen.loginsInesperados} por sesión vencida, ${resumen.renovaciones} renovaciones planificadas).`,
   ].filter((linea): linea is string => typeof linea === 'string');
   if (lineas.length === 0) return null;
   return (
@@ -139,6 +161,10 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<Detalle | null>(null);
   const [progreso, setProgreso] = useState<ProgresoEjecucion | null>(null);
+  const usables = proyecto.credenciales.filter(credencialUsable);
+  // Vacío: sin credencial, un escaneo anónimo.
+  const [credencialId, setCredencialId] = useState('');
+  const elegida = usables.find((c) => c.id === credencialId) ?? null;
 
   // En vivo, desde el proceso principal: página actual, hallazgos y conexiones bloqueadas.
   useEffect(() => window.qatlas.ejecuciones.alProgreso(setProgreso), []);
@@ -171,13 +197,19 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
 
   const lanzar = async () => {
     setRechazo(null);
-    const res = await window.qatlas.ejecuciones.lanzarEscaneo({ proyectoId: proyecto.id });
+    const res = await window.qatlas.ejecuciones.lanzarEscaneo({
+      proyectoId: proyecto.id,
+      credencialId: elegida?.id ?? null,
+    });
     if (!res.ok) setRechazo('No se pudo lanzar la ejecución.');
     else if (res.data.resultado === 'rechazada') {
       setRechazo(
-        res.data.motivo === 'ya-en-curso'
-          ? 'Ya hay una ejecución en curso en este proyecto.'
-          : 'Sin autorización vigente no se puede ejecutar nada.',
+        {
+          'ya-en-curso': 'Ya hay una ejecución en curso en este proyecto.',
+          'sin-autorizacion': 'Sin autorización vigente no se puede ejecutar nada.',
+          'credencial-no-usable':
+            'Esa credencial no se puede usar: revisá su indicador de éxito y su secreto.',
+        }[res.data.motivo],
       );
     }
     await cargar();
@@ -197,8 +229,36 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
         <p className="text-muted">
           Recorre el sitio en un navegador aislado, dentro de los dominios del proyecto, y busca
           errores, problemas de accesibilidad, de rendimiento y de seguridad. Todo el tráfico pasa
-          por el proxy de salida. El escaneo con login llega en la semana 6b.
+          por el proxy de salida. Con una credencial, entra con su rol y nunca visita el login ni
+          los links de cerrar sesión.
         </p>
+        <label className="flex flex-col gap-1.5">
+          <span className="font-medium">Iniciar sesión con</span>
+          <select
+            className="min-h-11 w-auto rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
+            value={credencialId}
+            onChange={(event) => {
+              setCredencialId(event.target.value);
+            }}
+          >
+            <option value="">Sin credencial: escaneo anónimo</option>
+            {proyecto.credenciales.map((c) => (
+              <option key={c.id} value={c.id} disabled={!credencialUsable(c)}>
+                {c.rol} · {c.nombre}
+                {credencialUsable(c) ? '' : ' (falta el indicador de éxito)'}
+              </option>
+            ))}
+          </select>
+          <span className="text-[13px] text-muted">
+            Comparar lo que ve cada rol llega en la fase 4.
+          </span>
+        </label>
+        {elegida?.estrategia === 'asistido' && (
+          <Aviso>
+            Se va a abrir una ventana del navegador de pruebas para que entres. Lo que hagas ahí no
+            cuenta como actividad en QAtlas: si la bóveda se bloquea, la ejecución se cancela.
+          </Aviso>
+        )}
         {bloqueoMinutos !== null && minutos > bloqueoMinutos && (
           <Aviso>
             Con estos límites puede durar más de {Math.ceil(minutos)} minutos, y la bóveda se
@@ -224,9 +284,15 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
                 className="flex flex-col gap-2 rounded-lg border border-border p-3"
               >
                 <p className="font-medium">
-                  {ejecucion.tipo === 'escaneo' ? 'Ejecución' : 'Prueba de login'}:{' '}
-                  {ESTADOS[ejecucion.estado]}
+                  {ejecucion.tipo === 'escaneo' ? 'Ejecución' : 'Prueba de login'}
+                  {ejecucion.rol ? ` con el rol ${ejecucion.rol}` : ''}: {ESTADOS[ejecucion.estado]}
                 </p>
+                {activa(ejecucion) &&
+                  (progreso?.ejecucionId === ejecucion.id && progreso.espera ? (
+                    <Aviso>{ESPERAS[progreso.espera]}</Aviso>
+                  ) : (
+                    ejecucion.estado === 'pausada' && <Aviso>{ESPERAS['sesion-vencida']}</Aviso>
+                  ))}
                 {ejecucion.resumen.motivo && (
                   <p className="text-[13.5px] text-muted">{MOTIVOS[ejecucion.resumen.motivo]}</p>
                 )}
@@ -250,6 +316,18 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
                   </>
                 )}
                 <div className="flex flex-wrap gap-2">
+                  {ejecucion.estado === 'pausada' && (
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        void window.qatlas.ejecuciones
+                          .reanudar({ ejecucionId: ejecucion.id })
+                          .then(cargar);
+                      }}
+                    >
+                      Reanudar
+                    </Button>
+                  )}
                   {activa(ejecucion) ? (
                     <Button
                       onClick={() => {

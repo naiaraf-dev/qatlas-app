@@ -56,3 +56,24 @@ export function minutosMinimosDeEjecucion(limites: {
 export function normalizarNombreProyecto(nombre: string): string {
   return nombre.trim().normalize('NFC').toLocaleLowerCase('es');
 }
+
+/**
+ * En un escaneo autenticado se vuelve a entrar sola (ADR 027): el tope de logins por sesión vencida en
+ * una ejecución, y cuánto espera una ejecución pausada antes de cancelarse.
+ */
+export const LIMITES_SESION = { loginsInesperados: 3, pausaMinutos: 15 } as const;
+
+/**
+ * Si una credencial se puede probar y usar en un escaneo. El indicador confirma el ingreso y, en un
+ * escaneo, que la sesión sigue; la básica alcanza con que la URL no responda 401.
+ */
+export function credencialUsable(credencial: {
+  requiereRevision: boolean;
+  estrategia: string;
+  secretoConfigurado: boolean;
+  indicadorExito: unknown;
+}): boolean {
+  if (credencial.requiereRevision) return false;
+  if (credencial.estrategia !== 'asistido' && !credencial.secretoConfigurado) return false;
+  return credencial.estrategia === 'basica' || credencial.indicadorExito !== null;
+}

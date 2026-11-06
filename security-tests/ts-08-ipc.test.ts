@@ -660,7 +660,11 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         noRecorridosExclusiones: 0,
         urlsDescartadas: 0,
         websocketDescartados: 0,
+        logins: 0,
+        loginsInesperados: 0,
+        renovaciones: 0,
       },
+      rol: null,
     };
     const conexion = {
       fecha: 'x',
@@ -762,8 +766,10 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
       paginasVisitadas: 1,
       hallazgos: 0,
       conexionesBloqueadas: 0,
+      espera: null,
     };
     expect(progreso.safeParse(valido).success).toBe(true);
+    expect(progreso.safeParse({ ...valido, espera: 'contrasena' }).success).toBe(false);
     expect(progreso.safeParse({ ...valido, detalle: 'x' }).success).toBe(false);
     expect(progreso.safeParse({ ...valido, hallazgos: -1 }).success).toBe(false);
   });

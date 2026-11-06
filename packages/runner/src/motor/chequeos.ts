@@ -33,6 +33,8 @@ export const SEVERIDAD: Readonly<Record<TipoHallazgo, SeveridadHallazgo>> = {
   'contenido-mixto': 'alta',
   'login-sin-cifrar': 'alta',
   'recurso-externo-bloqueado': 'informativa',
+  'parametro-sensible': 'media',
+  'secreto-en-almacenamiento': 'alta',
 };
 
 export function severidadDeAccesibilidad(impacto: string | null | undefined): SeveridadHallazgo {
@@ -274,4 +276,59 @@ export function coincideExclusion(
 ): boolean {
   const lugar = textos.join(' ').toLowerCase();
   return exclusiones.some((exclusion) => lugar.includes(exclusion.toLowerCase()));
+}
+
+/**
+ * Nombres de parámetro que suelen llevar un secreto, por segmentos (como las cookies): `access_token`
+ * y `apiKey` sí; `tokenizer` o `authors`, no. Del valor no se guarda nada.
+ */
+const SEGMENTOS_SENSIBLES = new Set([
+  'token',
+  'code',
+  'session',
+  'sessionid',
+  'sid',
+  'jwt',
+  'apikey',
+  'password',
+  'passwd',
+  'secret',
+  'auth',
+  'clave',
+  'contrasena',
+  'otp',
+]);
+
+export interface ParametroSensible {
+  nombre: string;
+  severidad: SeveridadHallazgo;
+}
+
+/**
+ * Los parámetros sensibles de una URL. Un `code` junto a un `state` es la vuelta de OAuth u OpenID
+ * Connect: el código es de un solo uso y de vida corta, y queda como informativo.
+ */
+export function parametrosSensibles(texto: string): ParametroSensible[] {
+  let url: URL;
+  try {
+    url = new URL(texto);
+  } catch {
+    return [];
+  }
+  const nombres = [...new Set(url.searchParams.keys())];
+  const conState = nombres.some((n) => n.toLowerCase() === 'state');
+  const encontrados: ParametroSensible[] = [];
+  for (const nombre of nombres) {
+    const segmentos = segmentosDeNombre(nombre);
+    const unido = segmentos.join('');
+    const sensible =
+      segmentos.some((s) => SEGMENTOS_SENSIBLES.has(s)) || SEGMENTOS_SENSIBLES.has(unido);
+    if (!sensible) continue;
+    const esCodigo = segmentos.length === 1 && segmentos[0] === 'code';
+    encontrados.push({
+      nombre: nombre.slice(0, 100),
+      severidad: esCodigo && conState ? 'informativa' : SEVERIDAD['parametro-sensible'],
+    });
+  }
+  return encontrados;
 }
