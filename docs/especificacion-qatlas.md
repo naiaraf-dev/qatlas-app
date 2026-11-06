@@ -43,6 +43,7 @@ usuario salvo por una acción explícita suya**.
 | 0.1         | Primera versión como aplicación web con servidor (PostgreSQL, API REST, multiusuario).                                                                                                                                       |
 | 0.2         | Pasa a aplicación de escritorio local-first, con SQLite cifrada y la seguridad como eje del diseño.                                                                                                                          |
 | 0.3         | Agrega importación de casos desde Excel, ejecución manual y UAT con acta de conformidad, monitor de logs, nuevos formatos de reporte (Excel, video, HTML, JUnit) y controles de seguridad para archivos de entrada y salida. |
+| 0.4         | Agrega el catálogo de estrategias de autenticación con sus fases, dominios de autenticación, roles por credencial, escaneo autenticado con vencimiento de sesión y pausa, y el chequeo de parámetros sensibles en la URL.      |
 
 ### Cambios de la versión 0.2 respecto de la 0.1
 
@@ -113,6 +114,9 @@ realiza las acciones que haría un usuario o un tester autorizado.
 | Plantilla de importación  | Configuración guardada que indica qué columna de un Excel corresponde a cada dato de un caso de prueba.                                       |
 | Fuente de log             | Archivo de log o contenedor del sistema probado que QAtlas lee durante una ejecución.                                                         |
 | Runner                    | Proceso aislado que ejecuta las pruebas con Playwright.                                                                                       |
+| Estrategia de login       | Cómo una credencial inicia sesión: formulario, SSO, enlace con token, login asistido o autenticación básica (6.2.1).                        |
+| Dominio de autenticación  | Dominio donde vive el login (un proveedor de identidad, un portal). Se usa solo durante el login; el escaneo nunca lo visita.               |
+| Estado de sesión          | Cookies y almacenamiento del navegador después de un login. Se guarda cifrado y solo en memoria.                                              |
 | IPC                       | Comunicación interna entre los procesos de la aplicación, sin pasar por la red.                                                               |
 
 # 2. Visión general del producto
@@ -479,6 +483,11 @@ se limpia automáticamente a los 30 segundos.
 - La aplicación excluye su carpeta de datos de la indexación de búsqueda
   del sistema operativo cuando la plataforma lo permite.
 
+- El estado de sesión de un escaneo autenticado nunca se escribe en
+  disco: vive cifrado con la clave del proyecto en la memoria del
+  proceso principal, y se descarta al bloquear, al cambiar la credencial
+  o el alcance, y a las 12 horas (ADR 026).
+
 ## 3.11 Cadena de suministro
 
 - **Dependencias mínimas:** cada dependencia nueva requiere
@@ -558,7 +567,7 @@ seguridad automatizada, obligatoria en CI:
 | TS-03  | Salida de red                   | Con un servidor de prueba que registra conexiones, se verifica que QAtlas no contacta ningún destino fuera de la lista permitida durante el uso completo de la app.                                                                                                                         |
 | TS-04  | Contención del crawler          | La app de prueba incluye links y redirecciones a otros dominios, WebSockets y service workers: ninguno llega a destino.                                                                                                                                                                     |
 | TS-05  | Modo solo lectura y exclusiones | El crawler no envía requests de escritura ni toca botones excluidos (servidor de prueba que registra métodos). Hasta la semana 6 cubre escrituras y links: el recorrido mínimo no hace clics.                                                                                               |
-| TS-06  | Login no grabado                | La contraseña no aparece en video (inspección de fotogramas OCR), traza ni HAR.                                                                                                                                                                                                             |
+| TS-06  | Login no grabado                | El login corre en un contexto que nunca graba. La contraseña no aparece en video (inspección de fotogramas OCR), traza, HAR, estado de sesión, perfil del navegador, base ni logs; tampoco la que la persona escribe en la ventana del login asistido, aunque el sitio la guarde en el navegador. |
 | TS-07  | Configuración de Electron       | Análisis estático (Electronegativity) y verificación de fuses, CSP y opciones de ventana del build final.                                                                                                                                                                                   |
 | TS-08  | IPC                             | Mensajes malformados o desde orígenes no esperados se rechazan.                                                                                                                                                                                                                             |
 | TS-09  | Bloqueo                         | Tras el bloqueo automático, ningún dato es accesible y las claves no están en memoria del renderer.                                                                                                                                                                                         |
@@ -877,7 +886,15 @@ Registro de cada sistema a probar, con sus límites de seguridad.
 - Modo datos sensibles y selectores sensibles para enmascarar.
 
 - Credenciales de prueba cifradas, con definición del login y botón
-  "Probar login".
+  "Probar login". Cada una con su estrategia de login (6.2.1) y su rol;
+  un proyecto puede tener varias, una por rol.
+
+- Dominios de autenticación: donde vive el login de otro proveedor. Son
+  parte del alcance autorizado, se usan solo durante el login y el
+  escaneo nunca los visita.
+
+- Duración máxima de la sesión (opcional, de 2 a 720 minutos): en un
+  escaneo autenticado, QAtlas vuelve a entrar un minuto antes.
 
 - Opciones relajables, desactivadas por defecto y registradas en la
   auditoría: "Sistema interno" y "Permitir login sin cifrar (http)" (ADR
@@ -908,13 +925,53 @@ Registro de cada sistema a probar, con sus límites de seguridad.
 - RN-PRY-06: los nombres de proyecto son únicos, sin distinguir
   mayúsculas.
 
-- RN-PRY-07: la URL de login pertenece a un dominio permitido. En http,
-  solo en localhost, 127.0.0.1 y .test, salvo con la opción explícita.
-  Una credencial que deja de cumplirlo no se puede usar hasta corregirla.
+- RN-PRY-07: la URL de login pertenece a un dominio permitido o a un
+  dominio de autenticación. En http, solo en localhost, 127.0.0.1 y
+  .test, salvo con la opción explícita. Una credencial que deja de
+  cumplirlo no se puede usar hasta corregirla. En el enlace con token, lo
+  mismo vale para el enlace.
 
-- RN-PRY-08: "Probar login" exige un indicador de éxito y admite hasta 3
-  intentos cada 15 minutos por credencial. Antes de probar se avisa que
-  un intento fallido puede bloquear la cuenta en el sistema probado.
+- RN-PRY-08: "Probar login" exige un indicador de éxito (en la
+  autenticación básica alcanza con que la URL no responda 401) y admite
+  hasta 3 intentos cada 15 minutos por credencial. Antes de probar se
+  avisa que un intento fallido puede bloquear la cuenta en el sistema
+  probado. El login asistido no entra en ese límite: lo hace una persona.
+
+- RN-PRY-09: el rol es único en el proyecto, sin distinguir mayúsculas.
+
+- RN-PRY-10: la estrategia de una credencial no se cambia: el secreto
+  guardado es de otra forma (una contraseña no es un enlace). Para otra
+  estrategia se crea otra credencial (ADR 025).
+
+- RN-PRY-11: los dominios de autenticación son parte del alcance:
+  aparecen en la declaración y cambiarlos exige volver a aceptarla.
+
+### 6.2.1 Estrategias de autenticación
+
+Cada credencial entra de una forma. Ninguna tiene un campo de texto
+libre para un valor secreto: el secreto, si lo hay, viaja solo del
+formulario al proceso principal, se guarda cifrado y llega al runner
+solo en el momento del login. El login corre siempre en un contexto
+aparte, detrás de un proxy de login (alcance más dominios de
+autenticación), sin video, traza, HAR ni capturas (ADR 025).
+
+| **Estrategia** | **Fase** | **Qué guarda** | **Cómo entra** | **Si la sesión vence** |
+|---|---|---|---|---|
+| Formulario de login | 1 (semana 6b) | Usuario y contraseña, cifrada | Completa el formulario con los pasos configurados | Vuelve a entrar sola |
+| SSO con redirección (OpenID Connect, OAuth, SAML) | 1 (semana 6b) | Usuario y contraseña, cifrada | Sigue la redirección al proveedor, que debe estar en los dominios de autenticación, y completa sus pasos allá | Vuelve a entrar sola; la sesión del proveedor no se guarda |
+| Enlace con token (portal) | 1 (semana 6b) | El enlace completo, cifrado; la URL de login sale de él, sin el token | Abre el enlace | Vuelve a entrar con el mismo enlace; si es de un solo uso, pausa y pide uno nuevo |
+| Login asistido (segundo factor, captcha, enlace por correo) | 1 (semana 6b) | Nada | Abre una ventana del navegador de pruebas y la persona entra a mano; QAtlas mira el indicador | Pausa y avisa; al reanudar abre la ventana otra vez |
+| Autenticación HTTP básica | 1 (semana 6b) | Usuario y contraseña, cifrada | QAtlas la pone en cada pedido al origen de la URL base, y a ningún otro | No vence |
+| TOTP automático | 2 | La semilla, cifrada como un secreto más | Calcula el código del segundo factor en el momento del login | Vuelve a entrar sola |
+| Token en encabezado (Bearer) | 2 | El token, cifrado | Lo agrega a los pedidos al origen base, como la básica | Pide un token nuevo |
+| Confiar en un certificado por su huella | 2 | La huella, auditada | Acepta solo ese certificado de un sistema interno, nunca "cualquier certificado" | — |
+| Certificado de cliente (mTLS) | 3 | El certificado y su clave, cifrados | El navegador lo presenta solo al origen del proyecto | — |
+| Importar una sesión existente | 3 | El estado importado, cifrado y en memoria, como uno propio | Se elige el archivo con el diálogo del sistema (3.14), nunca una ruta desde la interfaz | Pausa y pide otra |
+
+En todas: el escaneo nunca visita la URL de login ni un dominio de
+autenticación, y el estado de sesión se filtra a los dominios del
+alcance y sin ningún valor que contenga un secreto. Si el sitio guarda
+la contraseña en el navegador, se reporta (6.3).
 
 ## 6.3 Escaneo automático (ESC)
 
@@ -945,7 +1002,12 @@ definir casos.
   sin Secure o HttpOnly, formularios de login sobre HTTP, scripts de
   terceros detectados (dominios bloqueados por el proxy).
 
-- Escaneo autenticado con las credenciales del proyecto.
+- **Escaneo autenticado** con una credencial elegida al lanzar, con su
+  rol (6.2.1). Comparar lo que ve cada rol llega en la fase 4.
+
+- **Parámetros sensibles en la URL** (token, code, session, jwt,
+  api_key, password y parecidos, por segmentos del nombre): se guarda el
+  nombre, nunca el valor.
 
 ### Reglas
 
@@ -959,6 +1021,22 @@ definir casos.
   de exclusiones.
 
 - RN-ESC-04: una URL se analiza una sola vez por escaneo.
+
+- RN-ESC-06: el escaneo autenticado nunca visita la URL de login, un
+  dominio de autenticación ni un "cerrar sesión": suma solas las
+  exclusiones de cierre (logout, salir, cerrar sesión y parecidas).
+
+- RN-ESC-07: una redirección al login o a un dominio de autenticación,
+  un 401, un 403 que no es del proxy o el formulario de login en
+  pantalla son solo una sospecha. Se confirma volviendo a la página donde
+  se confirmó el login y mirando el indicador. Si la sesión sigue, la
+  página se analiza como siempre (un 403 por rol es un hallazgo más). Si
+  venció, la página vuelve a la cola sin analizarse, se vuelve a entrar y
+  se sigue: nunca hay hallazgos de la pantalla de login (ADR 027).
+
+- RN-ESC-08: con una duración máxima de sesión, se vuelve a entrar un
+  minuto antes. El tiempo de los logins y de las pausas no cuenta para
+  el tiempo máximo.
 
 - RN-ESC-05: se detiene al alcanzar el máximo de páginas o de tiempo
   (`max_minutos` del proyecto, 30 por defecto), y lo informa. El resumen
@@ -979,6 +1057,9 @@ definir casos.
 | Cookie de sesión insegura / contenido mixto / login sobre HTTP | Alta                      |
 | Cookie sin vencimiento y sin HttpOnly, sin indicio de sesión    | Informativa               |
 | Script o recurso de dominio externo bloqueado                  | Informativa               |
+| Contraseña guardada por el sitio en cookies o localStorage     | Alta                      |
+| Parámetro sensible en la URL                                    | Media                     |
+| code junto a state (vuelta de OAuth u OpenID Connect)          | Informativa               |
 | Página lenta, LCP lento, request lenta, página pesada           | Baja                      |
 
 Los criterios de cada chequeo, los umbrales de rendimiento y lo que no
@@ -999,6 +1080,10 @@ Lanzamiento, seguimiento e historial de las corridas.
 
 - Cancelar, re-ejecutar y comparar ejecuciones.
 
+- Pausa en un escaneo autenticado: cuando hace falta la persona (la
+  sesión del login asistido venció o el enlace ya no sirve), la ejecución
+  queda pausada, lo avisa y sigue al reanudar, sin perder lo recorrido.
+
 - Detalle con resumen, páginas visitadas, hallazgos, evidencias y visor
   de trazas aislado.
 
@@ -1008,6 +1093,15 @@ Lanzamiento, seguimiento e historial de las corridas.
 
 - RN-EJE-02: si no se pueden aplicar los controles de red, la ejecución
   no comienza.
+
+- RN-EJE-03: en un escaneo autenticado, como mucho 3 logins por sesión
+  vencida en una ejecución; las renovaciones planificadas no cuentan para
+  ese tope, pero sí para el límite de 3 cada 15 minutos por credencial
+  (RN-PRY-08). Un login que vuelve a dar sesión vencida enseguida cuenta:
+  es el bucle que el tope corta (ADR 027).
+
+- RN-EJE-04: una ejecución pausada cuenta como activa (retiene la cola)
+  y se cancela si nadie la reanuda en 15 minutos.
 
 ## 6.5 Hallazgos, reportes y exportación (REP)
 

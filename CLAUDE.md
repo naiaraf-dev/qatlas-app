@@ -29,7 +29,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Fase 1, semana 6a terminada: crawler y chequeos del escaneo (ESC), `pagina_visitada`, `hallazgo` y
   `hallazgo_ocurrencia` con el detalle cifrado, evento `ejecuciones:progreso`, TS-05 completo y el oráculo
   del sandbox. Ver las ADR 021 a 024.
-- Próximo: semana 6b, login real y escaneo autenticado; TS-06.
+- Fase 1, semana 6b terminada: estrategias de login (formulario, SSO, enlace con token, asistido, básica), roles,
+  dominios de autenticación, proxy de login aparte, estado de sesión en memoria y cifrado, sesión vencida con
+  confirmación, límites y pausa, parámetros sensibles, TS-06 y la zona con login del sandbox. Ver las ADR 025 a 029
+  y el catálogo de estrategias en la especificación (6.2.1).
+- Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
+- El runner es  (runner.ts); entrada-runner.ts solo lo conecta al . Un E2E que necesita
+  manejar la ventana del login asistido corre los servicios y el runner en su proceso ().
+- El estado de sesión nunca va a la base ni a disco. Un cambio que deja sin valor una sesión avisa con el callback
+  de  ().
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
