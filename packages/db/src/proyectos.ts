@@ -237,13 +237,15 @@ export function leerEjecuciones(base: BaseCifrada, proyectoId: string): FilaEjec
 
 /** Las que no terminaron, en orden de llegada. */
 export function leerEjecucionesActivas(base: BaseCifrada): FilaEjecucion[] {
-  return orm(base)
-    .select()
-    .from(ejecucion)
-    // Pausada cuenta como activa: retiene la cola (RN-EJE-01).
-    .where(inArray(ejecucion.estado, ['encolada', 'en-curso', 'pausada']))
-    .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
-    .all();
+  return (
+    orm(base)
+      .select()
+      .from(ejecucion)
+      // Pausada cuenta como activa: retiene la cola (RN-EJE-01).
+      .where(inArray(ejecucion.estado, ['encolada', 'en-curso', 'pausada']))
+      .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
+      .all()
+  );
 }
 
 export function actualizarEjecucion(
