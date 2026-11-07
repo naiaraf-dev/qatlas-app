@@ -82,6 +82,9 @@ export interface QatlasApi {
     detalle(
       req: IpcRequest<'ejecuciones:detalle'>,
     ): Promise<IpcResult<IpcResponse<'ejecuciones:detalle'>>>;
+    reanudar(
+      req: IpcRequest<'ejecuciones:reanudar'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:reanudar'>>>;
     /** Devuelve la función para dejar de escuchar. */
     alProgreso(oyente: (progreso: ProgresoEjecucion) => void): () => void;
   };

@@ -3,6 +3,8 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
+  // Los E2E que usan la bóveda importan better-sqlite3: sin esto, Playwright cargaría sus tipos.
+  tsconfig: './tsconfig.e2e.json',
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

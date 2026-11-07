@@ -17,6 +17,8 @@ cifrar. Chromium no ofrece una carpeta de perfil cifrada.
   `TMPDIR`, y esa ruta no puede pasar de 107 bytes. Con una carpeta de datos más larga, la ejecución falla sin abrir nada,
   y el log dice por qué.
 - **Se borra al terminar,** y al arrancar se borra cualquier carpeta de una ejecución cortada.
+- **La ventana del login asistido** (ADR 028) tiene un perfil persistente propio, para apagar el gestor de
+  contraseñas: va dentro de la carpeta de la ejecución (`asistido-…`), así que lo alcanzan las mismas limpiezas.
 - **Descargas bloqueadas.** El estado de sesión del login cifrado llega en la semana 6.
 
 ## Medido

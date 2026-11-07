@@ -21,6 +21,26 @@ const VARIABLES_PERMITIDAS = [
   'USERPROFILE',
 ];
 
+/**
+ * El navegador con ventana del login asistido necesita el servidor gráfico. En Windows no hace falta
+ * nada; en Linux, sin estas el runner no puede abrir la ventana. Solo estos nombres, exactos, y solo
+ * para el runner: el proxy no las recibe.
+ */
+const VARIABLES_DE_PANTALLA_LINUX = ['DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY'] as const;
+
+export function variablesDePantalla(
+  origen: NodeJS.ProcessEnv,
+  plataforma: NodeJS.Platform,
+): Record<string, string> {
+  if (plataforma !== 'linux') return {};
+  const entorno: Record<string, string> = {};
+  for (const nombre of VARIABLES_DE_PANTALLA_LINUX) {
+    const valor = origen[nombre];
+    if (valor !== undefined) entorno[nombre] = valor;
+  }
+  return entorno;
+}
+
 export function entornoMinimo(
   origen: NodeJS.ProcessEnv,
   extra: Record<string, string>,

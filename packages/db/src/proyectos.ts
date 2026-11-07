@@ -36,7 +36,7 @@ type NuevaAutorizacion = Omit<
 type NuevaCredencial = Omit<FilaCredencial, Comunes | 'secretoActualizadoEn'>;
 type DatosCredencial = Pick<
   FilaCredencial,
-  'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin' | 'indicadorExito'
+  'nombre' | 'usuario' | 'urlLogin' | 'pasosLogin' | 'indicadorExito' | 'estrategia' | 'rol'
 >;
 
 /** Lista cerrada: un valor del usuario no puede terminar acá. */
@@ -164,11 +164,22 @@ export function actualizarCredencial(
     .run();
 }
 
-export function reemplazarSecretoCredencial(base: BaseCifrada, id: string, secreto: Buffer): void {
+/** `urlLogin` cambia junto con el secreto en el token en la URL: sale del enlace nuevo. */
+export function reemplazarSecretoCredencial(
+  base: BaseCifrada,
+  id: string,
+  secreto: Buffer,
+  urlLogin?: string,
+): void {
   const ahora = new Date().toISOString();
   orm(base)
     .update(credencial)
-    .set({ secreto, secretoActualizadoEn: ahora, updatedAt: ahora })
+    .set({
+      secreto,
+      secretoActualizadoEn: ahora,
+      updatedAt: ahora,
+      ...(urlLogin === undefined ? {} : { urlLogin }),
+    })
     .where(eq(credencial.id, id))
     .run();
 }
@@ -226,12 +237,15 @@ export function leerEjecuciones(base: BaseCifrada, proyectoId: string): FilaEjec
 
 /** Las que no terminaron, en orden de llegada. */
 export function leerEjecucionesActivas(base: BaseCifrada): FilaEjecucion[] {
-  return orm(base)
-    .select()
-    .from(ejecucion)
-    .where(inArray(ejecucion.estado, ['encolada', 'en-curso']))
-    .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
-    .all();
+  return (
+    orm(base)
+      .select()
+      .from(ejecucion)
+      // Pausada cuenta como activa: retiene la cola (RN-EJE-01).
+      .where(inArray(ejecucion.estado, ['encolada', 'en-curso', 'pausada']))
+      .orderBy(asc(ejecucion.createdAt), asc(sql`rowid`))
+      .all()
+  );
 }
 
 export function actualizarEjecucion(

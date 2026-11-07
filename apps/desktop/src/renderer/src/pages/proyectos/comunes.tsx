@@ -30,10 +30,17 @@ export const MENSAJES: Record<MotivoValidacion, string> = {
   'puertos-sin-host-local':
     'Para declarar puertos, agregá localhost, 127.0.0.1 o un dominio .test.',
   'nombre-repetido': 'Ya hay un proyecto con ese nombre.',
-  'login-fuera-de-dominios': 'La URL de login tiene que estar dentro de los dominios permitidos.',
+  'login-fuera-de-dominios':
+    'Tiene que estar dentro de los dominios permitidos o de los dominios de autenticación.',
   'login-sin-cifrar':
     'En http el secreto viajaría sin cifrar. Usá https o activá «Permitir login sin cifrar».',
   'declaracion-distinta': 'La declaración cambió. Revisala y aceptala de nuevo.',
+  'rol-repetido': 'Ya hay una credencial con ese rol en este proyecto.',
+  'secreto-requerido': 'Esta forma de login necesita un secreto.',
+  'secreto-no-corresponde': 'El login asistido no guarda ningún secreto.',
+  'usuario-requerido': 'Completá el usuario.',
+  'estrategia-fija': 'La forma de login no se cambia. Para otra, creá una credencial nueva.',
+  'estrategia-no-disponible': 'Esa forma de login todavía no se puede usar.',
 };
 
 export function proyectoNuevo(): ProyectoEntrada {
@@ -46,6 +53,7 @@ export function proyectoNuevo(): ProyectoEntrada {
     puertosLocales: [],
     exclusiones: [...EXCLUSIONES_POR_DEFECTO],
     selectoresSensibles: [],
+    dominiosAutenticacion: [],
   };
 }
 
@@ -216,6 +224,43 @@ function CampoPuertos({
   );
 }
 
+/**
+ * Donde vive el login de otro proveedor (ADR 025): se usan solo durante el login, el escaneo nunca los
+ * visita, y son parte del alcance que se autoriza.
+ */
+function CampoDominiosAutenticacion({
+  dominios,
+  onChange,
+  errores,
+}: {
+  dominios: readonly string[];
+  onChange: (dominios: string[]) => void;
+  errores: readonly string[];
+}) {
+  const [texto, setTexto] = useState(aLineas(dominios));
+  return (
+    <Campo
+      etiqueta="Dominios de autenticación"
+      ayuda="Opcional. Uno por línea: el proveedor de identidad o el portal por donde se entra, como idp.lexora.test. Se usan solo durante el login; el escaneo nunca los visita. Si cambian, hay que aceptar la autorización de nuevo."
+      errores={errores}
+    >
+      {(props) => (
+        <textarea
+          {...props}
+          className={`${CLASE_ENTRADA} py-2`}
+          rows={2}
+          value={texto}
+          spellCheck={false}
+          onChange={(event) => {
+            setTexto(event.target.value);
+            onChange(deLineas(event.target.value));
+          }}
+        />
+      )}
+    </Campo>
+  );
+}
+
 /** Lo que el asistente y la edición comparten: el alcance. */
 export function CamposAlcance({
   valor,
@@ -273,6 +318,13 @@ export function CamposAlcance({
           />
         )}
       </Campo>
+      <CampoDominiosAutenticacion
+        dominios={valor.dominiosAutenticacion}
+        onChange={(dominiosAutenticacion) => {
+          onChange({ dominiosAutenticacion });
+        }}
+        errores={erroresDe(errores, 'dominiosAutenticacion')}
+      />
       <CampoPuertos
         puertos={valor.puertosLocales}
         onChange={(puertosLocales) => {
@@ -291,6 +343,45 @@ export function CamposAlcance({
     </>
   );
 }
+
+/** Vacío: la sesión dura lo que el sistema probado diga. Lo inválido no se manda. */
+function CampoSesionMaxima({
+  minutos,
+  onChange,
+}: {
+  minutos: number | null;
+  onChange: (minutos: number | null) => void;
+}) {
+  const [texto, setTexto] = useState(minutos === null ? '' : String(minutos));
+  const { min, max } = LIMITE_SESION_MINUTOS;
+  const invalido = texto.trim() !== '' && !sesionValida(Number(texto));
+  return (
+    <Campo
+      etiqueta="La sesión dura como máximo (minutos)"
+      ayuda={`Opcional, de ${min} a ${max}. En un escaneo autenticado, QAtlas vuelve a entrar un minuto antes de que venza. Vacío: se detecta cuando vence.`}
+      errores={invalido ? [`Tiene que ser un número entero de ${min} a ${max}.`] : []}
+    >
+      {(props) => (
+        <input
+          {...props}
+          inputMode="numeric"
+          className={CLASE_ENTRADA}
+          value={texto}
+          autoComplete="off"
+          onChange={(event) => {
+            setTexto(event.target.value);
+            const texto = event.target.value.trim();
+            onChange(texto === '' ? null : Number(texto));
+          }}
+        />
+      )}
+    </Campo>
+  );
+}
+
+const LIMITE_SESION_MINUTOS = { min: 2, max: 720 } as const;
+const sesionValida = (n: number) =>
+  Number.isInteger(n) && n >= LIMITE_SESION_MINUTOS.min && n <= LIMITE_SESION_MINUTOS.max;
 
 /** Límites y controles del escaneo. */
 export function CamposControles({
@@ -321,6 +412,12 @@ export function CamposControles({
           </Campo>
         ))}
       </div>
+      <CampoSesionMaxima
+        minutos={valor.sesionMaxMinutos}
+        onChange={(sesionMaxMinutos) => {
+          onChange({ sesionMaxMinutos });
+        }}
+      />
       <Casilla
         etiqueta="Modo solo lectura"
         ayuda="Bloquea POST, PUT, PATCH y DELETE durante los escaneos, salvo el login configurado."
@@ -395,6 +492,7 @@ export function limpiar(valor: ProyectoEntrada): ProyectoEntrada {
 
 /** Evita mandar por IPC algo que el esquema va a rechazar sin decir por qué. */
 export function numerosValidos(valor: ProyectoEntrada): boolean {
+  if (valor.sesionMaxMinutos !== null && !sesionValida(valor.sesionMaxMinutos)) return false;
   return CAMPOS_NUMERICOS.every(({ campo }) => {
     const { min, max } = LIMITES_PROYECTO[campo];
     const numero = valor[campo];

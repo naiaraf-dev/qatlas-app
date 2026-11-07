@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EXCLUSIONES_POR_DEFECTO,
   PROYECTO_POR_DEFECTO,
@@ -28,6 +28,7 @@ const ENTRADA: ProyectoEntrada = {
   puertosLocales: [3000],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
+  dominiosAutenticacion: [],
 };
 const PASOS = [{ accion: 'click' as const, selector: 'button' }];
 
@@ -43,11 +44,14 @@ let alRegistrarProxy:
   ((r: { destino: string; permitida: boolean; regla: string }) => void) | undefined;
 let proxyYaCaido: boolean;
 let progresos: ProgresoEjecucion[];
+/** Los dominios de cada proxy que se levantó: el del escaneo y los de login. */
+let politicasProxy: string[][];
 let runnerActual: { emitir: (m: MensajeDelRunner) => void; salir: () => void } | undefined;
 
 const lanzador: LanzadorDeProcesos = {
-  iniciarProxy: (_datos, alRegistrar) => {
+  iniciarProxy: (datos, alRegistrar) => {
     registro.push('proxy');
+    politicasProxy.push([...datos.politica.dominios]);
     alRegistrarProxy = alRegistrar;
     if (falloProxy) return Promise.reject(new Error('sin proxy'));
     return Promise.resolve({
@@ -88,7 +92,10 @@ const lanzador: LanzadorDeProcesos = {
   },
 };
 
-const terminado = (paginasVisitadas: number, linksExcluidos: number): MensajeDelRunner => ({
+const terminado = (
+  paginasVisitadas: number,
+  linksExcluidos: number,
+): Extract<MensajeDelRunner, { tipo: 'escaneo-terminado' }> => ({
   tipo: 'escaneo-terminado',
   paginasVisitadas,
   linksExcluidos,
@@ -122,10 +129,15 @@ function lanzar(proyectoId: string): string {
 const estado = (proyectoId: string, id: string) =>
   ejecuciones.listar(proyectoId).find((e) => e.id === id);
 
+let roles = 0;
+
 function guardarCredencial(proyectoId: string, conIndicador = true): string {
+  roles += 1;
   const res = proyectos.guardarCredencial({
     proyectoId,
     nombre: 'Prueba',
+    rol: `rol-${roles}`,
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'http://localhost:5173/login',
     pasosLogin: PASOS,
@@ -138,6 +150,7 @@ function guardarCredencial(proyectoId: string, conIndicador = true): string {
 
 beforeEach(async () => {
   registro = [];
+  politicasProxy = [];
   mensajes = [];
   falloProxy = false;
   proxyYaCaido = false;
@@ -453,6 +466,7 @@ describe('Resultados del escaneo', () => {
       paginasVisitadas: 2,
       hallazgos: 0,
       conexionesBloqueadas: 0,
+      espera: null,
     });
     runnerActual?.emitir(terminado(2, 0));
     expect(progresos.at(-1)?.estado).toBe('finalizada');
@@ -532,7 +546,7 @@ describe('Resultados del escaneo', () => {
       noRecorridosExclusiones: 5,
       urlsDescartadas: 6,
       websocketDescartados: 7,
-    } as MensajeDelRunner);
+    });
     expect(estado(proyecto, id)?.resumen).toMatchObject({
       paginasVisitadas: 3,
       linksExcluidos: 2,
@@ -694,7 +708,7 @@ describe('Monitor de conexiones', () => {
 describe('Probar login', () => {
   const responderLogin = async (funciono: boolean) => {
     await pausa();
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: funciono ? 'funciono' : 'fallo' });
   };
 
   it('sin indicador de éxito no se abre nada', async () => {
@@ -752,10 +766,10 @@ describe('Probar login', () => {
     await responderLogin(true);
     await resultado;
     const conSecreto = mensajes.filter(
-      (m) => m.tipo === 'login' && Buffer.from(m.secreto).toString() === SECRETO,
+      (m) => m.tipo === 'probar-login' && Buffer.from(m.secreto ?? []).toString() === SECRETO,
     );
     expect(conSecreto).toHaveLength(1);
-    expect(mensajes.filter((m) => m.tipo !== 'login')).toEqual([{ tipo: 'cancelar' }]);
+    expect(mensajes.filter((m) => m.tipo !== 'probar-login')).toEqual([{ tipo: 'cancelar' }]);
   });
 
   it('si el proxy no arranca, el secreto ni se descifra', async () => {
@@ -797,10 +811,10 @@ describe('Probar login: límite de intentos', () => {
   async function intentar(servicio: ServicioEjecuciones, proyecto: string, credencial: string) {
     const resultado = servicio.probarLogin(proyecto, credencial);
     await pausa();
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'fallo' });
     return resultado;
   }
-  const logins = () => mensajes.filter((m) => m.tipo === 'login');
+  const logins = () => mensajes.filter((m) => m.tipo === 'probar-login');
 
   beforeEach(() => {
     ahora = Date.parse('2026-11-01T12:00:00.000Z');
@@ -835,7 +849,7 @@ describe('Probar login: límite de intentos', () => {
     for (let i = 0; i < 3; i++) {
       const resultado = servicio.probarLogin(proyecto, credencial);
       await pausa();
-      runnerActual?.emitir({ tipo: 'login-terminado', funciono: true });
+      runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'funciono' });
       expect(await resultado).toEqual({ resultado: 'funciono' });
     }
     expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');
@@ -914,7 +928,7 @@ describe('Probar login: límite de intentos', () => {
     );
     expect(filas.n).toBe(1);
     expect(logins()).toHaveLength(1);
-    runnerActual?.emitir({ tipo: 'login-terminado', funciono: false });
+    runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'fallo' });
     await resultado;
   });
 
@@ -961,6 +975,10 @@ describe('Carpeta de perfiles', () => {
     const huerfano = path.join(carpeta, 'perfiles', 'cortada');
     mkdirSync(huerfano, { recursive: true });
     writeFileSync(path.join(huerfano, 'x'), 'y');
+    // También el perfil de la ventana del asistido, que va adentro de la carpeta de la ejecución.
+    const ventana = path.join(huerfano, 'asistido-abc123', 'Default');
+    mkdirSync(ventana, { recursive: true });
+    writeFileSync(path.join(ventana, 'Preferences'), '{}');
     const { limpiarPerfilesHuerfanos } = await import('./perfiles');
     limpiarPerfilesHuerfanos(carpeta);
     expect(readdirSync(path.join(carpeta, 'perfiles'))).toEqual([]);
@@ -994,5 +1012,449 @@ describe('Carpeta de perfiles', () => {
       { TEMP: 'z' },
     );
     expect(entorno).toEqual({ SystemRoot: 'C:\\Windows', SystemDrive: 'C:', TEMP: 'z' });
+  });
+
+  it('las variables de pantalla: solo en Linux, solo esos nombres exactos (ADR 028)', async () => {
+    const { entornoMinimo, variablesDePantalla } = await import('./perfiles');
+    const padre = {
+      PATH: '/usr/bin',
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+      DISPLAY_EXTRA: 'x',
+      XAUTHORITY_OTRA: 'x',
+      display: 'x',
+      XDG_SESSION_TYPE: 'x11',
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      SECRETO_DEL_PADRE: 'x',
+    };
+    expect(variablesDePantalla(padre, 'linux')).toEqual({
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+    });
+    expect(variablesDePantalla(padre, 'win32')).toEqual({});
+    expect(variablesDePantalla(padre, 'darwin')).toEqual({});
+    expect(variablesDePantalla({ PATH: '/usr/bin' }, 'linux')).toEqual({});
+    // El runner en Linux: lo de siempre más esas tres, y nada más del padre.
+    expect(entornoMinimo(padre, { ...variablesDePantalla(padre, 'linux'), TEMP: 'z' })).toEqual({
+      PATH: '/usr/bin',
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+      TEMP: 'z',
+    });
+    // Sin pedirlas, no pasan: el proxy no las recibe.
+    expect(entornoMinimo(padre, {})).toEqual({ PATH: '/usr/bin' });
+  });
+});
+
+describe('Escaneo autenticado (ADR 025 a 027)', () => {
+  const MINUTO = 60_000;
+  let ahora: number;
+  let servicio: ServicioEjecuciones;
+  const ESTADO = {
+    cookies: [
+      {
+        name: 'app_sesion',
+        value: 'valor-de-sesion-inventado-55',
+        domain: 'localhost',
+        path: '/',
+        expires: -1,
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax' as const,
+      },
+    ],
+    origins: [],
+  };
+
+  beforeEach(() => {
+    ahora = Date.parse('2026-11-01T12:00:00.000Z');
+    servicio = new ServicioEjecuciones(
+      boveda,
+      proyectos,
+      lanzador,
+      () => ahora,
+      (p) => progresos.push(p),
+    );
+  });
+
+  function proyectoConAuth(): string {
+    const entrada = { ...ENTRADA, dominiosAutenticacion: ['idp.example.test'] };
+    const { declaracion } = proyectos.validar(entrada);
+    if (!declaracion) throw new Error('Entrada inválida');
+    const res = proyectos.crear(entrada, { aceptada: true, ...declaracion });
+    if (res.resultado !== 'creado') throw new Error('No se creó');
+    return res.id;
+  }
+
+  function credencialDe(proyectoId: string, estrategia: 'formulario' | 'asistido' | 'token-url') {
+    roles += 1;
+    const comunes = {
+      proyectoId,
+      nombre: 'Prueba',
+      rol: `rol-${roles}`,
+      usuario: estrategia === 'formulario' ? 'ana@example.com' : '',
+      urlLogin: 'http://localhost:5173/login',
+      pasosLogin: estrategia === 'formulario' ? PASOS : [],
+      indicadorExito: { tipo: 'aparece' as const, selector: '#panel' },
+    };
+    const res =
+      estrategia === 'asistido'
+        ? proyectos.guardarCredencial({ ...comunes, estrategia })
+        : proyectos.guardarCredencial({
+            ...comunes,
+            estrategia,
+            secreto:
+              estrategia === 'token-url'
+                ? 'http://localhost:5173/entrar?token=CANARIO-token-77'
+                : SECRETO,
+          });
+    if (res.resultado !== 'guardada') throw new Error(JSON.stringify(res));
+    return res.credencialId;
+  }
+
+  async function lanzarCon(proyectoId: string, credencialId: string) {
+    const res = servicio.lanzarEscaneo(proyectoId, credencialId);
+    if (res.resultado !== 'encolada') throw new Error(res.motivo);
+    await pausa();
+    return res.ejecucionId;
+  }
+
+  const pedir = async (motivo: 'inicial' | 'planificada' | 'vencida', reintento = false) => {
+    mensajes.length = 0;
+    runnerActual?.emitir({ tipo: 'necesita-login', motivo, reintento });
+    await pausa();
+    return mensajes.find((m) => m.tipo === 'datos-login' || m.tipo === 'login-denegado');
+  };
+  const entro = async () => {
+    runnerActual?.emitir({
+      tipo: 'sesion',
+      resultado: 'ok',
+      estado: ESTADO,
+      urlComprobacion: 'http://localhost:5173/panel',
+    });
+    await pausa();
+  };
+  const resumen = (proyectoId: string, id: string) =>
+    servicio.listar(proyectoId).find((e) => e.id === id);
+
+  it('el escaneo lleva la autenticación sin el secreto, y el rol queda en la ejecución', async () => {
+    const proyecto = proyectoConAuth();
+    const credencial = credencialDe(proyecto, 'formulario');
+    const id = await lanzarCon(proyecto, credencial);
+    const escaneo = mensajes.find((m) => m.tipo === 'escaneo');
+    expect(escaneo).toMatchObject({
+      autenticacion: {
+        estrategia: 'formulario',
+        dominiosAutenticacion: ['idp.example.test'],
+        sesionMaxMs: null,
+        permitirLoginHttp: false,
+      },
+      sesionPrevia: null,
+    });
+    expect(JSON.stringify(escaneo)).not.toContain(SECRETO);
+    // El proxy del escaneo no conoce los dominios de autenticación.
+    expect(politicasProxy).toEqual([['localhost']]);
+    expect(resumen(proyecto, id)?.rol).toMatch(/^rol-/);
+  });
+
+  it('el login levanta un proxy aparte, con los dominios de autenticación, y lo apaga', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    const datos = await pedir('inicial');
+    if (datos?.tipo !== 'datos-login') throw new Error('sin datos');
+    expect(Buffer.from(datos.secreto ?? []).toString()).toBe(SECRETO);
+    expect(politicasProxy).toEqual([['localhost'], ['localhost', 'idp.example.test']]);
+    registro.length = 0;
+    await entro();
+    expect(registro).toEqual(['proxy-detenido']);
+    expect(resumen(proyecto, id)?.estado).toBe('en-curso');
+  });
+
+  it('tope por ejecución: cuenta solo los logins por sesión vencida (reloj controlado)', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    await pedir('inicial');
+    await entro();
+    // Separados por 16 minutos: el límite por credencial no interviene.
+    for (let i = 0; i < 3; i++) {
+      ahora += 16 * MINUTO;
+      expect((await pedir('vencida'))?.tipo).toBe('datos-login');
+      await entro();
+    }
+    ahora += 16 * MINUTO;
+    expect((await pedir('vencida'))?.tipo).toBe('login-denegado');
+    runnerActual?.emitir({ ...terminado(5, 0), detenido: 'sesion' });
+    await pausa();
+    expect(resumen(proyecto, id)).toMatchObject({
+      estado: 'finalizada',
+      resumen: { motivo: 'limite-logins', detenido: 'sesion', logins: 4, loginsInesperados: 3 },
+    });
+  });
+
+  it('las renovaciones planificadas no cuentan para el tope, pero sí para el límite por credencial', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    await pedir('inicial');
+    await entro();
+    for (let i = 0; i < 2; i++) {
+      ahora += MINUTO;
+      expect((await pedir('planificada'))?.tipo).toBe('datos-login');
+      await entro();
+    }
+    // Tres logins en 15 minutos: la tercera renovación no se hace, y el escaneo sigue con su sesión.
+    ahora += MINUTO;
+    expect((await pedir('planificada'))?.tipo).toBe('login-denegado');
+    expect(resumen(proyecto, id)?.estado).toBe('en-curso');
+    // Pasada la ventana, una sesión vencida sí entra, y es la primera inesperada.
+    ahora += 15 * MINUTO;
+    expect((await pedir('vencida'))?.tipo).toBe('datos-login');
+    await entro();
+    runnerActual?.emitir(terminado(9, 0));
+    await pausa();
+    expect(resumen(proyecto, id)).toMatchObject({
+      estado: 'finalizada',
+      resumen: { motivo: null, logins: 4, renovaciones: 2, loginsInesperados: 1 },
+    });
+  });
+
+  it('un login que funciona y vuelve a dar sesión vencida enseguida cuenta: el bucle se corta', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    await pedir('inicial');
+    await entro();
+    // Cada login entra, y lo primero que hace el escaneo es encontrar la sesión vencida otra vez.
+    // El reloj avanza solo para que el límite por credencial no lo corte antes que el tope.
+    const respuestas: (string | undefined)[] = [];
+    for (let i = 0; i < 4; i++) {
+      ahora += 16 * MINUTO;
+      const respuesta = await pedir('vencida');
+      respuestas.push(respuesta?.tipo);
+      if (respuesta?.tipo === 'datos-login') await entro();
+    }
+    expect(respuestas).toEqual(['datos-login', 'datos-login', 'datos-login', 'login-denegado']);
+    runnerActual?.emitir({ ...terminado(1, 0), detenido: 'sesion' });
+    await pausa();
+    expect(resumen(proyecto, id)?.resumen).toMatchObject({
+      motivo: 'limite-logins',
+      loginsInesperados: 3,
+    });
+  });
+
+  it('el bucle sin tiempo de por medio lo corta antes el límite por credencial', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    await pedir('inicial');
+    await entro();
+    expect((await pedir('vencida'))?.tipo).toBe('datos-login');
+    await entro();
+    expect((await pedir('vencida'))?.tipo).toBe('datos-login');
+    await entro();
+    expect((await pedir('vencida'))?.tipo).toBe('login-denegado');
+    runnerActual?.emitir({ ...terminado(1, 0), detenido: 'sesion' });
+    await pausa();
+    expect(resumen(proyecto, id)?.resumen.motivo).toBe('limite-logins');
+  });
+
+  it('un login fallido al empezar termina la ejecución sin páginas: fallida', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'formulario'));
+    await pedir('inicial');
+    runnerActual?.emitir({ tipo: 'sesion', resultado: 'fallo' });
+    await pausa();
+    expect((await pedir('inicial', true))?.tipo).toBe('login-denegado');
+    runnerActual?.emitir({ ...terminado(0, 0), detenido: 'sesion' });
+    await pausa();
+    expect(resumen(proyecto, id)).toMatchObject({
+      estado: 'fallida',
+      resumen: { motivo: 'login-fallido' },
+    });
+  });
+
+  it('el asistido no manda secreto, no cuenta intentos y, si la sesión vence, pausa', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'asistido'));
+    expect(await pedir('inicial')).toMatchObject({ tipo: 'datos-login', secreto: null });
+    expect(progresos.at(-1)?.espera).toBe('login-asistido');
+    await entro();
+    expect(progresos.at(-1)?.espera).toBeNull();
+    expect(await pedir('vencida')).toBeUndefined();
+    expect(resumen(proyecto, id)?.estado).toBe('pausada');
+    expect(progresos.at(-1)).toMatchObject({ estado: 'pausada', espera: 'sesion-vencida' });
+    // Pausada retiene la cola: otro proyecto espera.
+    const otro = crearProyecto('Otro');
+    const encolada = servicio.lanzarEscaneo(otro, null);
+    expect(encolada.resultado).toBe('encolada');
+    expect(servicio.reanudar(id)).toEqual({ resultado: 'reanudada' });
+    await pausa();
+    expect(mensajes.find((m) => m.tipo === 'datos-login')).toMatchObject({ secreto: null });
+    expect(resumen(proyecto, id)?.estado).toBe('en-curso');
+    expect(servicio.reanudar(id)).toEqual({ resultado: 'no-pausada' });
+    boveda.conAcceso((base) => {
+      expect(base.prepare('SELECT count(*) AS n FROM intento_login').get()).toEqual({ n: 0 });
+    });
+  });
+
+  it('si la ventana del asistido no abre, falla enseguida con el motivo, y el log dice por qué sin rutas', async () => {
+    const avisos: string[] = [];
+    const espia = vi.spyOn(console, 'warn').mockImplementation((...partes: unknown[]) => {
+      avisos.push(partes.map(String).join(' '));
+    });
+    try {
+      const proyecto = proyectoConAuth();
+      const id = await lanzarCon(proyecto, credencialDe(proyecto, 'asistido'));
+      expect(await pedir('inicial')).toMatchObject({ tipo: 'datos-login' });
+      runnerActual?.emitir({
+        tipo: 'ventana-no-disponible',
+        causa: 'pantalla',
+        detalle: '[1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+      });
+      await pausa();
+      expect(progresos.at(-1)?.espera).toBeNull();
+      runnerActual?.emitir({ ...terminado(0, 0), detenido: 'sesion' });
+      await pausa();
+      expect(resumen(proyecto, id)).toMatchObject({
+        estado: 'fallida',
+        resumen: { motivo: 'ventana-no-disponible' },
+      });
+      expect(avisos).toEqual([
+        '[ejecucion] ventana del navegador no disponible: pantalla [1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+      ]);
+    } finally {
+      espia.mockRestore();
+    }
+  });
+
+  it('una pausa sin reanudar se cancela a los 15 minutos', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const proyecto = proyectoConAuth();
+      const res = servicio.lanzarEscaneo(proyecto, credencialDe(proyecto, 'asistido'));
+      if (res.resultado !== 'encolada') throw new Error(res.motivo);
+      await vi.advanceTimersByTimeAsync(10);
+      runnerActual?.emitir({ tipo: 'necesita-login', motivo: 'vencida', reintento: false });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(resumen(proyecto, res.ejecucionId)?.estado).toBe('pausada');
+      mensajes.length = 0;
+      await vi.advanceTimersByTimeAsync(14 * MINUTO);
+      expect(mensajes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(MINUTO);
+      expect(mensajes).toEqual([{ tipo: 'login-denegado' }]);
+      runnerActual?.emitir({ ...terminado(3, 0), detenido: 'sesion' });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(resumen(proyecto, res.ejecucionId)?.resumen.motivo).toBe('pausa-vencida');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('un enlace que ya no sirve a mitad del escaneo pausa y pide uno nuevo', async () => {
+    const proyecto = proyectoConAuth();
+    const id = await lanzarCon(proyecto, credencialDe(proyecto, 'token-url'));
+    await pedir('inicial');
+    await entro();
+    ahora += 16 * MINUTO;
+    await pedir('vencida');
+    runnerActual?.emitir({ tipo: 'sesion', resultado: 'fallo' });
+    await pausa();
+    expect(await pedir('vencida', true)).toBeUndefined();
+    expect(progresos.at(-1)).toMatchObject({ estado: 'pausada', espera: 'enlace-vencido' });
+    expect(resumen(proyecto, id)?.estado).toBe('pausada');
+  });
+
+  it('la sesión queda cifrada en memoria, la usa el próximo escaneo y se descarta con un cambio', async () => {
+    const proyecto = proyectoConAuth();
+    const credencial = credencialDe(proyecto, 'formulario');
+    await lanzarCon(proyecto, credencial);
+    await pedir('inicial');
+    await entro();
+    const guardadas = (servicio as unknown as { sesiones: Map<string, { sellado: Buffer }> })
+      .sesiones;
+    expect(guardadas.size).toBe(1);
+    for (const { sellado } of guardadas.values()) {
+      expect(sellado.toString('latin1')).not.toContain('valor-de-sesion-inventado-55');
+    }
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+
+    ahora += 10 * MINUTO;
+    mensajes.length = 0;
+    await lanzarCon(proyecto, credencial);
+    expect(mensajes.find((m) => m.tipo === 'escaneo')).toMatchObject({
+      sesionPrevia: {
+        estado: ESTADO,
+        urlComprobacion: 'http://localhost:5173/panel',
+        edadMs: 10 * MINUTO,
+      },
+    });
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+
+    servicio.descartarSesiones(proyecto);
+    mensajes.length = 0;
+    await lanzarCon(proyecto, credencial);
+    expect(mensajes.find((m) => m.tipo === 'escaneo')).toMatchObject({ sesionPrevia: null });
+  });
+
+  it('a las 12 horas la sesión guardada ya no se usa, y bloquear la borra', async () => {
+    const proyecto = proyectoConAuth();
+    const credencial = credencialDe(proyecto, 'formulario');
+    await lanzarCon(proyecto, credencial);
+    await pedir('inicial');
+    await entro();
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+    ahora += 12 * 60 * MINUTO;
+    mensajes.length = 0;
+    await lanzarCon(proyecto, credencial);
+    expect(mensajes.find((m) => m.tipo === 'escaneo')).toMatchObject({ sesionPrevia: null });
+    await pedir('inicial');
+    await entro();
+    // La bóveda de estos tests avisa a otra instancia: se llama directo, como lo hace el aviso.
+    boveda.conAcceso((base) => {
+      servicio.alBloquearse(base);
+    });
+    const guardadas = (servicio as unknown as { sesiones: Map<string, unknown> }).sesiones;
+    expect(guardadas.size).toBe(0);
+  });
+
+  it('una credencial sin indicador no se puede usar para escanear', () => {
+    const proyecto = crearProyecto();
+    const credencial = guardarCredencial(proyecto, false);
+    expect(servicio.lanzarEscaneo(proyecto, credencial)).toEqual({
+      resultado: 'rechazada',
+      motivo: 'credencial-no-usable',
+    });
+  });
+});
+
+describe('Básica: llega en la fase 2 (ADR 025)', () => {
+  /** Una credencial básica de antes, como la que trae una copia: con secreto e indicador. */
+  function basicaExistente(proyectoId: string): string {
+    const id = guardarCredencial(proyectoId);
+    boveda.conAcceso((base) => {
+      base
+        .prepare("UPDATE credencial SET estrategia = 'basica', pasos_login = '[]' WHERE id = ?")
+        .run(id);
+    });
+    return id;
+  }
+
+  it('no se lanza ni se prueba, lo dice, y no abre ningún proceso', async () => {
+    const proyecto = crearProyecto();
+    const credencial = basicaExistente(proyecto);
+    expect(proyectos.obtener(proyecto)?.credenciales[0]?.estrategia).toBe('basica');
+    expect(ejecuciones.lanzarEscaneo(proyecto, credencial)).toEqual({
+      resultado: 'rechazada',
+      motivo: 'estrategia-no-disponible',
+    });
+    expect(await ejecuciones.probarLogin(proyecto, credencial)).toEqual({
+      resultado: 'fallo',
+      motivo: 'estrategia-no-disponible',
+    });
+    expect(registro).toEqual([]);
+    expect(ejecuciones.listar(proyecto)).toEqual([]);
   });
 });

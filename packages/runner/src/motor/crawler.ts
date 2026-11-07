@@ -10,12 +10,14 @@ import {
   hallazgosDeRendimiento,
   claveDeMensaje,
   hostDe,
+  parametrosSensibles,
   SEVERIDAD,
   severidadDeAccesibilidad,
   TITULO_COOKIE_SIN_VENCIMIENTO,
   UMBRALES,
   type HallazgoDetectado,
 } from './chequeos';
+import type { SesionDelRastreo } from './gestor-sesion';
 import type { Vigilancia } from './motor';
 import { Frontera, normalizarUrl, sinQuery } from './urls';
 
@@ -52,7 +54,8 @@ export interface EventosRastreo {
 export interface ResultadoRastreo {
   paginasVisitadas: number;
   linksExcluidos: number;
-  detenido: 'max-paginas' | 'max-tiempo' | null;
+  /** 'sesion': no se pudo volver a entrar (límite de logins, login fallido o pausa cancelada). */
+  detenido: 'max-paginas' | 'max-tiempo' | 'sesion' | null;
   /** Cobertura no alcanzada: botones que no se tocaron por solo lectura. */
   noRecorridosSoloLectura: number;
   /** Cobertura no alcanzada: links y botones que coinciden con una exclusión. */
@@ -110,6 +113,8 @@ interface Datos {
     cookies: string[];
   }[];
   fallidas: { url: string; error: string }[];
+  /** Hosts de navegaciones principales que fallaron: una redirección que cortamos. */
+  navegacionesFallidas: string[];
   consola: { tipo: string; texto: string }[];
   excepciones: string[];
   pesoBytes: number;
@@ -120,12 +125,21 @@ interface Datos {
 const datosVacios = (): Datos => ({
   respuestas: [],
   fallidas: [],
+  navegacionesFallidas: [],
   consola: [],
   excepciones: [],
   pesoBytes: 0,
   requestsLentas: 0,
   pendientes: [],
 });
+
+const nombreDeHost = (texto: string): string => {
+  try {
+    return new URL(texto).hostname;
+  } catch {
+    return '';
+  }
+};
 
 /** El proxy marca sus propios rechazos: no son errores del sitio. */
 const ENCABEZADO_BLOQUEO = 'x-qatlas-bloqueado';
@@ -153,6 +167,10 @@ function escuchar(pagina: Page, datos: () => Datos): void {
   });
   pagina.on('requestfailed', (solicitud: Request) => {
     datos().fallidas.push({ url: solicitud.url(), error: solicitud.failure()?.errorText ?? '' });
+    if (solicitud.isNavigationRequest() && solicitud.frame() === pagina.mainFrame()) {
+      // Solo el nombre: los dominios de autenticación se declaran sin puerto.
+      datos().navegacionesFallidas.push(nombreDeHost(solicitud.url()));
+    }
   });
   pagina.on('requestfinished', (solicitud: Request) => {
     const actual = datos();
@@ -238,13 +256,18 @@ interface Analisis {
 
 const SELECTOR_BOTONES = 'button, [role=button], input[type=button], input[type=submit]';
 
-/** Recorre el sitio dentro del alcance y analiza cada página una vez. */
+/**
+ * Recorre el sitio dentro del alcance y analiza cada página una vez. Con `sesion`, el escaneo es
+ * autenticado: el contexto puede cambiar cuando se vuelve a entrar, y una página que encontró la sesión
+ * vencida no se analiza: vuelve a la cola (ADR 027).
+ */
 export async function rastrear(
-  contexto: BrowserContext,
-  vigilancia: Vigilancia,
+  contextoInicial: BrowserContext,
+  vigilanciaInicial: Vigilancia,
   opciones: OpcionesRastreo,
   eventos: EventosRastreo,
   ahora: () => number = Date.now,
+  sesion?: SesionDelRastreo,
 ): Promise<ResultadoRastreo> {
   const limite = ahora() + opciones.maxMinutos * 60_000;
   const pausa = 1000 / opciones.maxRps;
@@ -259,10 +282,27 @@ export async function rastrear(
     urlsDescartadas: 0,
   };
 
-  const pagina = await contexto.newPage();
-  const cdp = await contexto.newCDPSession(pagina);
   let datos = datosVacios();
+  let fuente = sesion
+    ? sesion.actual()
+    : { contexto: contextoInicial, vigilancia: vigilanciaInicial, generacion: 0 };
+  let vigilancia = fuente.vigilancia;
+  let pagina: Page = await fuente.contexto.newPage();
+  let cdp: CDPSession = await fuente.contexto.newCDPSession(pagina);
   escuchar(pagina, () => datos);
+  const vincular = async () => {
+    vigilancia = fuente.vigilancia;
+    pagina = await fuente.contexto.newPage();
+    cdp = await fuente.contexto.newCDPSession(pagina);
+    escuchar(pagina, () => datos);
+  };
+  /** Después de un login nuevo, el contexto es otro. */
+  const alDia = async () => {
+    if (!sesion || sesion.actual().generacion === fuente.generacion) return;
+    await pagina.close().catch(() => undefined);
+    fuente = sesion.actual();
+    await vincular();
+  };
 
   /** El límite de requests por segundo, sobre navegaciones y clics (ADR 021). */
   const respetarRitmo = async () => {
@@ -280,18 +320,26 @@ export async function rastrear(
   // Lo ya analizado, también por la URL final de una redirección (RN-ESC-04).
   const analizadas = new Set<string>();
   const base = normalizarUrl(opciones.urlBase);
-  if (base) frontera.agregar(base, 0, null);
+  if (base && !sesion?.esUrlDeLogin(base)) frontera.agregar(base, 0, null);
 
   for (let pendiente = frontera.siguiente(); pendiente; pendiente = frontera.siguiente()) {
     if (resultado.paginasVisitadas >= opciones.maxPaginas) {
       resultado.detenido = 'max-paginas';
       break;
     }
-    if (ahora() >= limite) {
+    // Lo que se estuvo entrando o en pausa no cuenta para el tiempo máximo.
+    if (ahora() >= limite + (sesion?.tiempoFuera() ?? 0)) {
       resultado.detenido = 'max-tiempo';
       break;
     }
     if (analizadas.has(pendiente.url)) continue;
+    if (sesion) {
+      if (!(await sesion.antesDePagina())) {
+        resultado.detenido = 'sesion';
+        break;
+      }
+      await alDia();
+    }
     analizadas.add(pendiente.url);
 
     datos = datosVacios();
@@ -311,6 +359,39 @@ export async function rastrear(
     }
     await redInactiva();
     await Promise.allSettled(datos.pendientes);
+
+    if (sesion) {
+      const ultima = datos.respuestas.filter((r) => r.principal).at(-1);
+      const formularioDeLogin =
+        navego && estado !== null && estado < 400
+          ? await pagina
+              .locator(sesion.selectorContrasena)
+              .first()
+              .isVisible()
+              .catch(() => false)
+          : false;
+      const sospecha = sesion.sospechar({
+        urlFinal: navego ? pagina.url() : null,
+        estado,
+        bloqueadaPorNosotros: Boolean(ultima?.bloqueada),
+        navegacionesBloqueadas: datos.navegacionesFallidas,
+        formularioDeLogin,
+      });
+      if (sospecha) {
+        const confirmacion = await sesion.confirmarYRenovar();
+        if (confirmacion === 'detener') {
+          resultado.detenido = 'sesion';
+          break;
+        }
+        if (confirmacion === 'renovada') {
+          // Sin hallazgos de la pantalla de login: la página se vuelve a visitar con la sesión nueva.
+          analizadas.delete(pendiente.url);
+          frontera.reencolar(pendiente);
+          await alDia();
+          continue;
+        }
+      }
+    }
 
     // Si la navegación falló, la pestaña puede seguir mostrando la página anterior.
     const final = (navego ? normalizarUrl(pagina.url()) : null) ?? pendiente.url;
@@ -347,6 +428,19 @@ export async function rastrear(
     const reportar = (hallazgo: HallazgoDetectado) => {
       eventos.alHallazgo(hallazgo);
     };
+
+    // Un token o una clave en la URL: queda en el historial, en los logs y en el Referer.
+    for (const parametro of parametrosSensibles(pendiente.url)) {
+      reportar({
+        tipo: 'parametro-sensible',
+        severidad: parametro.severidad,
+        url,
+        urlOrigen: null,
+        clave: parametro.nombre,
+        titulo: `Parámetro sensible en la URL: ${parametro.nombre}`,
+        detalle: '',
+      });
+    }
 
     // Recursos que bloqueamos nosotros: informativo, una vez por host.
     for (const host of new Set(bloqueadosPorNosotros.map(hostDe).filter(Boolean))) {
@@ -516,6 +610,7 @@ export async function rastrear(
       const siguiente = normalizarUrl(href);
       if (!siguiente || pendiente.profundidad + 1 > opciones.maxProfundidad) return;
       if (!decidirUrlSinResolver(siguiente, opciones.politica).permitida) return;
+      if (sesion?.esUrlDeLogin(siguiente)) return;
       if (frontera.agregar(siguiente, pendiente.profundidad + 1, pendiente.url) === 'trampa') {
         resultado.urlsDescartadas += 1;
       }

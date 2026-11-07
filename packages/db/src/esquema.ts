@@ -51,6 +51,10 @@ export const proyecto = sqliteTable('proyecto', {
   selectoresSensibles: text('selectores_sensibles', { mode: 'json' }).$type<string[]>().notNull(),
   sistemaInterno: integer('sistema_interno', { mode: 'boolean' }).notNull(),
   puertosLocales: text('puertos_locales', { mode: 'json' }).$type<number[]>().notNull(),
+  dominiosAutenticacion: text('dominios_autenticacion', { mode: 'json' })
+    .$type<string[]>()
+    .notNull(),
+  sesionMaxMinutos: integer('sesion_max_minutos'),
   permitirLoginHttp: integer('permitir_login_http', { mode: 'boolean' }).notNull(),
   claveProyectoCifrada: blob('clave_proyecto_cifrada', { mode: 'buffer' }).notNull(),
 });
@@ -68,6 +72,9 @@ export const autorizacion = sqliteTable('autorizacion', {
   dominiosAceptados: text('dominios_aceptados', { mode: 'json' }).$type<string[]>().notNull(),
   sistemaInternoAceptado: integer('sistema_interno_aceptado', { mode: 'boolean' }).notNull(),
   puertosAceptados: text('puertos_aceptados', { mode: 'json' }).$type<number[]>().notNull(),
+  dominiosAutenticacionAceptados: text('dominios_autenticacion_aceptados', { mode: 'json' })
+    .$type<string[]>()
+    .notNull(),
   invalidadaEn: text('invalidada_en'),
   // SEG-06, fase 4.
   verificacionDominio: text('verificacion_dominio'),
@@ -80,8 +87,12 @@ export const credencial = sqliteTable('credencial', {
     .references(() => proyecto.id),
   nombre: text('nombre').notNull(),
   usuario: text('usuario').notNull(),
-  // Cifrado además a nivel de campo con la clave del proyecto (ADR 013).
-  secreto: blob('secreto', { mode: 'buffer' }).notNull(),
+  // Cifrado además a nivel de campo con la clave del proyecto (ADR 013). Vacío en el login asistido.
+  secreto: blob('secreto', { mode: 'buffer' }),
+  estrategia: text('estrategia', {
+    enum: ['formulario', 'sso', 'token-url', 'asistido', 'basica'],
+  }).notNull(),
+  rol: text('rol').notNull(),
   secretoActualizadoEn: text('secreto_actualizado_en').notNull(),
   urlLogin: text('url_login').notNull(),
   pasosLogin: text('pasos_login', { mode: 'json' }).$type<unknown[]>().notNull(),
@@ -168,12 +179,15 @@ export const ejecucion = sqliteTable('ejecucion', {
   objetivoId: text('objetivo_id').notNull(),
   navegador: text('navegador').notNull(),
   estado: text('estado', {
-    enum: ['encolada', 'en-curso', 'finalizada', 'fallida', 'cancelada'],
+    enum: ['encolada', 'en-curso', 'pausada', 'finalizada', 'fallida', 'cancelada'],
   }).notNull(),
   inicio: text('inicio'),
   fin: text('fin'),
   resumen: text('resumen', { mode: 'json' }).$type<unknown>().notNull(),
   programacionId: text('programacion_id'),
+  // Con qué credencial y rol corrió: para comparar roles en la fase 4.
+  credencialId: text('credencial_id'),
+  rol: text('rol'),
 });
 
 /** Solo host y puerto: una ruta o una query pueden tener tokens. Se purga con su proyecto. */

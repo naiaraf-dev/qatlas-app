@@ -30,6 +30,7 @@ const ENTRADA: ProyectoEntrada = {
   puertosLocales: [],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
+  dominiosAutenticacion: [],
 };
 
 let carpeta: string;
@@ -80,6 +81,8 @@ function crearConCredencial() {
   const guardada = proyectos.guardarCredencial({
     proyectoId: creado.id,
     nombre: 'Prueba',
+    rol: 'admin',
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [{ accion: 'rellenar', selector: '#clave', origen: 'secreto' }],

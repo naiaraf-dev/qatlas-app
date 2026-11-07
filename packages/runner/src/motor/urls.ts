@@ -98,6 +98,11 @@ export class Frontera {
     this.vistas.add(url);
   }
 
+  /** Una página que encontró la sesión vencida vuelve adelante de la cola, sin contar como nueva. */
+  reencolar(pendiente: Pendiente): void {
+    this.cola.unshift(pendiente);
+  }
+
   siguiente(): Pendiente | undefined {
     return this.cola.shift();
   }

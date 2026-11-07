@@ -1,0 +1,7 @@
+{
+  "//": "Para cargar los E2E sin el mapeo de better-sqlite3 a sus tipos, que Playwright aplicaría también al ejecutar.",
+  "extends": "./tsconfig.tools.json",
+  "compilerOptions": {
+    "paths": {}
+  }
+}

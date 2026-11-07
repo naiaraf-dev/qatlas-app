@@ -142,6 +142,26 @@ test('la vigilancia del entorno detecta lo que cambió, y solo nombra la variabl
   expect(diferenciasDeEntorno({ A: 'valor' }, { A: 'otro' })).toEqual(['A']);
   expect(diferenciasDeEntorno({}, { TMPDIR: 'undefined' })).toEqual(['TMPDIR']);
   expect(diferenciasDeEntorno({ TMPDIR: 'x' }, {})).toEqual(['TMPDIR']);
+  // La única que se ignora es la que pone Playwright al transpilar, por su nombre exacto.
+  expect(diferenciasDeEntorno({}, { BROWSERSLIST_IGNORE_OLD_DATA: 'true' })).toEqual([]);
+  expect(
+    diferenciasDeEntorno(
+      {},
+      {
+        BROWSERSLIST_IGNORE_OLD_DATA_X: 'true',
+        BROWSERSLIST_IGNORE_OLD: 'true',
+        BROWSERSLIST_OTRA: 'true',
+        browserslist_ignore_old_data: 'true',
+        X_BROWSERSLIST_IGNORE_OLD_DATA: 'true',
+      },
+    ),
+  ).toEqual([
+    'BROWSERSLIST_IGNORE_OLD',
+    'BROWSERSLIST_IGNORE_OLD_DATA_X',
+    'BROWSERSLIST_OTRA',
+    'X_BROWSERSLIST_IGNORE_OLD_DATA',
+    'browserslist_ignore_old_data',
+  ]);
 });
 
 test('restaurar una variable que no existía la borra, no guarda el texto "undefined"', () => {

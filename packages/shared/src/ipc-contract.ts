@@ -111,12 +111,31 @@ export const MotivoValidacion = z.enum([
   'login-fuera-de-dominios',
   'login-sin-cifrar',
   'declaracion-distinta',
+  'rol-repetido',
+  'estrategia-fija',
+  // La forma de login existe pero todavía no se puede usar (ESTRATEGIAS_PENDIENTES).
+  'estrategia-no-disponible',
+  'secreto-requerido',
+  'secreto-no-corresponde',
+  'usuario-requerido',
 ]);
 export type MotivoValidacion = z.infer<typeof MotivoValidacion>;
 
 export const ErrorValidacion = z
   .object({
-    campo: z.enum(['nombre', 'urlBase', 'dominios', 'puertosLocales', 'urlLogin', 'declaracion']),
+    campo: z.enum([
+      'nombre',
+      'urlBase',
+      'dominios',
+      'puertosLocales',
+      'dominiosAutenticacion',
+      'urlLogin',
+      'secreto',
+      'usuario',
+      'rol',
+      'estrategia',
+      'declaracion',
+    ]),
     motivo: MotivoValidacion,
   })
   .strict();
@@ -132,6 +151,10 @@ export const ProyectoEntrada = z
     dominios: z.array(z.string().max(300)).max(50),
     // Además del puerto de la URL base. Cambia el alcance: invalida la autorización.
     puertosLocales: z.array(z.number().int().min(1).max(65535)).max(20),
+    // Solo para el login: el crawler nunca los recorre. Cambian el alcance (ADR 025).
+    dominiosAutenticacion: z.array(z.string().max(300)).max(20),
+    // Para renovar el login un poco antes de que venza. `null`: sin máximo conocido.
+    sesionMaxMinutos: z.number().int().min(2).max(720).nullable(),
     maxRps: entero(LIMITES_PROYECTO.maxRps),
     maxPaginas: entero(LIMITES_PROYECTO.maxPaginas),
     maxProfundidad: entero(LIMITES_PROYECTO.maxProfundidad),
@@ -207,10 +230,18 @@ export const IndicadorExito = z.discriminatedUnion('tipo', [
 ]);
 export type IndicadorExito = z.infer<typeof IndicadorExito>;
 
+/** Cómo se inicia sesión (ADR 025). Ninguna tiene un campo de texto libre para un valor secreto. */
+export const EstrategiaLogin = z.enum(['formulario', 'sso', 'token-url', 'asistido', 'basica']);
+export type EstrategiaLogin = z.infer<typeof EstrategiaLogin>;
+
 const DatosCredencial = {
   proyectoId: IdEntidad,
   nombre: z.string().trim().min(1).max(120),
-  usuario: z.string().min(1).max(320),
+  // Para escanear con distintos roles; comparar lo que ve cada uno llega en la fase 4.
+  rol: z.string().trim().min(1).max(60),
+  estrategia: EstrategiaLogin,
+  // Vacío en el login asistido y en el token en la URL: no lo usan.
+  usuario: z.string().max(320),
   urlLogin: z.string().max(2048),
   pasosLogin: z.array(PasoLogin).max(30),
   indicadorExito: IndicadorExito.nullable().default(null),
@@ -226,8 +257,10 @@ export const CredencialResumen = z
     urlLogin: z.string(),
     pasosLogin: z.array(PasoLogin),
     indicadorExito: IndicadorExito.nullable(),
+    rol: z.string(),
+    estrategia: EstrategiaLogin,
     // RN-PRY-04: sin indicios (ADR 013). Solo "configurado" y cuándo se reemplazó.
-    secretoConfigurado: z.literal(true),
+    secretoConfigurado: z.boolean(),
     secretoActualizadoEn: z.string(),
     // La URL de login quedó fuera de los dominios o en http sin la opción: no se puede usar.
     requiereRevision: z.boolean(),
@@ -251,6 +284,7 @@ export const EstadoEjecucion = z.enum([
   'finalizada',
   'fallida',
   'cancelada',
+  'pausada',
 ]);
 export type EstadoEjecucion = z.infer<typeof EstadoEjecucion>;
 
@@ -259,10 +293,19 @@ export const MotivoFinEjecucion = z.enum([
   'proxy-caido',
   'runner-caido',
   'navegador-no-disponible',
+  // La ventana del login asistido no se pudo abrir (sin pantalla, o el navegador terminó al abrirse).
+  'ventana-no-disponible',
   'autorizacion-no-vigente',
   'bloqueo',
   'interrumpida',
   'usuario',
+  // Escaneo autenticado (ADR 027).
+  'login-fallido',
+  'limite-logins',
+  'ventana-cerrada',
+  'tiempo-agotado',
+  'pausa-vencida',
+  'credencial-no-disponible',
 ]);
 export type MotivoFinEjecucion = z.infer<typeof MotivoFinEjecucion>;
 
@@ -277,12 +320,17 @@ export const ResumenEjecucion = z
     motivo: MotivoFinEjecucion.nullable(),
     hallazgos: Cantidad,
     // RN-ESC-05: por qué se detuvo antes de recorrer todo. `null` si no quedó nada por recorrer.
-    detenido: z.enum(['max-paginas', 'max-tiempo']).nullable(),
+    detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
     // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
     noRecorridosSoloLectura: Cantidad,
     noRecorridosExclusiones: Cantidad,
     urlsDescartadas: Cantidad,
     websocketDescartados: Cantidad,
+    // Escaneo autenticado: todos los logins, los que se hicieron porque la sesión venció y las
+    // renovaciones planificadas por la duración máxima de la sesión.
+    logins: Cantidad,
+    loginsInesperados: Cantidad,
+    renovaciones: Cantidad,
   })
   .strict();
 export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
@@ -295,6 +343,8 @@ export const EjecucionResumen = z
     inicio: z.string().nullable(),
     fin: z.string().nullable(),
     resumen: ResumenEjecucion,
+    // Con qué rol se escaneó. Null: anónimo.
+    rol: z.string().nullable(),
   })
   .strict();
 export type EjecucionResumen = z.infer<typeof EjecucionResumen>;
@@ -311,6 +361,9 @@ export const TipoHallazgo = z.enum([
   'contenido-mixto',
   'login-sin-cifrar',
   'recurso-externo-bloqueado',
+  // Semana 6b: un token o una clave en la URL, y el sitio guardando la contraseña en el navegador.
+  'parametro-sensible',
+  'secreto-en-almacenamiento',
 ]);
 export type TipoHallazgo = z.infer<typeof TipoHallazgo>;
 
@@ -349,6 +402,9 @@ export const ProgresoEjecucion = z
     paginasVisitadas: Cantidad,
     hallazgos: Cantidad,
     conexionesBloqueadas: Cantidad,
+    // Lo que la ejecución espera de la persona: entrar en la ventana, volver a entrar después de una
+    // pausa, o un enlace nuevo. Null: nada.
+    espera: z.enum(['login-asistido', 'sesion-vencida', 'enlace-vencido']).nullable(),
   })
   .strict();
 export type ProgresoEjecucion = z.infer<typeof ProgresoEjecucion>;
@@ -469,6 +525,8 @@ export const ipcContract = {
     request: z.union([
       z.object({ ...DatosCredencial, secreto: Secreto }).strict(),
       z.object({ ...DatosCredencial, credencialId: IdEntidad }).strict(),
+      // Solo el login asistido se crea sin secreto: la persona lo escribe en la ventana.
+      z.object({ ...DatosCredencial }).strict(),
     ]),
     response: respuestaConErrores(
       z.object({ resultado: z.literal('guardada'), credencialId: IdEntidad }).strict(),
@@ -478,7 +536,7 @@ export const ipcContract = {
     request: z
       .object({ proyectoId: IdEntidad, credencialId: IdEntidad, secreto: Secreto })
       .strict(),
-    response: z.object({ resultado: z.literal('reemplazado') }).strict(),
+    response: respuestaConErrores(z.object({ resultado: z.literal('reemplazado') }).strict()),
   },
   'credenciales:eliminar': {
     request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad }).strict(),
@@ -499,26 +557,44 @@ export const ipcContract = {
           motivo: z.enum([
             'no-confirmado',
             'sin-indicador',
+            'estrategia-no-disponible',
             'credencial-a-revisar',
             'sin-autorizacion',
             'ocupado',
             'no-se-pudo-ejecutar',
+            // Login asistido: la persona cerró la ventana sin terminar.
+            'ventana-cerrada',
+            // Login asistido: pasaron 5 minutos sin que se cumpla el indicador.
+            'tiempo-agotado',
+            // Login asistido: la ventana del navegador de pruebas no se pudo abrir.
+            'ventana-no-disponible',
           ]),
         })
         .strict(),
     ]),
   },
+  // Con `credencialId`, un escaneo autenticado con ese rol; null, anónimo.
   'ejecuciones:lanzarEscaneo': {
-    request: z.object({ proyectoId: IdEntidad }).strict(),
+    request: z.object({ proyectoId: IdEntidad, credencialId: IdEntidad.nullable() }).strict(),
     response: z.discriminatedUnion('resultado', [
       z.object({ resultado: z.literal('encolada'), ejecucionId: IdEntidad }).strict(),
       z
         .object({
           resultado: z.literal('rechazada'),
-          motivo: z.enum(['ya-en-curso', 'sin-autorizacion']),
+          motivo: z.enum([
+            'ya-en-curso',
+            'sin-autorizacion',
+            'credencial-no-usable',
+            'estrategia-no-disponible',
+          ]),
         })
         .strict(),
     ]),
+  },
+  // Una ejecución pausada sigue: vuelve a entrar (login asistido o enlace nuevo).
+  'ejecuciones:reanudar': {
+    request: z.object({ ejecucionId: IdEntidad }).strict(),
+    response: z.object({ resultado: z.enum(['reanudada', 'no-pausada']) }).strict(),
   },
   'ejecuciones:cancelar': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),

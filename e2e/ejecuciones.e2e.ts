@@ -290,7 +290,7 @@ test('RN-EJE-01: mientras corre, no se lanza otra del mismo proyecto', async () 
   await expect(boton('Lanzar ejecución')).toBeDisabled();
   const segunda = await page.evaluate(async (id) => {
     const { qatlas } = window as unknown as { qatlas: QatlasApi };
-    return qatlas.ejecuciones.lanzarEscaneo({ proyectoId: id as string });
+    return qatlas.ejecuciones.lanzarEscaneo({ proyectoId: id as string, credencialId: null });
   }, proyectoId);
   expect(segunda).toEqual({ ok: true, data: { resultado: 'rechazada', motivo: 'ya-en-curso' } });
   await boton('Cancelar ejecución').click();
@@ -413,6 +413,7 @@ test.describe('Probar login', () => {
   async function agregarCredencial(nombre: string, secreto: string, indicador?: string) {
     await boton('Agregar credencial').click();
     await entrada('Nombre de la credencial').fill(nombre);
+    await entrada('Rol').fill(nombre);
     await entrada('Usuario').fill(CANARIO_USUARIO);
     await entrada('Secreto').fill(secreto);
     await entrada('URL de login').fill(`${sitio.url}/login`);
@@ -488,7 +489,8 @@ test.describe('Probar login', () => {
   });
 
   test('una prueba de login queda en las ejecuciones, con su monitor', async () => {
-    await expect(ejecuciones().first()).toContainText('Prueba de login: Finalizada');
+    // Con el rol de la credencial que se probó.
+    await expect(ejecuciones().first()).toContainText(/Prueba de login con el rol .+: Finalizada/);
   });
 });
 

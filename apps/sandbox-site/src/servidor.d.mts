@@ -6,6 +6,23 @@ export const HOSTS_DE_FUGA: string[];
 export const HOSTS_UDP_DE_FUGA: string[];
 export const MAPA_DE_HOSTS: Readonly<Record<string, string>>;
 export const REGLAS_RESOLVER: string;
+export const HOST_IDP: string;
+export const HOST_PORTAL: string;
+export const USUARIOS_APP: Readonly<Record<'admin' | 'lector', { usuario: string; clave: string }>>;
+export const USUARIO_BASICA: { usuario: string; clave: string };
+
+export interface ZonaAutenticada {
+  registro: {
+    logins: { via: 'formulario' | 'sso' | 'token' | 'mfa'; rol: string }[];
+    vencidas: string[];
+    segundoFactor: number;
+    basicaRechazada: number;
+    rutasConSesion: string[];
+  };
+  vencerSesiones(): void;
+  aprobarSegundoFactor(): void;
+  emitirEnlace(rol: 'admin' | 'lector', opciones?: { reutilizable?: boolean }): string;
+}
 
 export interface SandboxActivo {
   puerto: number;
@@ -37,6 +54,7 @@ export interface SandboxActivo {
     /** Lo que una página mandó por WebSocket. En solo lectura, nada. */
     wsMensajes: string[];
   };
+  autenticacion: ZonaAutenticada;
   cerrar(): Promise<void>;
 }
 
@@ -44,4 +62,7 @@ export function iniciarSandbox(opciones?: {
   puerto?: number;
   demoraLentaMs?: number;
   tls?: { key: string; cert: string };
+  sesion?: { inactividadMs?: number; maximoMs?: number; maximoPaginas?: number };
+  ahora?: () => number;
+  hosts?: { app: string; idp: string; portal: string };
 }): Promise<SandboxActivo>;

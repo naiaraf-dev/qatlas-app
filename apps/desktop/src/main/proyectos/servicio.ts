@@ -30,6 +30,7 @@ import {
   type FilaProyecto,
 } from '@qatlas/db';
 import {
+  estrategiaDisponible,
   normalizarNombreProyecto,
   renderizarDeclaracion,
   verificarAutorizacion,
@@ -53,6 +54,9 @@ export interface DatosDeEjecucion {
   dominios: string[];
   sistemaInterno: boolean;
   puertosLocales: number[];
+  dominiosAutenticacion: string[];
+  sesionMaxMinutos: number | null;
+  permitirLoginHttp: boolean;
   maxRps: number;
   maxPaginas: number;
   maxProfundidad: number;
@@ -97,6 +101,8 @@ const CAMPOS_EDITABLES = [
   'urlBase',
   'dominios',
   'puertosLocales',
+  'dominiosAutenticacion',
+  'sesionMaxMinutos',
   'maxRps',
   'maxPaginas',
   'maxProfundidad',
@@ -126,6 +132,8 @@ function aEntrada(fila: FilaProyecto): ProyectoEntrada {
     urlBase: fila.urlBase,
     dominios: fila.dominiosPermitidos,
     puertosLocales: fila.puertosLocales,
+    dominiosAutenticacion: fila.dominiosAutenticacion,
+    sesionMaxMinutos: fila.sesionMaxMinutos,
     maxRps: fila.maxRps,
     maxPaginas: fila.maxPaginas,
     maxProfundidad: fila.maxProfundidad,
@@ -145,6 +153,7 @@ function aColumnas(
   urlBase: string,
   dominios: string[],
   puertosLocales: number[],
+  dominiosAutenticacion: string[],
 ) {
   return {
     nombre: entrada.nombre,
@@ -153,6 +162,8 @@ function aColumnas(
     urlBase,
     dominiosPermitidos: dominios,
     puertosLocales,
+    dominiosAutenticacion,
+    sesionMaxMinutos: entrada.sesionMaxMinutos,
     maxRps: entrada.maxRps,
     maxPaginas: entrada.maxPaginas,
     maxProfundidad: entrada.maxProfundidad,
@@ -177,21 +188,24 @@ function estadoDe(base: BaseCifrada, fila: FilaProyecto) {
       dominios: fila.dominiosPermitidos,
       sistemaInterno: fila.sistemaInterno,
       puertosLocales: fila.puertosLocales,
+      dominiosAutenticacion: fila.dominiosAutenticacion,
     },
     aceptada && {
       urlBase: aceptada.urlBaseAceptada,
       dominios: aceptada.dominiosAceptados,
       sistemaInterno: aceptada.sistemaInternoAceptado,
       puertosLocales: aceptada.puertosAceptados,
+      dominiosAutenticacion: aceptada.dominiosAutenticacionAceptados,
       version: aceptada.versionTexto,
       invalidada: aceptada.invalidadaEn !== null,
     },
   );
 }
 
+/** El login puede pasar por un dominio de autenticación: ahí está el proveedor de identidad. */
 function loginValido(fila: FilaProyecto, urlLogin: string): boolean {
   return validarUrlLogin(urlLogin, {
-    dominios: fila.dominiosPermitidos,
+    dominios: [...fila.dominiosPermitidos, ...fila.dominiosAutenticacion],
     permitirLoginHttp: fila.permitirLoginHttp,
   }).ok;
 }
@@ -205,7 +219,9 @@ function aResumenCredencial(proyecto: FilaProyecto, fila: FilaCredencial): Crede
     urlLogin: fila.urlLogin,
     pasosLogin: fila.pasosLogin as PasoLogin[],
     indicadorExito: (fila.indicadorExito ?? null) as IndicadorExito | null,
-    secretoConfigurado: true,
+    rol: fila.rol,
+    estrategia: fila.estrategia,
+    secretoConfigurado: fila.secreto !== null,
     secretoActualizadoEn: fila.secretoActualizadoEn,
     requiereRevision: !loginValido(proyecto, fila.urlLogin),
   };
@@ -218,7 +234,14 @@ function aResumenCredencial(proyecto: FilaProyecto, fila: FilaCredencial): Crede
  * - Cada acción y su auditoría van en la misma transacción.
  */
 export class ServicioProyectos {
-  constructor(private readonly boveda: ServicioBoveda) {}
+  /**
+   * `alCambiarCredencial` avisa que una credencial o el alcance cambiaron: la sesión guardada de ese
+   * proyecto deja de valer (ADR 026).
+   */
+  constructor(
+    private readonly boveda: ServicioBoveda,
+    private readonly alCambiarCredencial?: (proyectoId: string) => void,
+  ) {}
 
   listar(): ProyectoResumen[] {
     return this.boveda.conAcceso((base) =>
@@ -248,6 +271,7 @@ export class ServicioProyectos {
             urlBase: fila.urlBase,
             dominios: fila.dominiosPermitidos,
             puertosLocales: fila.puertosLocales,
+            dominiosAutenticacion: fila.dominiosAutenticacion,
           }),
         },
         credenciales: leerCredenciales(base, id).map((c) => aResumenCredencial(fila, c)),
@@ -296,7 +320,13 @@ export class ServicioProyectos {
       base.transaction(() => {
         insertarProyecto(base, {
           id,
-          ...aColumnas(entrada, alcance.urlBase, alcance.dominios, alcance.puertosLocales),
+          ...aColumnas(
+            entrada,
+            alcance.urlBase,
+            alcance.dominios,
+            alcance.puertosLocales,
+            alcance.dominiosAutenticacion,
+          ),
           claveProyectoCifrada: envuelta,
         });
         this.registrarAceptacion(base, id, texto, {
@@ -304,6 +334,7 @@ export class ServicioProyectos {
           dominios: alcance.dominios,
           sistemaInterno: entrada.sistemaInterno,
           puertosLocales: alcance.puertosLocales,
+          dominiosAutenticacion: alcance.dominiosAutenticacion,
         });
         registrarAuditoria(base, { accion: 'proyecto.crear', entidad: 'proyecto', entidadId: id });
       })();
@@ -323,20 +354,33 @@ export class ServicioProyectos {
         urlBase: alcance.urlBase,
         dominios: alcance.dominios,
         puertosLocales: alcance.puertosLocales,
+        dominiosAutenticacion: alcance.dominiosAutenticacion,
       };
       const cambio = (campo: keyof ProyectoEntrada) => !iguales(anterior[campo], nueva[campo]);
       const campos = CAMPOS_EDITABLES.filter(cambio);
       const opciones = OPCIONES.filter(cambio);
       // RN-PRY-03. "Sistema interno" cambia a qué se puede llegar; el login en http, no.
       const camposDeAlcance = (
-        ['urlBase', 'dominios', 'sistemaInterno', 'puertosLocales'] as const
+        [
+          'urlBase',
+          'dominios',
+          'sistemaInterno',
+          'puertosLocales',
+          'dominiosAutenticacion',
+        ] as const
       ).filter(cambio);
 
       base.transaction(() => {
         actualizarProyecto(
           base,
           id,
-          aColumnas(entrada, alcance.urlBase, alcance.dominios, alcance.puertosLocales),
+          aColumnas(
+            entrada,
+            alcance.urlBase,
+            alcance.dominios,
+            alcance.puertosLocales,
+            alcance.dominiosAutenticacion,
+          ),
         );
         if (campos.length > 0) {
           registrarAuditoria(base, {
@@ -365,6 +409,7 @@ export class ServicioProyectos {
           });
         }
       })();
+      if (camposDeAlcance.length > 0) this.alCambiarCredencial?.(id);
       return {
         resultado: 'actualizado',
         autorizacion: estadoDe(base, this.proyectoExistente(base, id)),
@@ -394,6 +439,7 @@ export class ServicioProyectos {
       } catch {
         // Se completa al abrir la base.
       }
+      this.alCambiarCredencial?.(id);
       return { resultado: 'eliminado' };
     });
   }
@@ -408,6 +454,7 @@ export class ServicioProyectos {
         urlBase: fila.urlBase,
         dominios: fila.dominiosPermitidos,
         puertosLocales: fila.puertosLocales,
+        dominiosAutenticacion: fila.dominiosAutenticacion,
       });
       if (!this.aceptacionValida(aceptacion, texto)) return { resultado: 'declaracion-distinta' };
       base.transaction(() => {
@@ -416,6 +463,7 @@ export class ServicioProyectos {
           dominios: fila.dominiosPermitidos,
           sistemaInterno: fila.sistemaInterno,
           puertosLocales: fila.puertosLocales,
+          dominiosAutenticacion: fila.dominiosAutenticacion,
         });
       })();
       return { resultado: 'aceptada' };
@@ -436,6 +484,7 @@ export class ServicioProyectos {
       dominios: string[];
       sistemaInterno: boolean;
       puertosLocales: number[];
+      dominiosAutenticacion: string[];
     },
   ): void {
     agregarAutorizacion(base, {
@@ -446,6 +495,7 @@ export class ServicioProyectos {
       dominiosAceptados: alcance.dominios,
       sistemaInternoAceptado: alcance.sistemaInterno,
       puertosAceptados: alcance.puertosLocales,
+      dominiosAutenticacionAceptados: alcance.dominiosAutenticacion,
     });
     registrarAuditoria(base, {
       accion: 'autorizacion.aceptar',
@@ -467,45 +517,114 @@ export class ServicioProyectos {
     if (!estado.vigente) throw new AutorizacionNoVigente(estado.motivo);
   }
 
+  /**
+   * Una credencial por estrategia (ADR 025). Lo que cada una exige se valida acá: el contrato no sabe de
+   * estrategias para no abrir un campo libre donde quede un valor secreto.
+   */
   guardarCredencial(
     solicitud: IpcRequest<'credenciales:guardar'>,
   ): IpcResponse<'credenciales:guardar'> {
     return this.boveda.conAcceso((base, maestra) => {
-      const { proyectoId, nombre, usuario, urlLogin, pasosLogin } = solicitud;
+      const { proyectoId, nombre, rol, estrategia, usuario, urlLogin, pasosLogin } = solicitud;
       const indicadorExito = solicitud.indicadorExito ?? null;
       const proyecto = this.proyectoExistente(base, proyectoId);
-      const login = validarUrlLogin(urlLogin, {
-        dominios: proyecto.dominiosPermitidos,
+      const credencialId = 'credencialId' in solicitud ? solicitud.credencialId : undefined;
+      const secretoNuevo = 'secreto' in solicitud ? solicitud.secreto : undefined;
+      const rechazar = (campo: ErrorValidacion['campo'], motivo: ErrorValidacion['motivo']) => ({
+        resultado: 'rechazado' as const,
+        errores: [{ campo, motivo }],
+      });
+
+      const rolLimpio = rol.trim();
+      const repetido = leerCredenciales(base, proyectoId).some(
+        (c) =>
+          c.id !== credencialId &&
+          c.rol.toLocaleLowerCase('es') === rolLimpio.toLocaleLowerCase('es'),
+      );
+      if (repetido) return rechazar('rol', 'rol-repetido');
+
+      const conUsuario =
+        estrategia === 'formulario' || estrategia === 'sso' || estrategia === 'basica';
+      if (conUsuario && !usuario) return rechazar('usuario', 'usuario-requerido');
+      const anterior = credencialId
+        ? this.credencialExistente(base, proyectoId, credencialId)
+        : undefined;
+      // La estrategia no cambia: el secreto guardado es de otra forma (una contraseña no es un enlace).
+      if (anterior && anterior.estrategia !== estrategia) {
+        return rechazar('estrategia', 'estrategia-fija');
+      }
+      // Una forma pendiente no se crea; la que ya existe se puede editar, pero no se usa.
+      if (!anterior && !estrategiaDisponible(estrategia)) {
+        return rechazar('estrategia', 'estrategia-no-disponible');
+      }
+      if (estrategia === 'asistido' && secretoNuevo !== undefined) {
+        return rechazar('secreto', 'secreto-no-corresponde');
+      }
+      if (!anterior && estrategia !== 'asistido' && secretoNuevo === undefined) {
+        return rechazar('secreto', 'secreto-requerido');
+      }
+
+      const dominiosDeLogin = [...proyecto.dominiosPermitidos, ...proyecto.dominiosAutenticacion];
+      // El token en la URL: el secreto es la URL de entrada, y tiene que estar en el alcance.
+      let urlDeEntrada = urlLogin;
+      if (estrategia === 'token-url' && secretoNuevo !== undefined) {
+        const entrada = validarUrlLogin(secretoNuevo, {
+          dominios: dominiosDeLogin,
+          permitirLoginHttp: proyecto.permitirLoginHttp,
+        });
+        if (!entrada.ok) return rechazar('secreto', entrada.motivo);
+        const url = new URL(entrada.url);
+        urlDeEntrada = url.origin + url.pathname;
+      }
+      const login = validarUrlLogin(urlDeEntrada, {
+        dominios: dominiosDeLogin,
         permitirLoginHttp: proyecto.permitirLoginHttp,
       });
-      if (!login.ok) {
-        return { resultado: 'rechazado', errores: [{ campo: 'urlLogin', motivo: login.motivo }] };
+      if (!login.ok) return rechazar('urlLogin', login.motivo);
+      // La básica va en cada pedido, no solo en el login: sobre http hace falta la opción, también en
+      // los equipos locales y en .test (el runner lo vuelve a decidir pedido por pedido).
+      if (
+        estrategia === 'basica' &&
+        new URL(login.url).protocol === 'http:' &&
+        !proyecto.permitirLoginHttp
+      ) {
+        return rechazar('urlLogin', 'login-sin-cifrar');
       }
+
       const datos = {
         nombre: nombre.trim(),
-        usuario,
+        rol: rolLimpio,
+        estrategia,
+        usuario: conUsuario ? usuario : '',
         urlLogin: login.url,
-        pasosLogin,
+        pasosLogin: estrategia === 'formulario' || estrategia === 'sso' ? pasosLogin : [],
         indicadorExito,
       };
 
-      if ('secreto' in solicitud) {
+      if (!anterior) {
         const id = randomUUID();
-        const secreto = this.cifrarSecreto(maestra, proyecto, id, solicitud.secreto);
+        const secreto =
+          secretoNuevo === undefined
+            ? null
+            : this.cifrarSecreto(maestra, proyecto, id, secretoNuevo);
         base.transaction(() => {
           agregarCredencial(base, { id, proyectoId, ...datos, secreto });
           this.auditarCredencial(base, 'credencial.guardar', id, proyectoId);
         })();
+        this.alCambiarCredencial?.(proyectoId);
         return { resultado: 'guardada', credencialId: id };
       }
 
-      const id = solicitud.credencialId;
-      this.credencialExistente(base, proyectoId, id);
       base.transaction(() => {
-        actualizarCredencial(base, id, datos);
-        this.auditarCredencial(base, 'credencial.guardar', id, proyectoId);
+        // En el token en la URL, la URL de login sale del enlace: solo cambia con el secreto.
+        actualizarCredencial(base, anterior.id, {
+          ...datos,
+          urlLogin: estrategia === 'token-url' ? anterior.urlLogin : datos.urlLogin,
+        });
+        this.auditarCredencial(base, 'credencial.guardar', anterior.id, proyectoId);
       })();
-      return { resultado: 'guardada', credencialId: id };
+      this.alCambiarCredencial?.(proyectoId);
+      return { resultado: 'guardada', credencialId: anterior.id };
     });
   }
 
@@ -516,12 +635,34 @@ export class ServicioProyectos {
   ): IpcResponse<'credenciales:reemplazarSecreto'> {
     return this.boveda.conAcceso((base, maestra) => {
       const proyecto = this.proyectoExistente(base, proyectoId);
-      this.credencialExistente(base, proyectoId, credencialId);
+      const actual = this.credencialExistente(base, proyectoId, credencialId);
+      if (actual.estrategia === 'asistido') {
+        return {
+          resultado: 'rechazado',
+          errores: [{ campo: 'secreto', motivo: 'secreto-no-corresponde' }],
+        };
+      }
+      let urlLogin: string | undefined;
+      if (actual.estrategia === 'token-url') {
+        const entrada = validarUrlLogin(secreto, {
+          dominios: [...proyecto.dominiosPermitidos, ...proyecto.dominiosAutenticacion],
+          permitirLoginHttp: proyecto.permitirLoginHttp,
+        });
+        if (!entrada.ok) {
+          return {
+            resultado: 'rechazado',
+            errores: [{ campo: 'secreto', motivo: entrada.motivo }],
+          };
+        }
+        const url = new URL(entrada.url);
+        urlLogin = url.origin + url.pathname;
+      }
       const cifrado = this.cifrarSecreto(maestra, proyecto, credencialId, secreto);
       base.transaction(() => {
-        reemplazarSecretoCredencial(base, credencialId, cifrado);
+        reemplazarSecretoCredencial(base, credencialId, cifrado, urlLogin);
         this.auditarCredencial(base, 'credencial.reemplazar_secreto', credencialId, proyectoId);
       })();
+      this.alCambiarCredencial?.(proyectoId);
       return { resultado: 'reemplazado' };
     });
   }
@@ -536,6 +677,7 @@ export class ServicioProyectos {
         borrarCredencial(base, credencialId);
         this.auditarCredencial(base, 'credencial.eliminar', credencialId, proyectoId);
       })();
+      this.alCambiarCredencial?.(proyectoId);
       return { resultado: 'eliminada' };
     });
   }
@@ -555,6 +697,7 @@ export class ServicioProyectos {
       if (!estado.vigente) throw new AutorizacionNoVigente(estado.motivo);
       const credencial = this.credencialExistente(base, proyectoId, credencialId);
       if (!loginValido(proyecto, credencial.urlLogin)) throw new CredencialARevisar();
+      if (credencial.secreto === null) throw new EntidadNoEncontrada();
 
       const clave = abrirClaveProyecto(maestra, proyectoId, proyecto.claveProyectoCifrada);
       try {
@@ -580,6 +723,9 @@ export class ServicioProyectos {
         dominios: fila.dominiosPermitidos,
         sistemaInterno: fila.sistemaInterno,
         puertosLocales: fila.puertosLocales,
+        dominiosAutenticacion: fila.dominiosAutenticacion,
+        sesionMaxMinutos: fila.sesionMaxMinutos,
+        permitirLoginHttp: fila.permitirLoginHttp,
         maxRps: fila.maxRps,
         maxPaginas: fila.maxPaginas,
         maxProfundidad: fila.maxProfundidad,

@@ -273,6 +273,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     exclusiones: ['logout'],
     modoDatosSensibles: false,
     selectoresSensibles: [],
+    dominiosAutenticacion: [],
+    sesionMaxMinutos: null,
     sistemaInterno: false,
     puertosLocales: [],
     permitirLoginHttp: false,
@@ -281,6 +283,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
   const CREDENCIAL = {
     proyectoId: ID,
     nombre: 'Prueba',
+    rol: 'admin',
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [{ accion: 'click', selector: 'button' }],
@@ -288,6 +292,8 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
   const RESUMEN_CREDENCIAL = {
     id: OTRO_ID,
     nombre: 'Prueba',
+    rol: 'admin',
+    estrategia: 'formulario',
     usuario: 'ana@example.com',
     urlLogin: 'https://app.lexora.test/login',
     pasosLogin: [],
@@ -321,6 +327,12 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
     ['aceptar', 'proyectos:aceptarAutorizacion', { id: ID, aceptacion: ACEPTACION }],
     ['credencial nueva', 'credenciales:guardar', { ...CREDENCIAL, secreto: 'x' }],
     ['editar credencial', 'credenciales:guardar', { ...CREDENCIAL, credencialId: OTRO_ID }],
+    // El esquema la deja pasar para el login asistido; el servicio la rechaza en las demás.
+    [
+      'credencial sin secreto',
+      'credenciales:guardar',
+      { ...CREDENCIAL, estrategia: 'asistido', usuario: '' },
+    ],
     [
       'reemplazar',
       'credenciales:reemplazarSecreto',
@@ -378,7 +390,12 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
         aceptacion: { aceptada: true, texto: 'x' },
       },
     ],
-    ['credencial nueva sin secreto', 'credenciales:guardar', CREDENCIAL],
+    [
+      'una estrategia que no existe',
+      'credenciales:guardar',
+      { ...CREDENCIAL, estrategia: 'cookie', secreto: 'x' },
+    ],
+    ['una credencial sin rol', 'credenciales:guardar', { ...CREDENCIAL, rol: ' ', secreto: 'x' }],
     ['credencial con secreto vacío', 'credenciales:guardar', { ...CREDENCIAL, secreto: '' }],
     [
       'editar y mandar el secreto a la vez',
@@ -456,9 +473,9 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
       { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, ultimos4: '1234' }] },
     ],
     [
-      'credencial con secreto sin configurar',
+      'credencial con el secreto adentro',
       'proyectos:obtener',
-      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secretoConfigurado: false }] },
+      { ...DETALLE, credenciales: [{ ...RESUMEN_CREDENCIAL, secreto: 'x' }] },
     ],
     [
       'resumen con un campo extra',
@@ -585,6 +602,7 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     'ejecuciones:cancelar',
     'ejecuciones:listar',
     'ejecuciones:detalle',
+    'ejecuciones:reanudar',
   ] as const)('%s queda bloqueado con la bóveda bloqueada', (canal) => {
     expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
   });
@@ -606,6 +624,30 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     expect(entrada('ejecuciones:cancelar').safeParse({ ejecucionId: 'no-uuid' }).success).toBe(
       false,
     );
+  });
+
+  it('lanzar elige la credencial por su ID, o ninguna; nunca recibe datos de login', () => {
+    const lanzar = entrada('ejecuciones:lanzarEscaneo');
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: null }).success).toBe(true);
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: ID_VALIDO }).success).toBe(true);
+    // Sin decirlo, no hay un valor por defecto que elija por la persona.
+    expect(lanzar.safeParse({ proyectoId: ID_VALIDO }).success).toBe(false);
+    for (const extra of [{ secreto: 'x' }, { estado: '{}' }, { rol: 'admin' }]) {
+      expect(
+        lanzar.safeParse({ proyectoId: ID_VALIDO, credencialId: null, ...extra }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('reanudar recibe solo el ID; un enlace nuevo se carga en la credencial, no acá', () => {
+    const reanudar = entrada('ejecuciones:reanudar');
+    expect(reanudar.safeParse({ ejecucionId: ID_VALIDO }).success).toBe(true);
+    expect(reanudar.safeParse({ ejecucionId: ID_VALIDO, secreto: 'x' }).success).toBe(false);
+    expect(
+      reanudar.safeParse({ ejecucionId: ID_VALIDO, enlace: 'https://x.test/?t=1' }).success,
+    ).toBe(false);
+    const salida = ipcContract['ejecuciones:reanudar'].response;
+    expect(salida.safeParse({ resultado: 'reanudada', estado: {} }).success).toBe(false);
   });
 
   it('probar login devuelve solo un resultado: ningún contenido de la página', () => {
@@ -643,7 +685,11 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         noRecorridosExclusiones: 0,
         urlsDescartadas: 0,
         websocketDescartados: 0,
+        logins: 0,
+        loginsInesperados: 0,
+        renovaciones: 0,
       },
+      rol: null,
     };
     const conexion = {
       fecha: 'x',
@@ -668,6 +714,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
     const base = {
       proyectoId: ID_VALIDO,
       nombre: 'Prueba',
+      rol: 'admin',
+      estrategia: 'formulario',
       usuario: 'ana@example.com',
       urlLogin: 'https://app.lexora.test/login',
       pasosLogin: [],
@@ -701,6 +749,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
       exclusiones: [],
       modoDatosSensibles: false,
       selectoresSensibles: [],
+      dominiosAutenticacion: [],
+      sesionMaxMinutos: null,
       sistemaInterno: false,
       permitirLoginHttp: false,
     };
@@ -741,8 +791,10 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
       paginasVisitadas: 1,
       hallazgos: 0,
       conexionesBloqueadas: 0,
+      espera: null,
     };
     expect(progreso.safeParse(valido).success).toBe(true);
+    expect(progreso.safeParse({ ...valido, espera: 'contrasena' }).success).toBe(false);
     expect(progreso.safeParse({ ...valido, detalle: 'x' }).success).toBe(false);
     expect(progreso.safeParse({ ...valido, hallazgos: -1 }).success).toBe(false);
   });
@@ -763,6 +815,8 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
       exclusiones: [],
       modoDatosSensibles: false,
       selectoresSensibles: [],
+      dominiosAutenticacion: [],
+      sesionMaxMinutos: null,
       sistemaInterno: false,
       permitirLoginHttp: false,
     };

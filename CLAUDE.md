@@ -29,7 +29,23 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Fase 1, semana 6a terminada: crawler y chequeos del escaneo (ESC), `pagina_visitada`, `hallazgo` y
   `hallazgo_ocurrencia` con el detalle cifrado, evento `ejecuciones:progreso`, TS-05 completo y el oráculo
   del sandbox. Ver las ADR 021 a 024.
-- Próximo: semana 6b, login real y escaneo autenticado; TS-06.
+- Fase 1, semana 6b terminada: estrategias de login (formulario, SSO, enlace con token, asistido), roles,
+  dominios de autenticación, proxy de login aparte, estado de sesión en memoria y cifrado, sesión vencida con
+  confirmación, límites y pausa, parámetros sensibles, TS-06 y la zona con login del sandbox. Ver las ADR 025 a 029
+  y el catálogo de estrategias en la especificación (6.2.1).
+- La básica pasó a la fase 2 (ADR 025): si el origen base redirige a otro origen, Chromium le manda el
+  `Authorization` que puso la ruta. `ESTRATEGIAS_PENDIENTES` en `@qatlas/shared` la deja visible y deshabilitada;
+  `e2e/basica-encabezado.e2e.ts` reproduce la fuga con `test.fail`.
+- La ventana del asistido usa un perfil propio con el gestor de contraseñas apagado, dentro de la carpeta de la
+  ejecución en la carpeta de datos (ADR 018 y 028): `crearRunner` recibe `carpetaPerfil`. En Linux, el runner recibe
+  `DISPLAY`, `XAUTHORITY` y `WAYLAND_DISPLAY` (`variablesDePantalla`); si la ventana no abre, la ejecución falla
+  enseguida con `ventana-no-disponible`.
+- Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
+- El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
+  manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).
+- El estado de sesión nunca va a la base ni a disco. Un cambio que deja sin valor una sesión avisa con el callback
+  de `ServicioProyectos` (`descartarSesiones`).
+- Los E2E cargan con `tsconfig.e2e.json` (sin el mapeo de better-sqlite3 a sus tipos). Node 22.15 o más nuevo.
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
@@ -128,7 +144,7 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 ## Antes de dar una tarea por terminada
 
 ```bash
-npm run check                         # lint, tipos, tests, Electronegativity
+npm run check                         # formato, lint, tipos, tests, Electronegativity
 npm run navegador:instalar            # una vez, o al subir Playwright
 npm run build && npm run test:e2e     # E2E (en Linux sin pantalla: xvfb-run -a npm run test:e2e)
 ```

@@ -31,10 +31,13 @@ const ENTRADA: ProyectoEntrada = {
   puertosLocales: [],
   exclusiones: [...EXCLUSIONES_POR_DEFECTO],
   selectoresSensibles: [],
+  dominiosAutenticacion: [],
 };
 
 const CREDENCIAL = {
   nombre: 'Usuario de prueba',
+  rol: 'admin',
+  estrategia: 'formulario' as const,
   usuario: 'ana@example.com',
   urlLogin: 'https://app.lexora.test/login',
   pasosLogin: [
@@ -47,6 +50,8 @@ const CREDENCIAL = {
 let carpeta: string;
 let boveda: ServicioBoveda;
 let proyectos: ServicioProyectos;
+/** Los avisos de cambio que descartan la sesión guardada de un proyecto (ADR 026). */
+let cambios: string[];
 
 const acceso = <T>(fn: (base: BaseCifrada, maestra: Buffer) => T): T => boveda.conAcceso(fn);
 const acciones = () =>
@@ -65,10 +70,14 @@ function crear(entrada: ProyectoEntrada = ENTRADA): string {
   return res.id;
 }
 
+let roles = 0;
+
 function guardarCredencial(proyectoId: string, urlLogin = CREDENCIAL.urlLogin): string {
+  roles += 1;
   const res = proyectos.guardarCredencial({
     proyectoId,
     ...CREDENCIAL,
+    rol: `rol-${roles}`,
     urlLogin,
     secreto: SECRETO,
   });
@@ -91,7 +100,8 @@ beforeEach(async () => {
   carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-proyectos-'));
   boveda = new ServicioBoveda({ carpeta });
   await boveda.crear(CONTRASENA, false);
-  proyectos = new ServicioProyectos(boveda);
+  cambios = [];
+  proyectos = new ServicioProyectos(boveda, (id) => cambios.push(id));
 });
 
 afterEach(() => {
@@ -330,6 +340,8 @@ describe('Credenciales (RN-PRY-04)', () => {
     expect(credencial).toEqual({
       id: credencialId,
       nombre: 'Usuario de prueba',
+      rol: expect.stringMatching(/^rol-/) as string,
+      estrategia: 'formulario',
       usuario: 'ana@example.com',
       urlLogin: 'https://app.lexora.test/login',
       pasosLogin: CREDENCIAL.pasosLogin,
@@ -691,5 +703,219 @@ describe('Indicador de éxito', () => {
     const id = crear();
     guardarCredencial(id);
     expect(detalle(id).credenciales[0]?.indicadorExito).toBeNull();
+  });
+});
+
+describe('Estrategias de login (ADR 025)', () => {
+  const AUTH: ProyectoEntrada = { ...ENTRADA, dominiosAutenticacion: ['idp.lexora.test'] };
+  const BASE = { ...CREDENCIAL, pasosLogin: [] };
+
+  it('el rol es único en el proyecto, sin importar mayúsculas', () => {
+    const id = crear();
+    expect(
+      proyectos.guardarCredencial({ proyectoId: id, ...CREDENCIAL, secreto: SECRETO }),
+    ).toMatchObject({ resultado: 'guardada' });
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...CREDENCIAL,
+        rol: ' ADMIN ',
+        secreto: SECRETO,
+      }),
+    ).toEqual({ resultado: 'rechazado', errores: [{ campo: 'rol', motivo: 'rol-repetido' }] });
+    // Otro proyecto puede tener el mismo rol.
+    const otro = crear({ ...ENTRADA, nombre: 'Otro' });
+    expect(
+      proyectos.guardarCredencial({ proyectoId: otro, ...CREDENCIAL, secreto: SECRETO }),
+    ).toMatchObject({ resultado: 'guardada' });
+  });
+
+  it.each(['formulario', 'sso', 'token-url'] as const)(
+    '%s sin secreto se rechaza',
+    (estrategia) => {
+      const id = crear();
+      expect(proyectos.guardarCredencial({ proyectoId: id, ...BASE, estrategia })).toEqual({
+        resultado: 'rechazado',
+        errores: [{ campo: 'secreto', motivo: 'secreto-requerido' }],
+      });
+    },
+  );
+
+  it.each(['formulario', 'sso'] as const)('%s sin usuario se rechaza', (estrategia) => {
+    const id = crear();
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...BASE,
+        estrategia,
+        usuario: '',
+        secreto: SECRETO,
+      }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'usuario', motivo: 'usuario-requerido' }],
+    });
+  });
+
+  it('la básica no se crea: llega en la fase 2', () => {
+    const id = crear({ ...ENTRADA, permitirLoginHttp: true });
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...BASE,
+        estrategia: 'basica',
+        urlLogin: 'https://app.lexora.test/protegida',
+        secreto: SECRETO,
+      }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'estrategia', motivo: 'estrategia-no-disponible' }],
+    });
+    expect(detalle(id).credenciales).toEqual([]);
+    expect(proyectos.datosDeEjecucion(id)?.permitirLoginHttp).toBe(true);
+  });
+
+  it('una básica que ya existe se puede editar, pero en http solo con la opción, también en .test', () => {
+    const id = crear();
+    // Como la que trae una copia de antes: ya no se puede crear.
+    const credencialId = guardarCredencial(id);
+    acceso((base) => {
+      base
+        .prepare("UPDATE credencial SET estrategia = 'basica', pasos_login = '[]' WHERE id = ?")
+        .run(credencialId);
+    });
+    const edicion = {
+      proyectoId: id,
+      credencialId,
+      ...BASE,
+      estrategia: 'basica' as const,
+      urlLogin: 'http://app.lexora.test/protegida',
+    };
+    expect(proyectos.guardarCredencial(edicion)).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'urlLogin', motivo: 'login-sin-cifrar' }],
+    });
+    expect(
+      proyectos.guardarCredencial({ ...edicion, urlLogin: 'https://app.lexora.test/protegida' }),
+    ).toMatchObject({ resultado: 'guardada' });
+    expect(proyectos.datosDeEjecucion(id)?.permitirLoginHttp).toBe(false);
+  });
+
+  it('el login asistido no guarda ningún secreto, ni usuario, ni pasos', async () => {
+    const id = crear();
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...CREDENCIAL,
+        estrategia: 'asistido',
+        secreto: SECRETO,
+      }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'secreto', motivo: 'secreto-no-corresponde' }],
+    });
+    const res = proyectos.guardarCredencial({
+      proyectoId: id,
+      ...CREDENCIAL,
+      estrategia: 'asistido',
+    });
+    if (res.resultado !== 'guardada') throw new Error(JSON.stringify(res));
+    expect(detalle(id).credenciales[0]).toMatchObject({
+      estrategia: 'asistido',
+      usuario: '',
+      pasosLogin: [],
+      secretoConfigurado: false,
+    });
+    expect(proyectos.reemplazarSecreto(id, res.credencialId, SECRETO)).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'secreto', motivo: 'secreto-no-corresponde' }],
+    });
+    await expect(proyectos.usarSecreto(id, res.credencialId, () => 1)).rejects.toThrow(
+      EntidadNoEncontrada,
+    );
+  });
+
+  it('el SSO puede empezar en un dominio de autenticación, nunca fuera del alcance', () => {
+    const id = crear(AUTH);
+    const sso = { proyectoId: id, ...CREDENCIAL, estrategia: 'sso' as const, secreto: SECRETO };
+    expect(
+      proyectos.guardarCredencial({ ...sso, urlLogin: 'https://idp.lexora.test/autorizar' }),
+    ).toMatchObject({ resultado: 'guardada' });
+    expect(
+      proyectos.guardarCredencial({ ...sso, rol: 'otro', urlLogin: 'https://idp.example.com/' }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'urlLogin', motivo: 'login-fuera-de-dominios' }],
+    });
+  });
+
+  it('en el enlace con token, el enlace es el secreto y la URL de login sale de él sin el token', () => {
+    const id = crear(AUTH);
+    const token = {
+      proyectoId: id,
+      ...BASE,
+      estrategia: 'token-url' as const,
+      usuario: '',
+      urlLogin: '',
+    };
+    expect(
+      proyectos.guardarCredencial({ ...token, secreto: 'https://evil.example/entrar?token=abc' }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'secreto', motivo: 'login-fuera-de-dominios' }],
+    });
+    const enlace = 'https://app.lexora.test/entrar?token=CANARIO-token-91';
+    const res = proyectos.guardarCredencial({ ...token, secreto: enlace });
+    if (res.resultado !== 'guardada') throw new Error(JSON.stringify(res));
+    expect(detalle(id).credenciales[0]?.urlLogin).toBe('https://app.lexora.test/entrar');
+    expect(JSON.stringify(detalle(id))).not.toContain('CANARIO-token-91');
+    // Un enlace nuevo cambia la URL de login con él, y se valida igual.
+    expect(
+      proyectos.reemplazarSecreto(id, res.credencialId, 'https://idp.lexora.test/portal?t=2'),
+    ).toEqual({ resultado: 'reemplazado' });
+    expect(detalle(id).credenciales[0]?.urlLogin).toBe('https://idp.lexora.test/portal');
+    expect(
+      proyectos.reemplazarSecreto(id, res.credencialId, 'https://evil.example/?t=3'),
+    ).toMatchObject({ resultado: 'rechazado' });
+  });
+
+  it('la estrategia no se cambia al editar', () => {
+    const id = crear();
+    const credencialId = guardarCredencial(id);
+    expect(
+      proyectos.guardarCredencial({
+        proyectoId: id,
+        ...CREDENCIAL,
+        estrategia: 'asistido',
+        credencialId,
+      }),
+    ).toEqual({
+      resultado: 'rechazado',
+      errores: [{ campo: 'estrategia', motivo: 'estrategia-fija' }],
+    });
+  });
+
+  it('avisa cada cambio que deja sin valor la sesión guardada', () => {
+    const id = crear();
+    cambios.length = 0;
+    const credencialId = guardarCredencial(id);
+    proyectos.reemplazarSecreto(id, credencialId, 'otro-secreto-inventado');
+    proyectos.guardarCredencial({ proyectoId: id, ...CREDENCIAL, rol: 'x', credencialId });
+    proyectos.eliminarCredencial(id, credencialId);
+    expect(cambios).toEqual([id, id, id, id]);
+    cambios.length = 0;
+    // Un cambio que no toca el alcance no la descarta; uno que sí, sí.
+    proyectos.actualizar(id, { ...ENTRADA, maxRps: 3 });
+    expect(cambios).toEqual([]);
+    proyectos.actualizar(id, { ...ENTRADA, dominiosAutenticacion: ['idp.lexora.test'] });
+    expect(cambios).toEqual([id]);
+  });
+
+  it('los dominios de autenticación son parte del alcance autorizado', () => {
+    const id = crear(AUTH);
+    expect(detalle(id).declaracion.texto).toContain('(dominios de autenticación: idp.lexora.test)');
+    const res = proyectos.actualizar(id, { ...AUTH, dominiosAutenticacion: ['sso.lexora.test'] });
+    expect(res).toMatchObject({ autorizacion: { vigente: false, motivo: 'alcance-cambiado' } });
+    expect(acciones()).toContainEqual(['autorizacion.invalidar', ['dominiosAutenticacion']]);
   });
 });

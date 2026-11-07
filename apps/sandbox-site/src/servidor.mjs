@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { createSocket } from 'node:dgram';
 import { createServer } from 'node:http';
 import { createServer as crearServidorTls } from 'node:https';
+import { crearZonaAutenticada, HOST_IDP, HOST_PORTAL } from './autenticacion.mjs';
+
+export { HOST_IDP, HOST_PORTAL, USUARIO_BASICA, USUARIOS_APP } from './autenticacion.mjs';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
@@ -44,6 +47,8 @@ export const HOSTS_DE_FUGA = [
  */
 export const MAPA_DE_HOSTS = Object.freeze({
   [HOST_SITIO]: HOST_ESCUCHA,
+  [HOST_IDP]: HOST_ESCUCHA,
+  [HOST_PORTAL]: HOST_ESCUCHA,
   [FUGA_SCRIPT]: HOST_ESCUCHA,
   [FUGA_PIXEL]: HOST_ESCUCHA,
   [FUGA_FETCH]: HOST_ESCUCHA,
@@ -368,6 +373,11 @@ export function iniciarSandbox({
   demoraLentaMs = DEMORA_LENTA_MS,
   // Clave y certificado de prueba, generados por quien lo llama. Sin esto, no hay HTTPS.
   tls = undefined,
+  // La zona con login (autenticacion.mjs): tiempos de sesión cortos y un reloj que el test controla.
+  sesion = undefined,
+  ahora = Date.now,
+  // Con qué nombre se ve cada parte. En la app de escritorio, sin resolver propio: 127.0.0.1 y localhost.
+  hosts = { app: HOST_SITIO, idp: HOST_IDP, portal: HOST_PORTAL },
 } = {}) {
   const registro = {
     fugas: [],
@@ -390,6 +400,24 @@ export function iniciarSandbox({
   let puertoTrampa = 0;
   let puertoUdp = 0;
   let puertoHttps = 0;
+  const origen = (host) => `http://${host}:${puertoReal}`;
+  const zona = crearZonaAutenticada({
+    sesion,
+    ahora,
+    origenes: () => ({
+      app: origen(hosts.app),
+      idp: origen(hosts.idp),
+      portal: origen(hosts.portal),
+    }),
+  });
+  const hostsAceptados = new Set([
+    HOST_SITIO,
+    HOST_ESCUCHA,
+    'localhost',
+    hosts.app,
+    hosts.idp,
+    hosts.portal,
+  ]);
 
   const atender = async (req, res) => {
     const nombreHost = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
@@ -402,13 +430,14 @@ export function iniciarSandbox({
       return;
     }
     // Protege de un sitio cualquiera que apunte su dominio a 127.0.0.1 (DNS rebinding).
-    if (![HOST_SITIO, HOST_ESCUCHA, 'localhost'].includes(nombreHost)) {
+    if (!hostsAceptados.has(nombreHost)) {
       responder(res, 421, '');
       return;
     }
 
     const { pathname } = new URL(req.url ?? '/', `http://${HOST_ESCUCHA}`);
     registro.rutas.push(pathname);
+    if (await zona.atender(req, res, nombreHost, leerCuerpo)) return;
     const clave = `${req.method} ${pathname}`;
     switch (clave) {
       case 'GET /':
@@ -686,6 +715,7 @@ export function iniciarSandbox({
       direccion: direccion.address,
       url: `http://${HOST_ESCUCHA}:${puertoReal}`,
       registro,
+      autenticacion: zona.api,
       cerrar: () => {
         for (const socket of websocketsAbiertos) socket.destroy();
         return Promise.all([

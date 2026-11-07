@@ -10,7 +10,7 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 | ----------------------------------------------- | ------------------------------------------------- |
 | ![QAtlas en modo claro](docs/captura-claro.png) | ![QAtlas en modo oscuro](docs/captura-oscuro.png) |
 
-> **Estado:** fase 1, semana 4 — estructura base endurecida, sistema de diseño Índigo, bóveda cifrada, proyectos con autorización, credenciales cifradas y app de prueba. Ver el [plan por fases](docs/especificacion-qatlas.md).
+> **Estado:** fase 1, semana 6b — estructura base endurecida, bóveda cifrada, proyectos con autorización, runner aislado detrás de un proxy de salida, escaneo automático con su oráculo, y escaneo autenticado con cuatro formas de login y roles (la autenticación básica, en la fase 2). Ver el [plan por fases](docs/especificacion-qatlas.md).
 
 ## Por qué
 
@@ -52,6 +52,9 @@ La seguridad no se agrega al final: es lo primero que se construye y se verifica
 | Solo lectura y exclusiones: escrituras HTTP, WebSocket salientes, links y botones (TS-05)            | ✅          |
 | Escaneo: el sitio probado no ve ni puede alterar los chequeos (mundo aislado)                        | ✅          |
 | Detalle de los hallazgos cifrado con la clave del proyecto, hasta la redacción                       | ✅          |
+| Login en un contexto aparte, detrás de un proxy de login, sin grabar nada (TS-06)                    | ✅          |
+| Estado de sesión solo en memoria, cifrado, sin secretos ni dominios de autenticación                 | ✅          |
+| Sesión vencida: se confirma antes de actuar, y como mucho 3 logins por ejecución                     | ✅          |
 | Redacción y detector de secretos; test del secreto canario                                           | ⏳ semana 7 |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·

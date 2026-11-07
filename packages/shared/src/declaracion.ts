@@ -23,6 +23,8 @@ export interface AlcanceAutorizado {
   sistemaInterno: boolean;
   /** Puertos locales declarados además del de la URL base. */
   puertosLocales: readonly number[];
+  /** Solo para el login: el crawler nunca los recorre (ADR 025). */
+  dominiosAutenticacion?: readonly string[];
 }
 
 export interface AutorizacionAceptada extends AlcanceAutorizado {
@@ -39,14 +41,23 @@ export function renderizarDeclaracion({
   urlBase,
   dominios,
   puertosLocales,
-}: Pick<AlcanceAutorizado, 'urlBase' | 'dominios' | 'puertosLocales'>): string {
+  dominiosAutenticacion = [],
+}: Pick<
+  AlcanceAutorizado,
+  'urlBase' | 'dominios' | 'puertosLocales' | 'dominiosAutenticacion'
+>): string {
   // Sin puertos extra el texto no cambia: las aceptaciones de la versión 1 siguen valiendo.
   const puertos =
     puertosLocales.length > 0 ? ` (puertos locales: ${puertosLocales.join(', ')})` : '';
   // Con funciones de reemplazo: un `$` en una URL no se interpreta como patrón.
   return PLANTILLA_DECLARACION.replace('{url_base}', () => urlBase).replace(
     '{dominios}',
-    () => dominios.join(', ') + puertos,
+    () =>
+      dominios.join(', ') +
+      puertos +
+      (dominiosAutenticacion.length > 0
+        ? ` (dominios de autenticación: ${dominiosAutenticacion.join(', ')})`
+        : ''),
   );
 }
 
@@ -56,7 +67,8 @@ function mismoAlcance(a: AlcanceAutorizado, b: AlcanceAutorizado): boolean {
     a.urlBase === b.urlBase &&
     a.sistemaInterno === b.sistemaInterno &&
     ordenar(a.dominios) === ordenar(b.dominios) &&
-    ordenar(a.puertosLocales) === ordenar(b.puertosLocales)
+    ordenar(a.puertosLocales) === ordenar(b.puertosLocales) &&
+    ordenar(a.dominiosAutenticacion ?? []) === ordenar(b.dominiosAutenticacion ?? [])
   );
 }
 
