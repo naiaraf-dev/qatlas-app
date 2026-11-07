@@ -26,11 +26,16 @@ const manifiestoNativos = () =>
     `${process.platform}-${process.arch}`,
   );
 
-export default defineConfig({
+// `mode` es development solo con `electron-vite dev`: las herramientas de desarrollo y el menú por
+// defecto existen solo ahí (especificación 3.6), también en un build sin empaquetar.
+export default defineConfig(({ mode }) => ({
   main: {
     // El driver de Drizzle importa 'better-sqlite3'; acá se usa la variante con SQLCipher (ADR 006).
     resolve: { alias: { 'better-sqlite3': 'better-sqlite3-multiple-ciphers' } },
-    define: { __QATLAS_NATIVOS__: JSON.stringify(manifiestoNativos()) },
+    define: {
+      __QATLAS_NATIVOS__: JSON.stringify(manifiestoNativos()),
+      __QATLAS_DESARROLLO__: JSON.stringify(mode === 'development'),
+    },
     build: {
       externalizeDeps: { exclude: WORKSPACE_PACKAGES },
       rolldownOptions: {
@@ -73,4 +78,4 @@ export default defineConfig({
       minify: true,
     },
   },
-});
+}));

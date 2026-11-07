@@ -14,6 +14,9 @@ import { registerIpc } from './ipc/register';
 import { makeSenderCheck } from './ipc/create-handler';
 import { APP_HOST, APP_ORIGIN, APP_SCHEME, resolveAppRequest } from './security/app-protocol';
 import { buildCsp } from './security/csp';
+import { menuDeLaAplicacion } from './security/menu';
+import iconoIco from '../../resources/icon.ico?asset';
+import iconoPng from '../../resources/icon.png?asset';
 import { isLikelySyncedPath, resolveDataDirectory } from './security/data-dir';
 import { verificarNativos, type ModuloNativo } from './security/nativos';
 import { ConnectionLog } from './security/network-policy';
@@ -107,6 +110,8 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'QAtlas',
+    // Ventana y barra de tareas. En Windows, el ICO trae cada tamaño dibujado para que se lea.
+    icon: process.platform === 'win32' ? iconoIco : iconoPng,
     // Mismo fondo que la interfaz, para que no haya un destello al abrir.
     backgroundColor: windowBackground(),
     webPreferences: {
@@ -118,10 +123,17 @@ function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       disableBlinkFeatures: 'Auxclick',
       preload: path.join(import.meta.dirname, '../preload/index.cjs'),
-      devTools: !app.isPackaged,
+      // Solo con electron-vite dev; nunca en un build, empaquetado o no (especificación 3.6).
+      devTools: __QATLAS_DESARROLLO__,
     },
   });
-  mainWindowPreferences = { ...SECURE_WEB_PREFERENCES, devTools: !app.isPackaged };
+  mainWindowPreferences = { ...SECURE_WEB_PREFERENCES, devTools: __QATLAS_DESARROLLO__ };
+  if (!__QATLAS_DESARROLLO__) {
+    // Defensa en profundidad: con devTools en false no se abren, y si algo las abriera, se cierran.
+    window.webContents.on('devtools-opened', () => {
+      window.webContents.closeDevTools();
+    });
+  }
 
   const onThemeChange = (): void => {
     window.setBackgroundColor(windowBackground());
@@ -240,7 +252,12 @@ function vigilarBloqueo(boveda: ServicioBoveda): void {
 }
 
 void app.whenReady().then(async () => {
-  if (app.isPackaged) Menu.setApplicationMenu(null);
+  const menu = menuDeLaAplicacion({
+    desarrollo: __QATLAS_DESARROLLO__,
+    plataforma: process.platform,
+  });
+  if (menu.tipo === 'ninguno') Menu.setApplicationMenu(null);
+  if (menu.tipo === 'plantilla') Menu.setApplicationMenu(Menu.buildFromTemplate(menu.plantilla));
 
   const servicios = await cargarServicios();
   if (!servicios) {

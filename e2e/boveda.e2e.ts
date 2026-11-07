@@ -39,6 +39,19 @@ test.afterAll(async () => {
 });
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
+
+/** El color del símbolo y de la línea de escaneo del isotipo visible: cambian con el modo (docs/marca). */
+const coloresDelLogo = (pagina: Page) =>
+  pagina
+    .locator('[data-marca="isotipo"]')
+    .first()
+    .evaluate((svg) => ({
+      simbolo: getComputedStyle(svg.querySelector('rect') as Element).fill,
+      escaneo: getComputedStyle(svg.querySelector('path') as Element).stroke,
+    }));
+const LOGO_CLARO = { simbolo: 'rgb(91, 91, 214)', escaneo: 'rgb(156, 156, 242)' };
+const LOGO_OSCURO = { simbolo: 'rgb(109, 109, 227)', escaneo: 'rgb(199, 201, 255)' };
+
 const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
 
 /** Escrita pero sin enviar: ningún atributo la refleja, aunque el campo la tenga. */
@@ -157,7 +170,51 @@ test('la pantalla bloqueada se ve bien en los dos modos', async () => {
       .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
       .toBe(fondo);
     await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeVisible();
+    // El logo de la pantalla de acceso, con los colores de la marca del modo.
+    await expect(page.locator('main [data-marca="isotipo"]')).toBeVisible();
+    await expect
+      .poll(() => coloresDelLogo(page))
+      .toEqual(modo === 'dark' ? LOGO_OSCURO : LOGO_CLARO);
   }
+  await desbloquear();
+  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+});
+
+test('sin el menú por defecto de Electron, y los atajos de las herramientas de desarrollo no abren nada', async () => {
+  const menu = await app.evaluate(({ Menu }) => {
+    const actual = Menu.getApplicationMenu();
+    return actual ? actual.items.map((item) => item.label) : null;
+  });
+  // En macOS, uno mínimo (los atajos de edición dependen del menú); en Windows y Linux, ninguno.
+  expect(menu).toEqual(process.platform === 'darwin' ? ['QAtlas', 'Edición', 'Ventana'] : null);
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const ventana = BrowserWindow.getAllWindows()[0];
+    const global = globalThis as unknown as { devtoolsAbiertas: number };
+    global.devtoolsAbiertas = 0;
+    ventana?.webContents.on('devtools-opened', () => {
+      global.devtoolsAbiertas += 1;
+    });
+  });
+  for (const atajo of [
+    'F12',
+    'Control+Shift+I',
+    'Control+Shift+J',
+    'Control+Shift+C',
+    'Meta+Alt+I',
+  ]) {
+    await page.keyboard.press(atajo);
+  }
+  // Señal: Ctrl+Mayús+L bloquea. Las teclas llegan en orden, así que al ver la bóveda bloqueada,
+  // los atajos de antes ya se procesaron (y además prueba que el teclado llega a la app).
+  await page.keyboard.press('Control+Shift+L');
+  await expect(titulo('Bóveda bloqueada')).toBeVisible();
+  const estado = await app.evaluate(({ BrowserWindow }) => ({
+    abiertas: BrowserWindow.getAllWindows()[0]?.webContents.isDevToolsOpened(),
+    veces: (globalThis as unknown as { devtoolsAbiertas: number }).devtoolsAbiertas,
+    ventanas: BrowserWindow.getAllWindows().length,
+  }));
+  expect(estado).toEqual({ abiertas: false, veces: 0, ventanas: 1 });
   await desbloquear();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
 });
