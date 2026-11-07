@@ -52,5 +52,10 @@ una variante sin cifrado.
 - **Tradeoff aceptado:** se confía en un binario publicado por un solo mantenedor. La procedencia indica
   cómo se generó, pero no reemplaza una revisión del código.
 - **Pendiente para la semana 10:** compilar SQLCipher desde fuente, en CI, para los instaladores.
-- La integridad del `.node` en disco se trata en la [ADR 007](007-integridad-modulos-nativos.md).
-- Al actualizar el paquete hay que volver a correr TS-02 en Electron y revisar esta ADR.
+- **No se compila en ningún equipo:** con `ignore-scripts=true` no corre nada al instalar, y el paquete no
+  declara script de instalación. El `.node` de cada plataforma es el del tarball, y su SHA-256 está en
+  `scripts/nativos-hashes.json`, revisado: el CI, el build y la app lo comparan ([ADR 007](007-integridad-modulos-nativos.md)).
+  Un comentario viejo en `scripts/allowed-install-scripts.mjs` hablaba de «compilación para Electron»; se
+  corrigió el 2026-11-07.
+- Al actualizar el paquete hay que volver a correr TS-02 en Electron, revisar esta ADR y registrar los
+  hashes nuevos después de revisarlos (ADR 007).
