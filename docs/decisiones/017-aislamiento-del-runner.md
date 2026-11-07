@@ -81,4 +81,5 @@ QAtlas no puede saberlo.
 
 `security-tests/runner-aislamiento.test.ts`, `e2e/contencion.e2e.ts` y, en un `utilityProcess` real,
 `e2e/ejecuciones.e2e.ts`. El entorno lo prueba una sonda, no el runner mismo; el runner recibe su entorno de
-`entornoMinimo`, con su test propio.
+`entornoMinimo`, con su test propio. En Linux, el runner suma solo `DISPLAY`, `XAUTHORITY` y `WAYLAND_DISPLAY`,
+para la ventana del login asistido (ADR 028).

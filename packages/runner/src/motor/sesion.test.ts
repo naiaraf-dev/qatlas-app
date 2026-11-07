@@ -3,12 +3,14 @@ import {
   depurarEstado,
   EXCLUSIONES_DE_CIERRE,
   hallazgosDeSecretos,
+  iniciarSesion,
   llevaBasica,
   motivoDeSospecha,
   variantesDeSecreto,
   type EstadoSesion,
   type SenalesDePagina,
 } from './sesion';
+import type { Browser } from 'playwright-core';
 import { coincideExclusion } from './chequeos';
 
 const POLITICA = {
@@ -201,5 +203,52 @@ describe('llevaBasica (ADR 025)', () => {
   it('una URL que no se puede leer no la lleva', () => {
     expect(llevaBasica('no es una url', HTTPS)).toBe(false);
     expect(llevaBasica('', HTTPS)).toBe(false);
+  });
+});
+
+describe('Login asistido sin ventana (ADR 028)', () => {
+  const ERROR_SIN_PANTALLA =
+    "browserType.launchPersistentContext: Target page, context or browser has been closed\nBrowser logs:\n\n╔════════════════════════════════════════════════════════════════════════════════════════════════╗\n║ Looks like you launched a headed browser without having a XServer running.                     ║\n║ Set either 'headless: true' or use 'xvfb-run <your-playwright-app>' before running Playwright. ║\n╚════════════════════════════════════════════════════════════════════════════════════════════════╝\nCall log:\n  - <launching> /home/ana/.cache/ms-playwright/chromium-1/chrome-linux/chrome --user-data-dir=/home/ana/datos/perfiles/1234abcd/asistido-x\n  - [pid=1][err] [1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY\n  - [pid=1][err] [1:1:ERROR:env.cc(257)] The platform failed to initialize.  Exiting.";
+
+  it('si la ventana no abre, falla enseguida con la causa y sin rutas, y no se reintenta como un login', async () => {
+    let intentos = 0;
+    const resultado = await iniciarSesion({} as Browser, {
+      datos: {
+        estrategia: 'asistido',
+        urlLogin: 'https://app.example.test/login',
+        pasos: [],
+        indicador: { tipo: 'aparece', selector: '#menu' },
+        usuario: '',
+        dominiosAutenticacion: [],
+        sesionMaxMs: null,
+        permitirLoginHttp: false,
+      },
+      proxy: { servidor: 'http://127.0.0.1:1', usuario: 'u', clave: 'c' },
+      politica: {
+        urlBase: 'https://app.example.test/',
+        dominios: ['app.example.test'],
+        sistemaInterno: false,
+        puertosLocales: [],
+      },
+      secreto: null,
+      timeoutMs: 1000,
+      alRegistrar: () => undefined,
+      abrirVisible: () => {
+        intentos += 1;
+        return Promise.reject(new Error(ERROR_SIN_PANTALLA));
+      },
+      politicaDelEscaneo: {
+        urlBase: 'https://app.example.test/',
+        dominios: ['app.example.test'],
+        sistemaInterno: false,
+        puertosLocales: [],
+      },
+      origenBase: 'https://app.example.test',
+    });
+    expect(intentos).toBe(1);
+    expect(resultado).toMatchObject({ resultado: 'ventana-no-disponible', causa: 'pantalla' });
+    const detalle = resultado.resultado === 'ventana-no-disponible' ? resultado.detalle : '';
+    expect(detalle).toContain('Missing X server or $DISPLAY');
+    expect(detalle).not.toMatch(/ana|launching|user-data-dir|perfiles/);
   });
 });

@@ -293,6 +293,8 @@ export const MotivoFinEjecucion = z.enum([
   'proxy-caido',
   'runner-caido',
   'navegador-no-disponible',
+  // La ventana del login asistido no se pudo abrir (sin pantalla, o el navegador terminó al abrirse).
+  'ventana-no-disponible',
   'autorizacion-no-vigente',
   'bloqueo',
   'interrumpida',
@@ -564,6 +566,8 @@ export const ipcContract = {
             'ventana-cerrada',
             // Login asistido: pasaron 5 minutos sin que se cumpla el indicador.
             'tiempo-agotado',
+            // Login asistido: la ventana del navegador de pruebas no se pudo abrir.
+            'ventana-no-disponible',
           ]),
         })
         .strict(),

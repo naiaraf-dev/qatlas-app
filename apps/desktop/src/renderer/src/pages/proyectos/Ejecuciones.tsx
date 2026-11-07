@@ -30,6 +30,7 @@ const MOTIVOS: Record<MotivoFinEjecucion, string> = {
   'proxy-caido': 'El proxy de salida se cayó: la ejecución se cortó.',
   'runner-caido': 'El proceso de pruebas terminó de forma inesperada.',
   'navegador-no-disponible': 'El navegador de pruebas no está disponible.',
+  'ventana-no-disponible': 'No se pudo abrir la ventana del navegador de pruebas.',
   'autorizacion-no-vigente': 'El proyecto no tiene una autorización vigente.',
   bloqueo: 'Se canceló porque la bóveda se bloqueó.',
   interrumpida: 'La aplicación se cerró antes de que terminara.',

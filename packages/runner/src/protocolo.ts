@@ -201,7 +201,13 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
   z
     .object({
       tipo: z.literal('login-terminado'),
-      resultado: z.enum(['funciono', 'fallo', 'ventana-cerrada', 'tiempo-agotado']),
+      resultado: z.enum([
+        'funciono',
+        'fallo',
+        'ventana-cerrada',
+        'tiempo-agotado',
+        'ventana-no-disponible',
+      ]),
     })
     .strict(),
   z
@@ -233,7 +239,15 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
   z
     .object({
       tipo: z.literal('navegador-no-disponible'),
-      causa: z.enum(['ruta', 'perfil-ruta-larga', 'sandbox', 'dependencias', 'otra']),
+      causa: z.enum(['ruta', 'perfil-ruta-larga', 'sandbox', 'dependencias', 'pantalla', 'otra']),
+      detalle: z.string().max(300),
+    })
+    .strict(),
+  // La ventana del login asistido no se pudo abrir: el login no se reintenta. Al log, no a la interfaz.
+  z
+    .object({
+      tipo: z.literal('ventana-no-disponible'),
+      causa: z.enum(['ruta', 'perfil-ruta-larga', 'sandbox', 'dependencias', 'pantalla', 'otra']),
       detalle: z.string().max(300),
     })
     .strict(),

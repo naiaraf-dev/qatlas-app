@@ -230,6 +230,8 @@ export class GestorDeSesion implements SesionDelRastreo {
           ahora: this.ahora,
         });
         this.opciones.informarSesion(resultado);
+        // Sin ventana no hay a quién esperar ni qué reintentar: el escaneo se detiene ya.
+        if (resultado.resultado === 'ventana-no-disponible') return 'detener';
         if (resultado.resultado !== 'ok') continue;
         for (const hallazgo of hallazgosDeSecretos(
           resultado.secretosEnAlmacenamiento,

@@ -1013,6 +1013,40 @@ describe('Carpeta de perfiles', () => {
     );
     expect(entorno).toEqual({ SystemRoot: 'C:\\Windows', SystemDrive: 'C:', TEMP: 'z' });
   });
+
+  it('las variables de pantalla: solo en Linux, solo esos nombres exactos (ADR 028)', async () => {
+    const { entornoMinimo, variablesDePantalla } = await import('./perfiles');
+    const padre = {
+      PATH: '/usr/bin',
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+      DISPLAY_EXTRA: 'x',
+      XAUTHORITY_OTRA: 'x',
+      display: 'x',
+      XDG_SESSION_TYPE: 'x11',
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus',
+      SECRETO_DEL_PADRE: 'x',
+    };
+    expect(variablesDePantalla(padre, 'linux')).toEqual({
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+    });
+    expect(variablesDePantalla(padre, 'win32')).toEqual({});
+    expect(variablesDePantalla(padre, 'darwin')).toEqual({});
+    expect(variablesDePantalla({ PATH: '/usr/bin' }, 'linux')).toEqual({});
+    // El runner en Linux: lo de siempre más esas tres, y nada más del padre.
+    expect(entornoMinimo(padre, { ...variablesDePantalla(padre, 'linux'), TEMP: 'z' })).toEqual({
+      PATH: '/usr/bin',
+      DISPLAY: ':99',
+      XAUTHORITY: '/tmp/xvfb-run.x/Xauthority',
+      WAYLAND_DISPLAY: 'wayland-0',
+      TEMP: 'z',
+    });
+    // Sin pedirlas, no pasan: el proxy no las recibe.
+    expect(entornoMinimo(padre, {})).toEqual({ PATH: '/usr/bin' });
+  });
 });
 
 describe('Escaneo autenticado (ADR 025 a 027)', () => {
@@ -1261,6 +1295,36 @@ describe('Escaneo autenticado (ADR 025 a 027)', () => {
     boveda.conAcceso((base) => {
       expect(base.prepare('SELECT count(*) AS n FROM intento_login').get()).toEqual({ n: 0 });
     });
+  });
+
+  it('si la ventana del asistido no abre, falla enseguida con el motivo, y el log dice por qué sin rutas', async () => {
+    const avisos: string[] = [];
+    const espia = vi.spyOn(console, 'warn').mockImplementation((...partes: unknown[]) => {
+      avisos.push(partes.map(String).join(' '));
+    });
+    try {
+      const proyecto = proyectoConAuth();
+      const id = await lanzarCon(proyecto, credencialDe(proyecto, 'asistido'));
+      expect(await pedir('inicial')).toMatchObject({ tipo: 'datos-login' });
+      runnerActual?.emitir({
+        tipo: 'ventana-no-disponible',
+        causa: 'pantalla',
+        detalle: '[1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+      });
+      await pausa();
+      expect(progresos.at(-1)?.espera).toBeNull();
+      runnerActual?.emitir({ ...terminado(0, 0), detenido: 'sesion' });
+      await pausa();
+      expect(resumen(proyecto, id)).toMatchObject({
+        estado: 'fallida',
+        resumen: { motivo: 'ventana-no-disponible' },
+      });
+      expect(avisos).toEqual([
+        '[ejecucion] ventana del navegador no disponible: pantalla [1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+      ]);
+    } finally {
+      espia.mockRestore();
+    }
   });
 
   it('una pausa sin reanudar se cancela a los 15 minutos', async () => {

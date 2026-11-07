@@ -492,6 +492,8 @@ const MOTIVOS_FALLO_LOGIN = {
     'El login no se probó: no se pudo abrir el navegador de pruebas o el proxy.',
   'ventana-cerrada': 'El login no se completó: la ventana se cerró antes de entrar.',
   'tiempo-agotado': 'El login no se completó: pasaron 5 minutos sin que se cumpla el indicador.',
+  'ventana-no-disponible':
+    'El login no se probó: no se pudo abrir la ventana del navegador de pruebas.',
 } as const;
 
 function FilaCredencial({

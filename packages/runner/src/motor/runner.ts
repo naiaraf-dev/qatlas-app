@@ -65,6 +65,8 @@ export function crearRunner({
         estado: resultado.estado,
         urlComprobacion: resultado.urlComprobacion,
       });
+    } else if (resultado.resultado === 'ventana-no-disponible') {
+      enviar({ tipo: 'ventana-no-disponible', causa: resultado.causa, detalle: resultado.detalle });
     } else {
       enviar({ tipo: 'sesion', resultado: resultado.resultado });
     }

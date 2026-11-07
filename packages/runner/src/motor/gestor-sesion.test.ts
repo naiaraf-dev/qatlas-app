@@ -201,3 +201,21 @@ describe('GestorDeSesion (ADR 026 y 027)', () => {
     expect(armar({}).gestor.esUrlDeLogin('https://app.lexora.test/login?x=1')).toBe(true);
   });
 });
+
+describe('Sin ventana para el asistido (ADR 028)', () => {
+  it('no se vuelve a pedir el login: el escaneo se detiene y lo informa una vez', async () => {
+    const { gestor, pedidos } = armar({ estrategia: 'asistido' });
+    const informados: ResultadoLogin[] = [];
+    const opciones = (gestor as unknown as { opciones: OpcionesGestor }).opciones;
+    opciones.informarSesion = (resultado) => {
+      informados.push(resultado);
+    };
+    opciones.entrar = () =>
+      Promise.resolve({ resultado: 'ventana-no-disponible', causa: 'pantalla', detalle: '' });
+    expect(await gestor.iniciar(null)).toBe(false);
+    expect(pedidos).toEqual(['inicial']);
+    expect(informados).toEqual([
+      { resultado: 'ventana-no-disponible', causa: 'pantalla', detalle: '' },
+    ]);
+  });
+});

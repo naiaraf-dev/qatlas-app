@@ -9,6 +9,8 @@ describe('Por qué no arrancó el navegador', () => {
     ['Failed to move to new namespace', 'sandbox'],
     ['error while loading shared libraries: libnss3.so', 'dependencias'],
     ['Host system is missing dependencies', 'dependencias'],
+    ['[1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY', 'pantalla'],
+    ['Looks like you launched a headed browser without having a XServer running.', 'pantalla'],
     ['Target closed', 'otra'],
   ])('%s → %s', (mensaje, causa) => {
     expect(causaDeFalla(mensaje)).toBe(causa);

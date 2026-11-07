@@ -319,6 +319,26 @@ describe('Procesos', () => {
     expect(procesos.match(/stdio: 'ignore'/g)).toHaveLength(2);
   });
 
+  it('las variables de pantalla van solo al runner, y la lista es de nombres exactos (ADR 028)', () => {
+    // El proxy: entorno mínimo sin agregados.
+    expect(procesos).toContain('env: entornoMinimo(process.env, {}),');
+    expect(procesos.match(/variablesDePantalla\(/g)).toHaveLength(1);
+    const runner =
+      /iniciarRunner:[\s\S]*?utilityProcess\.fork[\s\S]*?\}\);/.exec(procesos)?.[0] ?? '';
+    expect(runner).toContain('...variablesDePantalla(process.env, process.platform),');
+    const perfiles = readFileSync(
+      path.join(RAIZ, 'apps/desktop/src/main/ejecuciones/perfiles.ts'),
+      'utf8',
+    );
+    expect(perfiles).toContain(
+      "const VARIABLES_DE_PANTALLA_LINUX = ['DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY'] as const;",
+    );
+    // Se leen por nombre, nunca recorriendo el entorno del padre.
+    expect(perfiles).not.toMatch(
+      /Object\.(keys|entries)\(origen\)|startsWith|RegExp|for \(const \w+ in origen/,
+    );
+  });
+
   it('el proxy escucha en 127.0.0.1 y en un puerto elegido por el sistema', () => {
     const proxy = readFileSync(path.join(RUNNER, 'red/proxy.ts'), 'utf8');
     expect(proxy).toContain("servidor.listen(0, '127.0.0.1'");

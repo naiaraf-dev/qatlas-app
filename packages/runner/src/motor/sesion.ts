@@ -2,6 +2,7 @@ import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
 import type { Browser, BrowserContext, Page, Request } from 'playwright-core';
 import { decidirNombre, decidirUrlSinResolver, type PoliticaDeRed } from '../red/reglas';
 import { SEVERIDAD, type HallazgoDetectado } from './chequeos';
+import { causaDeFalla, detalleDeFalla, type CausaNavegador } from './diagnostico';
 import {
   esperar,
   indicadorCumplido,
@@ -72,7 +73,19 @@ export type ResultadoLogin =
         origen: string;
       }[];
     }
-  | { resultado: 'fallo' | 'ventana-cerrada' | 'tiempo-agotado' };
+  | { resultado: 'fallo' | 'ventana-cerrada' | 'tiempo-agotado' }
+  /** La ventana del asistido no abrió, o el navegador terminó antes de mostrar el login. */
+  | { resultado: 'ventana-no-disponible'; causa: CausaNavegador; detalle: string };
+
+/** Sin rutas ni contenido: la causa y las líneas de error de Chromium (como el navegador del escaneo). */
+function ventanaNoDisponible(error: unknown): ResultadoLogin {
+  const texto = error instanceof Error ? error.message : '';
+  return {
+    resultado: 'ventana-no-disponible',
+    causa: causaDeFalla(texto),
+    detalle: detalleDeFalla(texto),
+  };
+}
 
 /**
  * Lo que un escaneo autenticado nunca toca: cerraría la sesión. Se suman a las exclusiones del proyecto.
@@ -491,19 +504,30 @@ async function loginAsistido(opciones: OpcionesDeLogin): Promise<ResultadoLogin>
   const { datos } = opciones;
   if (!datos.indicador) return { resultado: 'fallo' };
   const ahora = opciones.ahora ?? Date.now;
-  const visible = await opciones.abrirVisible(opciones.proxy);
+  // Abrir la ventana es su propio paso: si falla, es el equipo (sin pantalla, sin sandbox), no el login.
+  let visible: NavegadorVisible;
+  try {
+    visible = await opciones.abrirVisible(opciones.proxy);
+  } catch (error) {
+    return ventanaNoDisponible(error);
+  }
   const escritas = new ContrasenasEscritas();
   try {
     const { contexto } = visible;
-    await protegerContexto(contexto, opciones.politica, {
-      soloLectura: false,
-      alRegistrar: opciones.alRegistrar,
-    });
+    let pagina: Page;
+    try {
+      await protegerContexto(contexto, opciones.politica, {
+        soloLectura: false,
+        alRegistrar: opciones.alRegistrar,
+      });
+      // El perfil persistente abre con una pestaña: es la ventana.
+      pagina = contexto.pages()[0] ?? (await contexto.newPage());
+    } catch (error) {
+      return ventanaNoDisponible(error);
+    }
     contexto.on('request', (solicitud) => {
       escritas.alEnviar(solicitud);
     });
-    // El perfil persistente abre con una pestaña: es la ventana.
-    const pagina = contexto.pages()[0] ?? (await contexto.newPage());
     let cerrada = false;
     pagina.on('close', () => {
       cerrada = true;
@@ -511,6 +535,16 @@ async function loginAsistido(opciones: OpcionesDeLogin): Promise<ResultadoLogin>
     await pagina
       .goto(datos.urlLogin, { timeout: opciones.timeoutMs, waitUntil: 'load' })
       .catch(() => undefined);
+    // Cerrada antes de mostrar el login: el navegador terminó al abrirse, no la persona. `cerrada`
+    // cambia en el evento de cierre, mientras se espera la navegación.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (cerrada) {
+      return {
+        resultado: 'ventana-no-disponible',
+        causa: 'otra',
+        detalle: 'el navegador terminó antes de mostrar la página de login',
+      };
+    }
     const limite = ahora() + ESPERA_ASISTIDO_MS;
     while (ahora() < limite) {
       // `cerrada` cambia en el evento de cierre, mientras se espera.

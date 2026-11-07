@@ -49,4 +49,13 @@ Vitest y en electron-vite, se resuelve a la variante con SQLCipher con `register
 
 - El perfil de la ventana se escribe en la carpeta de datos mientras está abierta, como el de cualquier contexto de
   Chromium: lo que el sitio guarda (cookies, almacenamiento) está ahí hasta que se cierra y se borra.
-- En Linux sin pantalla, el asistido no se puede usar. En CI corre con `xvfb-run`.
+- En Linux, la ventana necesita el servidor gráfico. El runner recibe `DISPLAY`, `XAUTHORITY` y `WAYLAND_DISPLAY`, solo
+  en Linux, por nombre exacto (`variablesDePantalla`), y el proxy no. El entorno sigue siendo una lista cerrada
+  (ADR 017). Sin esas variables, el CI de Linux no abría la ventana. No se pasa `XDG_RUNTIME_DIR`: una sesión solo
+  Wayland con `WAYLAND_DISPLAY` relativo podría necesitarla, y se agrega si aparece el caso. En CI corre con
+  `xvfb-run`.
+- Si la ventana no se puede abrir, o el navegador termina antes de mostrar el login, la ejecución falla enseguida con
+  «No se pudo abrir la ventana del navegador de pruebas» (`ventana-no-disponible`), sin reintentar y sin pausar. El
+  log del proceso principal dice la causa (`pantalla`, `sandbox`, …) y las líneas de error de Chromium, sin rutas
+  (`[ejecucion] ventana del navegador no disponible: …`). Si la persona cierra la ventana antes de que cargue el
+  login, también cuenta así.

@@ -37,7 +37,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   `Authorization` que puso la ruta. `ESTRATEGIAS_PENDIENTES` en `@qatlas/shared` la deja visible y deshabilitada;
   `e2e/basica-encabezado.e2e.ts` reproduce la fuga con `test.fail`.
 - La ventana del asistido usa un perfil propio con el gestor de contraseñas apagado, dentro de la carpeta de la
-  ejecución en la carpeta de datos (ADR 018 y 028): `crearRunner` recibe `carpetaPerfil`.
+  ejecución en la carpeta de datos (ADR 018 y 028): `crearRunner` recibe `carpetaPerfil`. En Linux, el runner recibe
+  `DISPLAY`, `XAUTHORITY` y `WAYLAND_DISPLAY` (`variablesDePantalla`); si la ventana no abre, la ejecución falla
+  enseguida con `ventana-no-disponible`.
 - Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
 - El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
   manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).
@@ -142,7 +144,7 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 ## Antes de dar una tarea por terminada
 
 ```bash
-npm run check                         # lint, tipos, tests, Electronegativity
+npm run check                         # formato, lint, tipos, tests, Electronegativity
 npm run navegador:instalar            # una vez, o al subir Playwright
 npm run build && npm run test:e2e     # E2E (en Linux sin pantalla: xvfb-run -a npm run test:e2e)
 ```

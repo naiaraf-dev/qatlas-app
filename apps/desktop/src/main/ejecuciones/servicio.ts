@@ -138,7 +138,7 @@ interface EnCurso {
   proxyLogin?: ProcesoProxy | undefined;
   /** Por qué no se pudo volver a entrar, para el resumen. */
   motivoSesion: MotivoFinEjecucion | null;
-  ultimoFallo: 'fallo' | 'ventana-cerrada' | 'tiempo-agotado' | null;
+  ultimoFallo: 'fallo' | 'ventana-cerrada' | 'tiempo-agotado' | 'ventana-no-disponible' | null;
   pausa: { motivo: MotivoLogin; temporizador: ReturnType<typeof setTimeout> } | null;
   espera: ProgresoEjecucion['espera'];
   runner?: ProcesoRunner;
@@ -731,6 +731,18 @@ export class ServicioEjecuciones {
       case 'login-terminado':
         enCurso.alTerminar?.(mensaje.resultado);
         this.finalizar(enCurso, 'finalizada', null);
+        return;
+      case 'ventana-no-disponible':
+        // Como el navegador del escaneo: la causa y las líneas de Chromium sin rutas, nada de la ejecución.
+        console.warn(
+          `[ejecucion] ventana del navegador no disponible: ${mensaje.causa} ${mensaje.detalle}`,
+        );
+        enCurso.proxyLogin?.detener();
+        enCurso.proxyLogin = undefined;
+        enCurso.espera = null;
+        enCurso.ultimoFallo = 'ventana-no-disponible';
+        enCurso.motivoSesion = 'ventana-no-disponible';
+        this.informar(enCurso);
         return;
       case 'navegador-no-disponible':
         // Sin datos de la ejecución: solo la causa, y las líneas de error de Chromium sin rutas.

@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { utilityProcess } from 'electron';
 import { MensajeDelRunner } from '@qatlas/runner';
-import { carpetaPerfil, entornoMinimo } from './perfiles';
+import { carpetaPerfil, entornoMinimo, variablesDePantalla } from './perfiles';
 import { conectarProxy } from './proxy-proceso';
 import type { LanzadorDeProcesos, ProcesoRunner } from './servicio';
 
@@ -42,6 +42,8 @@ export function crearLanzador({
         // Lo que el navegador escriba con una ruta relativa cae en el perfil, y se borra con él.
         cwd: perfil,
         env: entornoMinimo(process.env, {
+          // La ventana del login asistido, en Linux (ADR 028). Solo el runner.
+          ...variablesDePantalla(process.env, process.platform),
           // Playwright crea ahí el perfil y sus archivos: nada va al temporal del sistema (ADR 018).
           TEMP: perfil,
           TMP: perfil,
