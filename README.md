@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/marca/logo-oscuro.svg">
+    <img src="docs/marca/logo-claro.svg" alt="QAtlas" width="320">
+  </picture>
+</p>
+
 # QAtlas
 
 **Aplicación de escritorio para testing de aplicaciones web — local-first, cifrada y sin telemetría.**

@@ -46,6 +46,18 @@ test.afterAll(async () => {
 
 const nav = () => page.getByRole('navigation', { name: 'Principal' });
 
+/** El color del símbolo y de la línea de escaneo del isotipo visible: cambian con el modo (docs/marca). */
+const coloresDelLogo = (pagina: Page) =>
+  pagina
+    .locator('[data-marca="isotipo"]')
+    .first()
+    .evaluate((svg) => ({
+      simbolo: getComputedStyle(svg.querySelector('rect') as Element).fill,
+      escaneo: getComputedStyle(svg.querySelector('path') as Element).stroke,
+    }));
+const LOGO_CLARO = { simbolo: 'rgb(91, 91, 214)', escaneo: 'rgb(156, 156, 242)' };
+const LOGO_OSCURO = { simbolo: 'rgb(109, 109, 227)', escaneo: 'rgb(199, 201, 255)' };
+
 test('la interfaz carga desde el protocolo propio app://', async () => {
   await expect(
     page.getByRole('heading', { name: 'Te damos la bienvenida a QAtlas' }),
@@ -111,11 +123,16 @@ test('el tema se puede cambiar a mano y vuelve a seguir al sistema', async () =>
   const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const themes = page.getByRole('radiogroup', { name: 'Tema de la interfaz' });
 
+  // El logo del menú lateral, en los dos modos, con los colores de la marca.
+  await expect(page.locator('aside [data-marca="isotipo"]')).toBeVisible();
+
   await themes.getByRole('radio', { name: 'Oscuro' }).click();
   await expect.poll(background).toBe('rgb(11, 13, 18)');
+  await expect.poll(() => coloresDelLogo(page)).toEqual(LOGO_OSCURO);
 
   await themes.getByRole('radio', { name: 'Claro' }).click();
   await expect.poll(background).toBe('rgb(246, 247, 249)');
+  await expect.poll(() => coloresDelLogo(page)).toEqual(LOGO_CLARO);
   await expect(themes.getByRole('radio', { name: 'Claro' })).toHaveAttribute(
     'aria-checked',
     'true',

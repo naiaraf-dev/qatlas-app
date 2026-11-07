@@ -104,7 +104,7 @@ Los nombres de token son los de Tailwind: `bg-surface`, `text-muted`, `border-bo
 | `PageHeader`       | `ui/components.tsx` | Título, bajada y acciones de la página.                                                            |
 | `SegmentedControl` | `ui/components.tsx` | `radiogroup` accesible; usado para el modo.                                                        |
 | `CheckItem`        | `ui/components.tsx` | Verificación con ícono y texto para lectores de pantalla.                                          |
-| `Icon`, `Logo`     | `ui/Icon.tsx`       | Íconos decorativos (`aria-hidden`); botones solo-ícono llevan `aria-label`.                        |
+| `Icon`, `Logo`     | `ui/Icon.tsx`       | Íconos decorativos (`aria-hidden`); `Logo` es el isotipo (ver «Marca»).                            |
 | `Shell`            | `layout/Shell.tsx`  | Menú lateral fijo + barra superior + contenido con scroll propio.                                  |
 
 ## Patrones
@@ -114,6 +114,49 @@ Los nombres de token son los de Tailwind: `bg-surface`, `text-muted`, `border-bo
 - **Estados vacíos:** ícono en `accent-soft`, título, explicación de qué es y la acción para empezar.
 - **Errores y bloqueos:** fondo `crit` + ícono + texto que explique qué pasó.
 - **Datos técnicos** (URLs, reglas, IDs): siempre en mono.
+
+## Marca
+
+Los archivos fuente son los SVG de [`docs/marca/`](../marca/README.md), con el concepto y la tabla de colores.
+El símbolo es un escaneo: el círculo es la aplicación que se prueba; la línea, el escaneo que la recorre.
+
+**Uso.**
+
+- En la interfaz va el **isotipo** (`Logo`, en `ui/Icon.tsx`), siempre al lado del nombre «QAtlas» en Inter.
+  Toma los colores de los tokens `--qa-brand` (símbolo) y `--qa-brand-scan` (línea de escaneo), que cambian
+  con el modo. Por debajo de 32 px usa la geometría chica (trazos más gruesos, menos barras).
+- El **logo completo** (símbolo y nombre en Sora) va en el README, la documentación y el instalador: la
+  variante clara sobre fondos claros y la oscura sobre fondos oscuros.
+- El **ícono de la aplicación** (ventana, barra de tareas, instalador) está en `apps/desktop/resources/`
+  y se genera desde los SVG con `node scripts/marca.mjs --generar`: `icon.ico` (16, 24, 32, 48, 64 y 256 px;
+  hasta 32 px con la versión chica), `icon.png` (1024 px) e `icon-512.png`.
+
+**Tamaños mínimos.**
+
+- El logo con nombre: 24 px de alto.
+- El isotipo en la interfaz: 16 px; por debajo de 32 px, la geometría chica.
+- El ícono de la aplicación: 16 px es el mínimo que genera Windows. A ese tamaño se leen el cuadrado y la
+  media esfera, pero la línea de escaneo se funde con la esfera: falta una versión dibujada para 16 px.
+- Área libre alrededor del logo: al menos la altura de la «Q» del nombre.
+
+**Fondos permitidos.**
+
+- Las superficies de la interfaz (`bg`, `surface`, `sidebar`) en sus dos modos, con los tokens del modo.
+  Contraste del símbolo: 5,4:1 en claro y 4,4:1 en oscuro. La línea de escaneo en modo claro queda en
+  2,5:1: es un detalle decorativo de la marca (los logotipos están exentos del contraste mínimo), y el
+  nombre al lado lleva el significado.
+- Sobre `accent` u otro color fuerte, solo las versiones de un color (`-blanco` o `-negro`).
+- Nunca sobre fotos, degradados o tramas que le bajen el contraste.
+
+**Lo que no se hace.**
+
+- Deformarlo: estirarlo, cambiarle la proporción o recortarlo.
+- Cambiarle los colores fuera de la tabla de `docs/marca/` y de los tokens, o agregarle sombras, degradados
+  o contornos.
+- Rotarlo, animarlo fuera de `isotipo-animado.svg` o rearmar el símbolo con otra geometría.
+- Usar la variante clara en modo oscuro, o la oscura en modo claro.
+- Versionar una imagen con metadatos: `node scripts/marca.mjs --limpiar` los quita, y
+  `security-tests/privacidad-repo.test.ts` lo verifica.
 
 ## Reglas para agregar UI
 
