@@ -3,6 +3,7 @@
  * RN-EJE-01, RN-EJE-02, EVI-01). Sin ningún comportamiento especial para tests: el sandbox se usa en
  * `127.0.0.1`, con los dominios que aceptaría cualquier proyecto. Requiere `npm run build` antes.
  */
+import { execFileSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -115,6 +116,41 @@ async function lanzarHastaPaginaLenta(): Promise<void> {
       timeout: 30_000,
     })
     .toBeGreaterThan(vistas);
+}
+
+/**
+ * Los procesos del sistema cuya línea de comandos incluye `ruta`: el Chromium de una ejecución arranca
+ * con su perfil dentro de la carpeta de esa ejecución. Es la señal de que ya no queda nada que pueda
+ * escribir ahí. Solo lee; no toca ningún proceso.
+ */
+function procesosConRuta(ruta: string): number[] {
+  if (process.platform === 'win32') {
+    const salida = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        // El propio PowerShell lleva la ruta en su línea de comandos: se excluye.
+        `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($env:QATLAS_RUTA_BUSCADA) } | ForEach-Object { $_.ProcessId }`,
+      ],
+      { encoding: 'utf8', env: { ...process.env, QATLAS_RUTA_BUSCADA: ruta } },
+    );
+    return salida
+      .split(/\r?\n/)
+      .map((linea) => Number(linea.trim()))
+      .filter((pid) => pid > 0);
+  }
+  const pids: number[] = [];
+  for (const nombre of readdirSync('/proc')) {
+    if (!/^\d+$/.test(nombre)) continue;
+    try {
+      if (readFileSync(`/proc/${nombre}/cmdline`, 'utf8').includes(ruta)) pids.push(Number(nombre));
+    } catch {
+      // Un proceso que terminó mientras se leía.
+    }
+  }
+  return pids;
 }
 
 function archivosCon(raiz: string, canario: string): string[] {
@@ -313,7 +349,26 @@ test('el perfil vive dentro de la carpeta de datos mientras corre, no en el temp
     .toBe(true);
   await boton('Cancelar ejecución').click();
   await expect(ejecuciones().first()).toContainText('Ejecución: Cancelada');
-  await expect.poll(() => readdirSync(perfiles)).toEqual([]);
+  // Figura cancelada recién con el perfil borrado: sin esperar.
+  expect(readdirSync(perfiles)).toEqual([]);
+});
+
+test('al figurar finalizada, el perfil ya no existe, y no reaparece cuando terminó su navegador', async () => {
+  await lanzarHastaPaginaLenta();
+  const perfiles = path.join(carpeta, 'QAtlas', 'perfiles');
+  const [nombre] = readdirSync(perfiles);
+  const perfil = path.join(perfiles, nombre ?? '');
+  // Control de la señal: mientras corre, hay un proceso del navegador con esa carpeta.
+  await expect.poll(() => procesosConRuta(perfil), { timeout: 30_000 }).not.toEqual([]);
+
+  await expect(ejecuciones().first()).toContainText('Ejecución: Finalizada', { timeout: 120_000 });
+  // En el momento en que figura finalizada, ya no está.
+  expect(existsSync(perfil)).toBe(false);
+  // Más tarde, con una señal: cuando no queda ningún proceso que la tenga en su línea de comandos,
+  // sigue sin existir.
+  await expect.poll(() => procesosConRuta(perfil), { timeout: 30_000 }).toEqual([]);
+  expect(existsSync(perfil)).toBe(false);
+  expect(readdirSync(perfiles)).toEqual([]);
 });
 
 test('fallar cerrado: si el proxy se cae, la ejecución se aborta', async () => {

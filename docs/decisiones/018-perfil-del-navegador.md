@@ -17,6 +17,17 @@ cifrar. Chromium no ofrece una carpeta de perfil cifrada.
   `TMPDIR`, y esa ruta no puede pasar de 107 bytes. Con una carpeta de datos más larga, la ejecución falla sin abrir nada,
   y el log dice por qué.
 - **Se borra al terminar,** y al arrancar se borra cualquier carpeta de una ejecución cortada.
+- **El orden del final (2026-11-07).** El runner cierra sus navegadores (el del escaneo y la ventana del asistido, si
+  está abierta), espera a que terminen y sale. Recién entonces el proceso principal detiene el proxy y borra la
+  carpeta, sin bloquearse. La ejecución **figura terminada recién después de ese borrado**, y la cola espera; lo
+  registrado (conexiones y resumen) se guarda enseguida. Antes, figuraba terminada primero y el borrado venía
+  después.
+- **Si el runner no sale en 10 segundos, se lo corta.** Su Chromium termina al perder el pipe de control, y mientras
+  tiene archivos abiertos, borrar falla en Windows: los reintentos esperan a que los suelte. En Linux un archivo
+  abierto se puede borrar, así que en ese caso extremo un Chromium que se está cerrando podría escribir algo
+  después del borrado; lo que quede, lo borra el próximo inicio.
+- **Al bloquear**, la base se cierra en el momento: el estado se guarda enseguida (nadie lo ve hasta desbloquear) y
+  la limpieza sigue igual.
 - **La ventana del login asistido** (ADR 028) tiene un perfil persistente propio, para apagar el gestor de
   contraseñas: va dentro de la carpeta de la ejecución (`asistido-…`), así que lo alcanzan las mismas limpiezas.
 - **Descargas bloqueadas.** El estado de sesión del login cifrado llega en la semana 6.

@@ -67,13 +67,17 @@ export interface LanzadorDeProcesos {
     alRegistrar: (registro: { destino: string; permitida: boolean; regla: string }) => void,
   ) => Promise<ProcesoProxy>;
   iniciarRunner: (ejecucionId: string) => ProcesoRunner;
-  /** Borra el perfil efímero de la ejecución. */
-  limpiarPerfil: (ejecucionId: string) => void;
+  /** Borra el perfil efímero de la ejecución. Se llama recién cuando el runner salió. */
+  limpiarPerfil: (ejecucionId: string) => Promise<void> | void;
 }
 
 const NAVEGADOR = 'chromium';
 const MAX_CONEXIONES_GUARDADAS = 2000;
-const TIEMPO_DE_SALIDA_MS = 3000;
+/**
+ * Cuánto se espera a que el runner salga solo: cierra su navegador (y la ventana del asistido) y
+ * espera a que terminen. Pasado esto, se lo corta.
+ */
+const TIEMPO_DE_SALIDA_MS = 10_000;
 
 const RESUMEN_VACIO: ResumenEjecucion = {
   paginasVisitadas: 0,
@@ -155,6 +159,8 @@ interface EnCurso {
   paginaActual: string | null;
   /** Lo que espera `probarLogin`. */
   alTerminar?: (resultado: ResultadoPrueba | null) => void;
+  /** El resultado de una prueba de login: se entrega recién cuando la prueba quedó terminada y limpia. */
+  resultadoPrueba?: ResultadoPrueba;
 }
 
 type Proceso = 'proxy' | 'navegador' | 'runner';
@@ -729,7 +735,7 @@ export class ServicioEjecuciones {
         return;
       }
       case 'login-terminado':
-        enCurso.alTerminar?.(mensaje.resultado);
+        enCurso.resultadoPrueba = mensaje.resultado;
         this.finalizar(enCurso, 'finalizada', null);
         return;
       case 'ventana-no-disponible':
@@ -1027,7 +1033,11 @@ export class ServicioEjecuciones {
     }
   }
 
-  private volcarConexiones(base?: BaseCifrada, enCurso = this.actual): void {
+  /** Sin `enCurso`, la actual mientras corre: la que está terminando se guarda en `finalizar`. */
+  private volcarConexiones(
+    base?: BaseCifrada,
+    enCurso = this.actual?.terminada ? null : this.actual,
+  ): void {
     if (!enCurso || enCurso.pendientes.length === 0) return;
     const filas = enCurso.pendientes.map((p) => ({
       ...p,
@@ -1063,33 +1073,62 @@ export class ServicioEjecuciones {
         resumen: enCurso.resumen,
       });
     };
-    try {
-      if (base) guardar(base);
-      else this.boveda.conAcceso(guardar);
-    } catch {
-      // Con la bóveda ya cerrada: al desbloquear queda marcada como interrumpida.
+    if (base) {
+      // Al bloquear, la base se cierra ya: se guarda ahora. Nadie la ve hasta desbloquear, y la
+      // limpieza sigue sola; si la app se cierra antes, la termina el próximo inicio.
+      try {
+        guardar(base);
+      } catch {
+        // Al desbloquear queda marcada como interrumpida.
+      }
+      this.informar(enCurso, estado);
+      enCurso.alTerminar?.(enCurso.resultadoPrueba ?? null);
+      if (this.actual === enCurso) this.actual = null;
+      this.liberarProcesos(enCurso, () => undefined);
+      return;
     }
-    this.informar(enCurso, estado);
-    this.liberarProcesos(enCurso);
-    enCurso.alTerminar?.(null);
-    if (this.actual === enCurso) this.actual = null;
-    if (!base) {
+    // La ejecución figura terminada recién cuando el runner y su navegador salieron y el perfil se
+    // borró: así, al verla terminada, nada puede volver a escribir en esa carpeta. Hasta entonces sigue
+    // siendo la actual, y la cola espera. Lo registrado (conexiones y resumen) se guarda ya.
+    this.guardarTardia(enCurso);
+    this.liberarProcesos(enCurso, () => {
+      try {
+        this.boveda.conAcceso((abierta) => {
+          // Si mientras tanto se eliminó el proyecto, no queda fila que actualizar.
+          if (!leerEjecucion(abierta, enCurso.id)) {
+            enCurso.pendientes = [];
+            return;
+          }
+          guardar(abierta);
+        });
+      } catch {
+        // Con la bóveda ya cerrada: al desbloquear queda marcada como interrumpida.
+      }
+      this.informar(enCurso, estado);
+      enCurso.alTerminar?.(enCurso.resultadoPrueba ?? null);
+      if (this.actual === enCurso) this.actual = null;
       try {
         this.avanzarCola();
       } catch {
         // Bóveda bloqueada: la cola se marcó al bloquear.
       }
-    }
+    });
   }
 
-  /** El runner sale solo si puede; si no, se lo corta. El proxy se detiene al final, y el perfil se borra. */
-  private liberarProcesos(enCurso: EnCurso): void {
+  /**
+   * El runner sale solo si puede (cierra su navegador y espera); si no, se lo corta. Después se detiene
+   * el proxy y se borra el perfil, y recién entonces `alListo`.
+   */
+  private liberarProcesos(enCurso: EnCurso, alListo: () => void): void {
     const { runner, proxy, id } = enCurso;
     enCurso.proxyLogin?.detener();
     enCurso.proxyLogin = undefined;
     const limpiar = (): void => {
       proxy?.detener();
-      this.lanzador.limpiarPerfil(id);
+      void Promise.resolve()
+        .then(() => this.lanzador.limpiarPerfil(id))
+        .catch(() => undefined)
+        .then(alListo);
     };
     if (!runner) {
       limpiar();

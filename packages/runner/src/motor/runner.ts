@@ -38,12 +38,29 @@ export function crearRunner({
   recibir: (data: unknown) => void;
 } {
   let navegador: Browser | undefined;
+  /** La ventana del asistido abierta, si hay: al terminar se cierra también (su perfil se borra con ella). */
+  let ventana: NavegadorVisible | undefined;
+  const abrirYRecordar = async (
+    proxy: Parameters<typeof abrirNavegadorVisible>[0],
+  ): Promise<NavegadorVisible> => {
+    const abierta = await abrirVisible(proxy);
+    ventana = abierta;
+    return {
+      contexto: abierta.contexto,
+      cerrar: async () => {
+        if (ventana === abierta) ventana = undefined;
+        await abierta.cerrar();
+      },
+    };
+  };
   /** Quien espera la respuesta a un `necesita-login`. Hay uno a la vez. */
   let esperaDeLogin: ((datos: DatosDeLogin | null) => void) | null = null;
 
   async function terminar(codigo: number): Promise<void> {
     esperaDeLogin?.(null);
-    await navegador?.close().catch(() => undefined);
+    // Los dos navegadores, y se espera a que terminen: el proceso principal borra el perfil cuando
+    // este proceso sale, y nada tiene que seguir escribiendo ahí.
+    await Promise.all([ventana?.cerrar(), navegador?.close().catch(() => undefined)]);
     alTerminar(codigo);
   }
 
@@ -118,7 +135,7 @@ export function crearRunner({
         secreto: mensaje.secreto,
         timeoutMs: configuracion.timeoutPaginaMs,
         alRegistrar,
-        abrirVisible,
+        abrirVisible: abrirYRecordar,
         politicaDelEscaneo: mensaje.politicaDelEscaneo,
         origenBase: new URL(mensaje.politicaDelEscaneo.urlBase).origin,
       });
@@ -185,7 +202,7 @@ export function crearRunner({
       alRegistrar,
       timeoutMs: configuracion.timeoutPaginaMs,
       urlBase: configuracion.politica.urlBase,
-      abrirVisible,
+      abrirVisible: abrirYRecordar,
       pedirLogin,
       informarSesion,
       alHallazgo: eventos.alHallazgo,
