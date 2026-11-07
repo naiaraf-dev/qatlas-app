@@ -46,5 +46,9 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
+  },
+  "//overrides": "minimatch: alerta de denegación de servicio en < 11.0.1 (globParts). Llega solo por eslint y typescript-eslint, que piden ^10; la app no la usa. Sacar el override cuando eslint y typescript-eslint pidan minimatch 11. Ver docs/seguridad/dependencias.md.",
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }
