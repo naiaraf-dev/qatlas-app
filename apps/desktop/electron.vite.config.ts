@@ -1,10 +1,8 @@
-import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'electron-vite';
+import { manifiestoRegistrado } from '../../scripts/nativos.mjs';
 
 // Los paquetes del monorepo se incluyen en el bundle (no se externalizan),
 // así la app empaquetada no depende de node_modules del workspace.
@@ -17,37 +15,16 @@ const WORKSPACE_PACKAGES = [
   '@qatlas/runner',
 ];
 
-const require = createRequire(import.meta.url);
-
-/** SHA-256 de los módulos nativos de esta plataforma, verificados al iniciar (ADR 007). */
-function manifiestoNativos(): { paquete: string; archivo: string; sha256: string }[] {
-  const plataforma = `${process.platform}-${process.arch}`;
-  const carpeta = (paquete: string) => dirname(require.resolve(`${paquete}/package.json`));
-  const candidatos = [
-    {
-      paquete: 'better-sqlite3-multiple-ciphers',
-      archivos: [`prebuilds/${plataforma}.node`],
-    },
-    {
-      paquete: 'argon2',
-      archivos: readdirSync(join(carpeta('argon2'), 'prebuilds', plataforma)).map(
-        (nombre) => `prebuilds/${plataforma}/${nombre}`,
-      ),
-    },
-  ];
-  return candidatos.flatMap(({ paquete, archivos }) =>
-    archivos.map((archivo) => {
-      const ruta = join(carpeta(paquete), archivo);
-      // Fallar cerrado también en el build: sin el binario no hay qué verificar.
-      if (!existsSync(ruta)) throw new Error(`Falta el módulo nativo de ${paquete}`);
-      return {
-        paquete,
-        archivo,
-        sha256: createHash('sha256').update(readFileSync(ruta)).digest('hex'),
-      };
-    }),
+/**
+ * Los módulos nativos de esta plataforma, con el SHA-256 REGISTRADO y revisado (ADR 007), no el que
+ * tenga el disco. Antes, lo instalado de todas las plataformas se compara con el registro: si algo no
+ * coincide, o esta plataforma no está registrada, el build falla.
+ */
+const manifiestoNativos = () =>
+  manifiestoRegistrado(
+    resolve(import.meta.dirname, '../..'),
+    `${process.platform}-${process.arch}`,
   );
-}
 
 export default defineConfig({
   main: {

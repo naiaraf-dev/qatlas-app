@@ -1,4 +1,5 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { utilityProcess } from 'electron';
 import { MensajeDelRunner } from '@qatlas/runner';
@@ -78,13 +79,15 @@ export function crearLanzador({
       return proceso;
     },
 
-    limpiarPerfil: (ejecucionId) => {
-      rmSync(carpetaPerfil(carpetaDatos, ejecucionId), {
+    // Sin bloquear el proceso principal. En Windows, mientras un Chromium tiene archivos del perfil
+    // abiertos, borrar falla: los reintentos esperan a que termine (si el runner se cortó por tiempo, su
+    // navegador cierra al perder el pipe de control). Lo que no se borre, lo borra el próximo inicio.
+    limpiarPerfil: (ejecucionId) =>
+      rm(carpetaPerfil(carpetaDatos, ejecucionId), {
         recursive: true,
         force: true,
-        maxRetries: 5,
-        retryDelay: 200,
-      });
-    },
+        maxRetries: 20,
+        retryDelay: 250,
+      }),
   };
 }

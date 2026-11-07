@@ -37,6 +37,9 @@ let boveda: ServicioBoveda;
 let proyectos: ServicioProyectos;
 let ejecuciones: ServicioEjecuciones;
 let registro: string[];
+/** Para probar el orden del final: el runner sale cuando el test lo dice, y el borrado espera. */
+let salidaManual: boolean;
+let terminarBorrado: (() => void) | undefined;
 let falloProxy: boolean;
 let mensajes: MensajeAlRunner[];
 let caerProxy: (() => void) | undefined;
@@ -72,7 +75,7 @@ const lanzador: LanzadorDeProcesos = {
       enviar: (mensaje) => {
         // `postMessage` clona: lo que llega al otro lado es una copia.
         mensajes.push(structuredClone(mensaje));
-        if (mensaje.tipo === 'cancelar') eventos.emit('salir');
+        if (mensaje.tipo === 'cancelar' && !salidaManual) eventos.emit('salir');
       },
       alMensaje: (oyente) => eventos.on('mensaje', oyente),
       alSalir: (oyente) => eventos.on('salir', oyente),
@@ -88,7 +91,16 @@ const lanzador: LanzadorDeProcesos = {
     return proceso;
   },
   limpiarPerfil: () => {
-    registro.push('perfil-borrado');
+    if (!salidaManual) {
+      registro.push('perfil-borrado');
+      return;
+    }
+    return new Promise<void>((listo) => {
+      terminarBorrado = () => {
+        registro.push('perfil-borrado');
+        listo();
+      };
+    });
   },
 };
 
@@ -150,6 +162,8 @@ function guardarCredencial(proyectoId: string, conIndicador = true): string {
 
 beforeEach(async () => {
   registro = [];
+  salidaManual = false;
+  terminarBorrado = undefined;
   politicasProxy = [];
   mensajes = [];
   falloProxy = false;
@@ -244,6 +258,7 @@ describe('RN-EJE-02: fallar cerrado', () => {
     const id = lanzar(proyecto);
     await pausa();
     caerProxy?.();
+    await pausa();
     expect(estado(proyecto, id)).toMatchObject({
       estado: 'fallida',
       resumen: { motivo: 'proxy-caido' },
@@ -267,7 +282,38 @@ describe('RN-EJE-02: fallar cerrado', () => {
     const id = lanzar(proyecto);
     await pausa();
     runnerActual?.emitir({ tipo: 'navegador-no-disponible', causa: 'ruta', detalle: '' });
+    await pausa();
     expect(estado(proyecto, id)?.resumen.motivo).toBe('navegador-no-disponible');
+  });
+});
+
+describe('El final: figura terminada recién con todo limpio', () => {
+  it('sigue en curso hasta que el runner salió y el perfil se borró; la cola espera', async () => {
+    salidaManual = true;
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+    // El runner todavía no salió: no se borra nada, y la ejecución sigue siendo la actual.
+    expect(estado(proyecto, id)?.estado).toBe('en-curso');
+    expect(registro).not.toContain('perfil-borrado');
+    const siguiente = ejecuciones.lanzarEscaneo(crearProyecto('Otro'));
+    expect(siguiente.resultado).toBe('encolada');
+    expect(registro.filter((r) => r === 'runner')).toHaveLength(1);
+
+    runnerActual?.salir();
+    await pausa();
+    // Salió, y el borrado está en marcha: todavía no figura terminada.
+    expect(terminarBorrado).toBeDefined();
+    expect(estado(proyecto, id)?.estado).toBe('en-curso');
+
+    terminarBorrado?.();
+    await pausa();
+    expect(estado(proyecto, id)?.estado).toBe('finalizada');
+    expect(progresos.at(-1)).toMatchObject({ ejecucionId: id, estado: 'finalizada' });
+    // Recién ahora arranca la siguiente.
+    expect(registro.filter((r) => r === 'runner')).toHaveLength(2);
   });
 });
 
@@ -308,6 +354,7 @@ describe('RN-EJE-01 y la cola', () => {
     lanzar(proyecto);
     await pausa();
     runnerActual?.emitir(terminado(1, 0));
+    await pausa();
     expect(ejecuciones.lanzarEscaneo(proyecto).resultado).toBe('encolada');
   });
 
@@ -398,6 +445,8 @@ describe('Bloqueo', () => {
     lanzar(proyecto);
     await pausa();
     boveda.bloquear();
+    // La limpieza del bloqueo sigue sola: se espera a que termine antes de mirar.
+    await pausa();
     registro.length = 0;
     await boveda.desbloquear(CONTRASENA);
     await pausa();
@@ -469,6 +518,7 @@ describe('Resultados del escaneo', () => {
       espera: null,
     });
     runnerActual?.emitir(terminado(2, 0));
+    await pausa();
     expect(progresos.at(-1)?.estado).toBe('finalizada');
     expect(ejecuciones.detalle(id)?.paginas).toEqual([
       { url: 'http://localhost:5173/', status: 200, tiempoCargaMs: 120, profundidad: 1 },
@@ -547,6 +597,7 @@ describe('Resultados del escaneo', () => {
       urlsDescartadas: 6,
       websocketDescartados: 7,
     });
+    await pausa();
     expect(estado(proyecto, id)?.resumen).toMatchObject({
       paginasVisitadas: 3,
       linksExcluidos: 2,
@@ -593,6 +644,7 @@ describe('Resultados del escaneo', () => {
     runnerActual?.emitir(pagina('http://localhost:5173/'));
     runnerActual?.emitir(hallazgo());
     runnerActual?.emitir(terminado(1, 0));
+    await pausa();
     proyectos.eliminar(proyecto, 'Lexora');
     expect(ejecuciones.detalle(id)).toBeNull();
     boveda.conAcceso((base) => {
@@ -624,6 +676,7 @@ describe('Monitor de conexiones', () => {
       regla: 'fuera-de-dominios',
     });
     runnerActual?.emitir(terminado(1, 0));
+    await pausa();
 
     const detalle = ejecuciones.detalle(id);
     expect(detalle?.ejecucion.resumen).toMatchObject({
@@ -671,6 +724,7 @@ describe('Monitor de conexiones', () => {
       alRegistrarProxy?.({ destino: 'evil.example:80', permitida: false, regla: 'x' });
     }
     runnerActual?.emitir(terminado(1, 0));
+    await pausa();
     expect(estado(proyecto, id)?.resumen.conexionesBloqueadas).toBe(2100);
     expect(ejecuciones.conexionesRecientes(500)).toHaveLength(500);
     boveda.conAcceso((base) => {
@@ -698,6 +752,7 @@ describe('Monitor de conexiones', () => {
     ejecuciones.cortarDeProyecto(b);
     expect(estado(a, id)?.estado).toBe('en-curso');
     ejecuciones.cortarDeProyecto(a);
+    await pausa();
     expect(estado(a, id)).toMatchObject({
       estado: 'cancelada',
       resumen: { motivo: 'autorizacion-no-vigente' },
@@ -850,6 +905,7 @@ describe('Probar login: límite de intentos', () => {
       const resultado = servicio.probarLogin(proyecto, credencial);
       await pausa();
       runnerActual?.emitir({ tipo: 'login-terminado', resultado: 'funciono' });
+      // El resultado llega con la prueba ya terminada y limpia: la siguiente se puede lanzar enseguida.
       expect(await resultado).toEqual({ resultado: 'funciono' });
     }
     expect((await servicio.probarLogin(proyecto, credencial)).resultado).toBe('limite');

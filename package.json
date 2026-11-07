@@ -26,10 +26,11 @@
     "test:security": "vitest run --project security",
     "audit:electron": "npx --yes @doyensec/electronegativity@1.10.3 -i apps/desktop/src -r -o electronegativity.sarif",
     "audit:deps": "npm audit --audit-level=high",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:coverage && npm run audit:electron",
+    "check": "npm run format:check && npm run nativos:verificar && npm run lint && npm run typecheck && npm test && npm run test:coverage && npm run audit:electron",
     "test:e2e": "npm run navegador:verificar && playwright test && npm run navegador:verificar && npm run test:crypto:electron",
     "navegador:instalar": "playwright install --no-shell chromium && npm run navegador:verificar",
     "navegador:verificar": "node scripts/verificar-navegador.mjs",
+    "nativos:verificar": "node scripts/verificar-nativos.mjs",
     "test:coverage": "vitest run --project unit --coverage packages/crypto packages/db packages/shared packages/runner apps/desktop/src/main/boveda apps/desktop/src/main/proyectos apps/desktop/src/main/ejecuciones",
     "test:crypto:electron": "node scripts/test-crypto-electron.mjs"
   },
@@ -45,5 +46,9 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
+  },
+  "//overrides": "minimatch: alerta de denegación de servicio en < 11.0.1 (globParts). Llega solo por eslint y typescript-eslint, que piden ^10; la app no la usa. Sacar el override cuando eslint y typescript-eslint pidan minimatch 11. Ver docs/seguridad/dependencias.md.",
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }

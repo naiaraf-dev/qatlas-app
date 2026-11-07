@@ -40,6 +40,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   ejecución en la carpeta de datos (ADR 018 y 028): `crearRunner` recibe `carpetaPerfil`. En Linux, el runner recibe
   `DISPLAY`, `XAUTHORITY` y `WAYLAND_DISPLAY` (`variablesDePantalla`); si la ventana no abre, la ejecución falla
   enseguida con `ventana-no-disponible`.
+- Los `.node` de argon2 y SQLCipher están en `scripts/nativos-hashes.json` (ADR 007). Al actualizar uno de esos
+  paquetes, revisar el binario y registrarlo con `node scripts/verificar-nativos.mjs --calcular`; nunca
+  desactivar la verificación.
 - Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
 - El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
   manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).

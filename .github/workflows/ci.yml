@@ -31,6 +31,12 @@ jobs:
           cache: npm
       # .npmrc tiene ignore-scripts=true: ningún paquete ejecuta código al instalarse.
       - run: npm ci
+      # Firmas del registro de npm y procedencia de cada paquete instalado.
+      - name: Firmas de los paquetes
+        run: npm audit signatures
+      # Cada .node de cada plataforma, contra el registro revisado (ADR 007).
+      - name: Módulos nativos registrados
+        run: npm run nativos:verificar
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck

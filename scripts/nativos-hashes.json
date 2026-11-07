@@ -1,0 +1,28 @@
+{
+  "argon2": {
+    "0.45.2": {
+      "prebuilds/darwin-arm64/argon2.armv8.glibc.node": "3acdc3db9f06e813f1fd4a3cceb9b72e136baeff1424328009d593cc210e5e62",
+      "prebuilds/freebsd-arm64/argon2.armv8.glibc.node": "e23c4c3760c29310b6f7fef9bb0992c84d6a91123b2bc2d6c47d4094eef63564",
+      "prebuilds/freebsd-x64/argon2.glibc.node": "6ff8b65a9710c8e5965d67cc17d65052434d0e1ad98702045c8179f14cd0d407",
+      "prebuilds/linux-arm/argon2.armv7.glibc.node": "636847081cabdbf70836af81682954d73fbf24e78de698780fe6fe8bea484982",
+      "prebuilds/linux-arm/argon2.armv7.musl.node": "fbde253330b25315ab1f209f974653997ef3f6b90ad372583b99fa4ba5e627d3",
+      "prebuilds/linux-arm64/argon2.armv8.glibc.node": "d1a174cb5c08aa9638496c3cb1b4652492330838dbfe4906d34b6c097789c630",
+      "prebuilds/linux-arm64/argon2.armv8.musl.node": "7e084fc69aac5f608fddaa91fbf1a353335f226f38f4ee3a7cfa0ad247db8ff3",
+      "prebuilds/linux-x64/argon2.glibc.node": "36aafaaf30e493a2a91586f24b8429191538447d8c7c292f60988026de503e49",
+      "prebuilds/linux-x64/argon2.musl.node": "143e145f409c78f211f5694af72610f96c0adb067ca38b7737ac342d02e23623",
+      "prebuilds/win32-x64/argon2.glibc.node": "32c0e61ff1908d13f86d971dcbcd5a6491d79759232adec8c3995631cec33a7c"
+    }
+  },
+  "better-sqlite3-multiple-ciphers": {
+    "13.0.3": {
+      "prebuilds/darwin-arm64.node": "e220712cd3af9dd575fe4ac7973d5dbfbad3d22760b772a48f1eee977517ef5b",
+      "prebuilds/darwin-x64.node": "4434dfa929e9b83fdc1ea34ee8739e764fcf09af8559ab039082b7b673b18805",
+      "prebuilds/linux-arm64.node": "e5c2b6bd85726bc53a4b8767d4bbb8be82feaad46b45b9c82c885cb02d54e7d0",
+      "prebuilds/linux-x64.node": "3607ea18911c931085eaa896eb831260d549e9bcef2dd6e8896b5bb7a41ec6a8",
+      "prebuilds/linuxmusl-arm64.node": "670af6edb9a5225bd1e934124c23494ba6a9f6f03bf7987d0729ab05a3b21734",
+      "prebuilds/linuxmusl-x64.node": "98bd72b54e55a39bacb4c1eb65ecb2c91e1e69557b9d9f4a0a5a8444c6b742c3",
+      "prebuilds/win32-arm64.node": "95ff36ee761a846fc4d0fae7eed209b47b21c8d41f5528f40d7beb5f30e62666",
+      "prebuilds/win32-x64.node": "d4f29082cde7efd5c1e85e794ba532efeef4f2f968c58cc54fe97c2095270262"
+    }
+  }
+}

@@ -22,7 +22,8 @@ Electron usa BoringSSL, no OpenSSL. En Node 22, el del equipo de desarrollo y el
 
 ## Decisión
 
-Usar `argon2` con la versión exacta fija (`0.45.1`), detrás de la interfaz `ImplementacionArgon2id`.
+Usar `argon2` con la versión exacta fija, detrás de la interfaz `ImplementacionArgon2id`. Se eligió la 0.45.1;
+hoy es la **0.45.2** (ver «Actualizaciones»).
 
 **No hay auditoría publicada de esta librería.** Se eligió por:
 
@@ -35,6 +36,18 @@ Usar `argon2` con la versión exacta fija (`0.45.1`), detrás de la interfaz `Im
 Además, borra su copia de la contraseña y la memoria interna en C, y calcula fuera del hilo principal.
 
 Por esto, la regla del proyecto pasa a ser usar una **implementación de referencia o auditada**.
+
+## Actualizaciones
+
+- **0.45.1 → 0.45.2 (2026-11-07).** Único cambio funcional: el orden de los parámetros en la cadena PHC
+  (`m,t,p`), que QAtlas no usa: deriva la clave con `raw: true`, que devuelve los bytes antes de armar
+  esa cadena. Las claves derivadas no cambian y las bóvedas existentes abren igual (lo verifican el
+  vector oficial y TS-02). No es un arreglo de seguridad. El resto es mantenimiento: `node-addon-api`
+  8.9.2, `node-gyp` 13.1 y herramientas de desarrollo. Al recompilar cambiaron los binarios de Windows
+  x64 y macOS arm64; los demás son idénticos. El de Windows x64 se revisó: mismo tamaño, 426 bytes
+  distintos, la mayoría en cabeceras y metadatos de compilación, sin cambios en el código C del paquete.
+  Las dos versiones las publicó el mismo usuario de npm, con procedencia SLSA. Los hashes están en
+  `scripts/nativos-hashes.json` (ADR 007).
 
 ## Verificación
 

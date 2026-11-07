@@ -20,9 +20,9 @@ const ALLOWED = [
     script: 'install.js',
     reason: 'Descarga el binario de Electron verificando su checksum SHA-256.',
   },
-  // Fase 1, semana 3: better-sqlite3-multiple-ciphers (compilación para Electron).
-  // argon2 no está acá: usa el binario precompilado de su paquete (ADR 005). Semana 10: se
-  // agrega para compilar win32-arm64 y darwin-x64.
+  // better-sqlite3-multiple-ciphers y argon2 no están acá: usan los binarios precompilados de sus
+  // paquetes, sin script de instalación, y cada .node está en scripts/nativos-hashes.json (ADR 005,
+  // 006 y 007). Semana 10: compilar SQLCipher desde fuente para los instaladores.
 ];
 
 for (const { pkg, script, reason } of ALLOWED) {
