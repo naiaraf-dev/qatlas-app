@@ -36,6 +36,9 @@
   --qa-accent-text: #4646c2;
   --qa-accent-soft: #eef0ff;
   --qa-accent-soft-text: #3434a8;
+  /* Marca (docs/marca): el símbolo y su línea de escaneo. Solo para el logo. */
+  --qa-brand: #5b5bd6;
+  --qa-brand-scan: #9c9cf2;
 
   /* Estado correcto */
   --qa-ok-bg: #ecfdf3;
@@ -74,6 +77,8 @@
   --qa-accent-text: #a5a8ff;
   --qa-accent-soft: #1d2136;
   --qa-accent-soft-text: #c7c9ff;
+  --qa-brand: #6d6de3;
+  --qa-brand-scan: #c7c9ff;
 
   --qa-ok-bg: #10261f;
   --qa-ok-border: #1d4535;

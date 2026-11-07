@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 /**
  * Íconos de QAtlas: trazo de 2 px, esquinas redondeadas, 24×24.
  * Son decorativos (aria-hidden): el texto que los acompaña es el que da el nombre.
@@ -67,12 +69,69 @@ export function Icon({
   );
 }
 
+/**
+ * El isotipo de QAtlas (docs/marca): el círculo es la aplicación que se prueba; la línea, el escaneo que
+ * la recorre. Colores con los tokens de marca, que cambian con el modo. Por debajo de 32 px, la geometría
+ * chica (trazos más gruesos, menos barras), como `icono-app-chico.svg`. Decorativo: el nombre va al lado.
+ */
+const ISOTIPO = {
+  normal: {
+    alto: 29,
+    barras: [
+      [12.23, 33.2, 11.46, 4.0],
+      [26.07, 33.2, 11.86, 4.0],
+      [40.3, 33.2, 11.46, 4.0],
+      [14.0, 40.4, 13.5, 3.2],
+      [30.56, 40.4, 19.44, 3.2],
+      [17.99, 46.6, 16.11, 2.5],
+      [36.48, 46.6, 9.52, 2.5],
+      [26.23, 52, 11.53, 1.9],
+    ],
+    linea: 31,
+    grosor: 1.8,
+    punto: 2.6,
+  },
+  chica: {
+    alto: 28.6,
+    barras: [
+      [12.89, 33.6, 16.82, 5.0],
+      [34.29, 33.6, 16.82, 5.0],
+      [15.69, 42.2, 32.61, 4.0],
+      [22.58, 49.6, 18.83, 3.0],
+    ],
+    linea: 31.2,
+    grosor: 3.0,
+    punto: 3.8,
+  },
+} as const;
+
 export function Logo({ size = 28 }: { size?: number }) {
+  const recorte = useId();
+  const g = size < 32 ? ISOTIPO.chica : ISOTIPO.normal;
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true">
-      <rect width="28" height="28" rx="8" fill="var(--qa-accent)" />
-      <circle cx="13" cy="13" r="6" fill="none" stroke="#fff" strokeWidth="2.2" />
-      <path d="M17.5 17.5 21 21" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="1.5 1 64 64" aria-hidden="true" data-marca="isotipo">
+      <clipPath id={recorte}>
+        <circle cx="32" cy="32" r="22" />
+      </clipPath>
+      <rect width="64" height={g.alto} clipPath={`url(#${recorte})`} fill="var(--qa-brand)" />
+      {g.barras.map(([x, y, ancho, alto]) => (
+        <rect
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          width={ancho}
+          height={alto}
+          rx={alto / 2}
+          fill="var(--qa-brand)"
+        />
+      ))}
+      <path
+        d={`M5 ${g.linea}H59`}
+        stroke="var(--qa-brand-scan)"
+        strokeWidth={g.grosor}
+        strokeLinecap="round"
+      />
+      <circle cx="59" cy={g.linea} r={g.punto} fill="var(--qa-brand-scan)" />
     </svg>
   );
 }

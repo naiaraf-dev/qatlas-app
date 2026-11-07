@@ -15,6 +15,11 @@ import {
   SECURE_WEB_PREFERENCES,
 } from '../apps/desktop/src/main/security/web-preferences';
 import { buildCsp } from '../apps/desktop/src/main/security/csp';
+import {
+  menuDeLaAplicacion,
+  ROLES_PROHIBIDOS,
+  rolesDe,
+} from '../apps/desktop/src/main/security/menu';
 
 const DESKTOP_SRC = path.resolve(import.meta.dirname, '../apps/desktop/src');
 
@@ -150,5 +155,59 @@ describe('TS-07 · Interfaz sin recursos remotos', () => {
 
   it('no se usa shell.openExternal sin el canal con confirmación (pendiente)', () => {
     for (const { file, code } of files) expect(code, file).not.toContain('openExternal');
+  });
+});
+
+describe('TS-07 · Herramientas de desarrollo y menú en producción (3.6)', () => {
+  const main = () => files.find((f) => f.file === path.join('main', 'index.ts'))?.code ?? '';
+
+  it('las herramientas de desarrollo dependen del modo del build, no de si la app está empaquetada', () => {
+    const codigo = main();
+    expect(codigo.match(/devTools: __QATLAS_DESARROLLO__/g)).toHaveLength(2);
+    for (const { file, code } of files) {
+      expect(code, file).not.toMatch(/devTools\s*:\s*(?:true|!app\.isPackaged)/);
+      expect(code, file).not.toContain('openDevTools(');
+    }
+    const config = readFileSync(
+      path.resolve(import.meta.dirname, '../apps/desktop/electron.vite.config.ts'),
+      'utf8',
+    );
+    expect(config).toContain("__QATLAS_DESARROLLO__: JSON.stringify(mode === 'development')");
+  });
+
+  it('en producción, si algo abriera las herramientas de desarrollo, se cierran', () => {
+    expect(main()).toMatch(
+      /if \(!__QATLAS_DESARROLLO__\) \{[\s\S]*?'devtools-opened'[\s\S]*?closeDevTools\(\)/,
+    );
+  });
+
+  it('en producción no está el menú por defecto: ninguno, o uno mínimo en macOS', () => {
+    expect(menuDeLaAplicacion({ desarrollo: false, plataforma: 'win32' })).toEqual({
+      tipo: 'ninguno',
+    });
+    expect(menuDeLaAplicacion({ desarrollo: false, plataforma: 'linux' })).toEqual({
+      tipo: 'ninguno',
+    });
+    expect(menuDeLaAplicacion({ desarrollo: true, plataforma: 'win32' })).toEqual({
+      tipo: 'por-defecto',
+    });
+    const mac = menuDeLaAplicacion({ desarrollo: false, plataforma: 'darwin' });
+    if (mac.tipo !== 'plantilla') throw new Error('macOS lleva un menú mínimo');
+    const roles = rolesDe(mac.plantilla);
+    // Sin recargar ni herramientas de desarrollo, y con los atajos de edición.
+    expect(roles.filter((rol) => ROLES_PROHIBIDOS.has(rol))).toEqual([]);
+    expect(roles).toEqual(
+      expect.arrayContaining(['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll']),
+    );
+  });
+
+  it('el menú se decide solo con menuDeLaAplicacion', () => {
+    const codigo = main();
+    expect(codigo).toContain('menuDeLaAplicacion({');
+    expect(codigo.match(/Menu\.setApplicationMenu\(/g)).toHaveLength(2);
+    for (const { file, code } of files) {
+      if (file === path.join('main', 'index.ts')) continue;
+      expect(code, file).not.toMatch(/setApplicationMenu|Menu\.buildFromTemplate/);
+    }
   });
 });

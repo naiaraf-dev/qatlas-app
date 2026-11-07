@@ -15,6 +15,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import {
+  EXTENSIONES_DE_IMAGEN,
+  limpiarPng,
+  limpiarSvg,
+  metadatosDe,
+} from '../scripts/metadatos-imagenes.mjs';
 
 const RAIZ = fileURLToPath(new URL('..', import.meta.url));
 
@@ -180,6 +186,60 @@ describe('Datos personales en el repositorio', () => {
     }
     // El mensaje solo lleva archivo, línea y regla: los logs del CI son públicos.
     expect(hallazgos).toEqual([]);
+  });
+});
+
+describe('Metadatos en las imágenes', () => {
+  it('ninguna imagen del repo trae metadatos (EXIF, XMP, comentarios, software, C2PA)', () => {
+    const imagenes = archivosDelRepo().filter((archivo) => EXTENSIONES_DE_IMAGEN.test(archivo));
+    expect(imagenes.length).toBeGreaterThan(0);
+    const hallazgos: string[] = [];
+    for (const archivo of imagenes) {
+      let datos: Buffer;
+      try {
+        datos = readFileSync(path.join(RAIZ, archivo));
+      } catch {
+        continue; // Borrado en la copia de trabajo y todavía no commiteado.
+      }
+      for (const metadato of metadatosDe(datos, path.extname(archivo))) {
+        hallazgos.push(`${archivo}: ${metadato}`);
+      }
+    }
+    // Solo el archivo y el tipo de metadato, nunca su contenido. Se quitan con scripts/marca.mjs --limpiar.
+    expect(hallazgos).toEqual([]);
+  });
+
+  it('el detector encuentra los metadatos, y la limpieza los saca', () => {
+    // Un PNG mínimo de 1×1 con un chunk de texto (como el que dejan muchas herramientas).
+    const chunk = (tipo: string, datos: Buffer) => {
+      const largo = Buffer.alloc(4);
+      largo.writeUInt32BE(datos.length);
+      return Buffer.concat([largo, Buffer.from(tipo, 'latin1'), datos, Buffer.alloc(4)]);
+    };
+    const ihdr = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
+    const png = Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunk('IHDR', ihdr),
+      chunk('tEXt', Buffer.from('Software Editor de ejemplo', 'latin1')),
+      chunk('IDAT', Buffer.from([0])),
+      chunk('IEND', Buffer.alloc(0)),
+    ]);
+    expect(metadatosDe(png, '.png')).toEqual(['chunk tEXt']);
+    expect(metadatosDe(limpiarPng(png), '.png')).toEqual([]);
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://example.com/i" inkscape:version="1"><!-- hecho a mano --><metadata><rdf:RDF/></metadata><rect width="1" height="1"/></svg>';
+    expect(metadatosDe(Buffer.from(svg), '.svg')).toEqual(
+      expect.arrayContaining(['metadata', 'comentario', 'RDF', 'Inkscape']),
+    );
+    const limpio = limpiarSvg(svg);
+    expect(metadatosDe(Buffer.from(limpio), '.svg')).toEqual([]);
+    expect(limpio).toContain('<rect width="1" height="1"/>');
+
+    // Un formato que el detector no sabe revisar falla cerrado.
+    expect(metadatosDe(Buffer.from([0xff, 0xd8]), '.jpg')).toEqual([
+      'formato .jpg sin revisar: agregarlo a scripts/metadatos-imagenes.mjs',
+    ]);
   });
 });
 
