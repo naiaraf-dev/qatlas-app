@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { esNombreSensible } from '@qatlas/redaction';
 import type { SeveridadHallazgo, TipoHallazgo } from '@qatlas/shared';
 
 /**
@@ -282,22 +283,6 @@ export function coincideExclusion(
  * Nombres de parámetro que suelen llevar un secreto, por segmentos (como las cookies): `access_token`
  * y `apiKey` sí; `tokenizer` o `authors`, no. Del valor no se guarda nada.
  */
-const SEGMENTOS_SENSIBLES = new Set([
-  'token',
-  'code',
-  'session',
-  'sessionid',
-  'sid',
-  'jwt',
-  'apikey',
-  'password',
-  'passwd',
-  'secret',
-  'auth',
-  'clave',
-  'contrasena',
-  'otp',
-]);
 
 export interface ParametroSensible {
   nombre: string;
@@ -320,10 +305,8 @@ export function parametrosSensibles(texto: string): ParametroSensible[] {
   const encontrados: ParametroSensible[] = [];
   for (const nombre of nombres) {
     const segmentos = segmentosDeNombre(nombre);
-    const unido = segmentos.join('');
-    const sensible =
-      segmentos.some((s) => SEGMENTOS_SENSIBLES.has(s)) || SEGMENTOS_SENSIBLES.has(unido);
-    if (!sensible) continue;
+    // La misma lista que la redacción: lo que se reporta es lo que se redacta (ADR 030).
+    if (!esNombreSensible(nombre)) continue;
     const esCodigo = segmentos.length === 1 && segmentos[0] === 'code';
     encontrados.push({
       nombre: nombre.slice(0, 100),

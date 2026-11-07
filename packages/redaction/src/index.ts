@@ -29,6 +29,7 @@ export {
 export {
   contarRedacciones,
   marca,
+  recortar,
   type RegistroRedaccion,
   type Resultado,
   type TextoRedactado,

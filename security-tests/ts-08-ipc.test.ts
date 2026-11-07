@@ -688,6 +688,8 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         logins: 0,
         loginsInesperados: 0,
         renovaciones: 0,
+        secretosRedactados: 0,
+        diagnostico: null,
       },
       rol: null,
     };
@@ -772,6 +774,7 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
     url: 'https://app.lexora.test/x',
     urlOrigen: null,
     detalle: 'img.logo',
+    secretosRedactados: 0,
   };
 
   it('un hallazgo tiene una forma cerrada: tipo y severidad de una lista', () => {
@@ -780,6 +783,11 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
     expect(HallazgoVista.safeParse({ ...HALLAZGO, tipo: 'otro' }).success).toBe(false);
     expect(HallazgoVista.safeParse({ ...HALLAZGO, severidad: 'urgente' }).success).toBe(false);
     expect(HallazgoVista.safeParse({ ...HALLAZGO, detalle: 'x'.repeat(2001) }).success).toBe(false);
+    // El aviso de secretos redactados es una cantidad, nunca el valor (EVI-04).
+    expect(HallazgoVista.safeParse({ ...HALLAZGO, secretosRedactados: -1 }).success).toBe(false);
+    expect(
+      HallazgoVista.safeParse({ ...HALLAZGO, secretosRedactados: '[REDACTADO]' }).success,
+    ).toBe(false);
   });
 
   it('el evento de progreso solo lleva lo que la pantalla muestra', () => {

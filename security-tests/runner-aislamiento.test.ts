@@ -106,7 +106,9 @@ describe('Nada del paquete del runner toca la bóveda', () => {
     const { dependencies } = JSON.parse(
       readFileSync(path.join(RAIZ, 'packages/runner/package.json'), 'utf8'),
     ) as { dependencies: Record<string, string> };
+    // La redacción es pura: sin red, sin archivos, sin la bóveda (ADR 030).
     expect(Object.keys(dependencies).sort()).toEqual([
+      '@qatlas/redaction',
       '@qatlas/shared',
       'axe-core',
       'playwright-core',

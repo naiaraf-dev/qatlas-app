@@ -42,3 +42,10 @@ export const comoRedactado = (texto: string): TextoRedactado => texto as TextoRe
 /** Cuántos secretos se redactaron en total. */
 export const contarRedacciones = (registros: readonly RegistroRedaccion[]): number =>
   registros.reduce((total, r) => total + r.cantidad, 0);
+
+/**
+ * Recorta un texto ya redactado a un largo máximo (el del protocolo o la base). Cortar una marca a la
+ * mitad no deja ver nada: lo que había debajo ya no está.
+ */
+export const recortar = (texto: TextoRedactado, maximo: number): TextoRedactado =>
+  comoRedactado(texto.slice(0, maximo));

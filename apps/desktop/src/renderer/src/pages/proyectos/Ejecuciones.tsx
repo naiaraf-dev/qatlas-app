@@ -103,8 +103,17 @@ function Cobertura({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
   );
 }
 
+/** La ruta de una URL para mostrar. Ya viene redactada; si no se puede leer, se muestra tal cual. */
+function rutaDe(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
 function Hallazgo({ hallazgo }: { hallazgo: HallazgoVista }) {
-  const ruta = new URL(hallazgo.url).pathname;
+  const ruta = rutaDe(hallazgo.url);
   return (
     <li className="flex flex-col gap-1 rounded-lg border border-border p-3">
       <p className="flex flex-wrap items-center gap-2">
@@ -113,8 +122,17 @@ function Hallazgo({ hallazgo }: { hallazgo: HallazgoVista }) {
       </p>
       <p className="font-mono text-[12.5px] break-all text-text-2">
         {ruta}
-        {hallazgo.urlOrigen && ` · link en ${new URL(hallazgo.urlOrigen).pathname}`}
+        {hallazgo.urlOrigen && ` · link en ${rutaDe(hallazgo.urlOrigen)}`}
       </p>
+      {hallazgo.secretosRedactados > 0 && (
+        // EVI-04: se avisa sin mostrar el valor. La exportación (semana 9) pide revisarlo (RN-REP-03).
+        <Aviso>
+          {hallazgo.secretosRedactados === 1
+            ? 'Se redactó 1 secreto en este hallazgo.'
+            : `Se redactaron ${hallazgo.secretosRedactados} secretos en este hallazgo.`}{' '}
+          Lo que se ve dice qué tipo era, nunca el valor.
+        </Aviso>
+      )}
       {hallazgo.tipo === 'rendimiento' && (
         <p className="text-[13px] text-muted">Medición orientativa, tomada en este equipo.</p>
       )}

@@ -61,6 +61,11 @@ export interface OpcionesServicio {
   alBloquear?: () => void;
   /** Se ejecuta antes de cerrar la base: lo último que se puede guardar. */
   antesDeBloquear?: (base: BaseCifrada) => void;
+  /**
+   * Con la base abierta y migrada, antes de `alDesbloquear`: lo que necesita la clave maestra, como
+   * redactar lo guardado antes de la semana 7 (ADR 033). También al restaurar una copia.
+   */
+  alAbrir?: (base: BaseCifrada, maestra: Buffer) => void;
   /** Se ejecuta después de abrir la base, con su configuración. */
   alDesbloquear?: (configuracion: Configuracion, base: BaseCifrada) => void;
   ahora?: () => number;
@@ -147,6 +152,7 @@ export class ServicioBoveda {
       migrar(base);
       verificarIntegridad(base);
       completarBorradosPendientes(base);
+      this.opciones.alAbrir?.(base, maestra);
       this.opciones.alDesbloquear?.(leerConfiguracion(base), base);
     } catch (error) {
       base.close();

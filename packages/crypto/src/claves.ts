@@ -4,7 +4,7 @@ import { ErrorCripto } from './errores';
 import { LONGITUD_CLAVE } from './kdf';
 import { borrar } from './memoria';
 
-type UsoSubclave = 'sqlcipher' | 'envoltura-proyectos' | 'archivos' | 'campos';
+type UsoSubclave = 'sqlcipher' | 'envoltura-proyectos' | 'archivos' | 'campos' | 'clave-hallazgo';
 
 const SIN_SALT = Buffer.alloc(0);
 
@@ -30,6 +30,14 @@ export function derivarSubclaveArchivos(claveProyecto: Buffer): Buffer {
 
 export function derivarSubclaveCampos(claveProyecto: Buffer): Buffer {
   return subclave(claveProyecto, 'campos');
+}
+
+/**
+ * Para la clave de un hallazgo (ADR 032): un HMAC del mensaje redactado. Determinístico dentro del
+ * proyecto, para deduplicar; sin la clave del proyecto no se puede atacar por fuerza bruta.
+ */
+export function derivarSubclaveHallazgos(claveProyecto: Buffer): Buffer {
+  return subclave(claveProyecto, 'clave-hallazgo');
 }
 
 export interface ClaveProyectoNueva {

@@ -331,6 +331,11 @@ export const ResumenEjecucion = z
     logins: Cantidad,
     loginsInesperados: Cantidad,
     renovaciones: Cantidad,
+    // EVI-04: cuántos secretos se redactaron en todo lo que se guardó de la ejecución.
+    secretosRedactados: Cantidad,
+    // Por qué no arrancó el navegador o la ventana: las líneas de Chromium, sin rutas y redactadas.
+    // Va acá, cifrado, y no al log (ADR 034).
+    diagnostico: z.string().max(300).nullable(),
   })
   .strict();
 export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
@@ -378,8 +383,10 @@ export const HallazgoVista = z
     titulo: z.string().max(300),
     url: z.string().max(2048),
     urlOrigen: z.string().max(2048).nullable(),
-    // Puede traer contenido de la página: se guarda cifrado y se muestra solo acá (ADR 021).
+    // Puede traer contenido de la página: redactado, cifrado y mostrado solo acá (ADR 021 y 032).
     detalle: z.string().max(2000),
+    // Cuántos secretos se redactaron en este hallazgo: la interfaz lo avisa, sin el valor (EVI-04).
+    secretosRedactados: Cantidad,
   })
   .strict();
 export type HallazgoVista = z.infer<typeof HallazgoVista>;

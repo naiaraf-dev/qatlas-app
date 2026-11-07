@@ -12,6 +12,7 @@ import {
   normalizarMensaje,
   PATRONES,
   pareceSecreto,
+  recortar,
   redactarCuerpo,
   redactarEncabezados,
   redactarFormulario,
@@ -375,6 +376,14 @@ describe('Secretos de las credenciales, sin guardarlos (ADR 031)', () => {
     const inicio = performance.now();
     redactarTexto('x'.repeat(2000), { comparador });
     expect(performance.now() - inicio).toBeLessThan(500);
+  });
+});
+
+describe('Recortar', () => {
+  it('recorta lo redactado sin dejar ver lo que había debajo', () => {
+    const { texto } = redactarTexto('password=clave-de-prueba');
+    expect(recortar(texto, 12)).toBe('password=[RE');
+    expect(recortar(texto, 100)).toBe(texto);
   });
 });
 
