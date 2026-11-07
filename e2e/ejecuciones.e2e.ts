@@ -364,10 +364,9 @@ test('bloquear la bóveda cancela la ejecución y limpia todo', async () => {
   await page.getByRole('button', { name: /Sandbox/ }).click();
   await lanzarHastaPaginaLenta();
   expect(await pidsDe('qatlas-runner')).toHaveLength(1);
-  await page.evaluate(async () => {
-    const { qatlas } = window as unknown as { qatlas: QatlasApi };
-    await qatlas.vault.lock();
-  });
+  // Como una persona: bloquear recarga la ventana, así que no se espera nada dentro de la página
+  // (con evaluate, la respuesta de lock() se perdía con la recarga: «Execution context was destroyed»).
+  await boton('Bloquear').click();
   await expect(titulo('Bóveda bloqueada')).toBeVisible();
   await expect.poll(() => pidsDe('qatlas-runner')).toEqual([]);
   await expect.poll(() => pidsDe('qatlas-proxy')).toEqual([]);
