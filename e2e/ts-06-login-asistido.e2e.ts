@@ -162,6 +162,10 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
   }
 
   let visible: NavegadorVisible | undefined;
+  // La ejecución queda finalizada apenas llega el fin del escaneo; el runner cierra su navegador
+  // después, y ese navegador escribe en el temporal. Se espera el final de verdad antes de revisar el
+  // temporal y de borrarlo.
+  let runnerTermino = false;
   const boveda = new ServicioBoveda({ carpeta: carpetaBoveda });
   let ejecuciones: ServicioEjecuciones | undefined;
   try {
@@ -189,6 +193,7 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
             eventos.emit('mensaje', structuredClone(mensaje));
           },
           alTerminar: () => {
+            runnerTermino = true;
             eventos.emit('salir');
           },
           carpetaPerfil: temporal,
@@ -300,13 +305,21 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
     expect(contenido.join('\n')).toContain('secreto-en-almacenamiento');
     expect(archivosConCanario(carpetaBoveda)).toEqual([]);
 
-    // 6. Los logs, y el temporal después de cerrar la ventana.
+    // 6. Los logs, y el temporal después de cerrar la ventana y de que el runner cierre su navegador.
+    await expect.poll(() => runnerTermino, { timeout: 30_000 }).toBe(true);
     expect(logs.join('\n')).not.toContain(CANARIO);
     expect(archivosConCanario(temporal)).toEqual([]);
     expect(perfilesDeVentana(temporal)).toEqual([]);
   } finally {
     Object.assign(console, originales);
     await visible?.cerrar();
+    // Si el test falló antes, igual se espera al runner (con un límite) para no borrar bajo sus pies.
+    const limite = Date.now() + 30_000;
+    // `runnerTermino` cambia en el callback del runner, mientras se espera.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    while (!runnerTermino && Date.now() < limite) {
+      await new Promise((resolver) => setTimeout(resolver, 100));
+    }
     boveda.bloquear();
     restaurarEntorno(entornoAntes);
     rmSync(raiz, { recursive: true, force: true, maxRetries: 3 });
