@@ -975,6 +975,10 @@ describe('Carpeta de perfiles', () => {
     const huerfano = path.join(carpeta, 'perfiles', 'cortada');
     mkdirSync(huerfano, { recursive: true });
     writeFileSync(path.join(huerfano, 'x'), 'y');
+    // También el perfil de la ventana del asistido, que va adentro de la carpeta de la ejecución.
+    const ventana = path.join(huerfano, 'asistido-abc123', 'Default');
+    mkdirSync(ventana, { recursive: true });
+    writeFileSync(path.join(ventana, 'Preferences'), '{}');
     const { limpiarPerfilesHuerfanos } = await import('./perfiles');
     limpiarPerfilesHuerfanos(carpeta);
     expect(readdirSync(path.join(carpeta, 'perfiles'))).toEqual([]);

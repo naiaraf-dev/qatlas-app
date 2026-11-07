@@ -4,7 +4,12 @@ import { MensajeAlRunner, type MensajeDelRunner } from '../protocolo';
 import { causaDeFalla, detalleDeFalla, perfilDemasiadoLargo } from './diagnostico';
 import { rastrear, type OpcionesRastreo } from './crawler';
 import { GestorDeSesion, type DatosDeLogin } from './gestor-sesion';
-import { abrirContexto, abrirNavegador, abrirNavegadorVisible } from './motor';
+import {
+  abrirContexto,
+  abrirNavegador,
+  abrirNavegadorVisible,
+  type NavegadorVisible,
+} from './motor';
 import { EXCLUSIONES_DE_CIERRE, iniciarSesion, type ResultadoLogin } from './sesion';
 
 /**
@@ -16,13 +21,19 @@ export interface OpcionesRunner {
   enviar: (mensaje: MensajeDelRunner) => void;
   /** Al terminar, con el código de salida. En la app, el proceso se va. */
   alTerminar: (codigo: number) => void;
-  abrirVisible?: typeof abrirNavegadorVisible;
+  /**
+   * La carpeta de la ejecución, dentro de la carpeta de datos (ADR 018): ahí va el perfil de la ventana
+   * del asistido. En la app es el directorio de trabajo que le da el proceso principal.
+   */
+  carpetaPerfil: string;
+  abrirVisible?: (proxy: Parameters<typeof abrirNavegadorVisible>[0]) => Promise<NavegadorVisible>;
 }
 
 export function crearRunner({
   enviar,
   alTerminar,
-  abrirVisible = abrirNavegadorVisible,
+  carpetaPerfil,
+  abrirVisible = (proxy) => abrirNavegadorVisible(proxy, carpetaPerfil),
 }: OpcionesRunner): {
   recibir: (data: unknown) => void;
 } {

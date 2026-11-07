@@ -8,7 +8,7 @@
  * que solo pide el segundo factor, y el test lo aprueba cuando el sandbox lo pidió. Lo que se escribe en
  * esa ventana está en `ts-06-login-asistido.e2e.ts`.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -146,12 +146,23 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
     .getByLabel('Iniciar sesión con')
     .selectOption({ label: 'admin con segundo factor · Con teléfono' });
   await expect(page.getByText(/Se va a abrir una ventana del navegador de pruebas/)).toBeVisible();
+  const temporalAntes = new Set(readdirSync(os.tmpdir()));
   await boton('Lanzar ejecución').click();
 
   // Señal: la ventana llegó a la pantalla del segundo factor. Mientras tanto, la app lo dice.
   await expect
     .poll(() => sitio.autenticacion.registro.segundoFactor, { timeout: 60_000 })
     .toBeGreaterThan(0);
+  // El perfil de la ventana está dentro de la carpeta de la ejecución, en la de datos (ADR 018 y 028),
+  // y no en el temporal del sistema.
+  const perfiles = path.join(carpeta, 'QAtlas', 'perfiles');
+  const [deLaEjecucion] = readdirSync(perfiles);
+  expect(
+    readdirSync(path.join(perfiles, deLaEjecucion ?? '')).filter((n) => n.startsWith('asistido-')),
+  ).toHaveLength(1);
+  expect(
+    readdirSync(os.tmpdir()).filter((n) => !temporalAntes.has(n) && n.includes('asistido')),
+  ).toEqual([]);
   await expect(ejecucion()).toContainText('Entrá en la ventana del navegador de pruebas');
   sitio.autenticacion.aprobarSegundoFactor();
 
@@ -160,4 +171,6 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
     { timeout: 120_000 },
   );
   expect(sitio.autenticacion.registro.logins.at(-1)).toEqual({ via: 'mfa', rol: 'admin' });
+  // Al terminar, la carpeta de la ejecución se borra, con el perfil de la ventana adentro.
+  await expect.poll(() => readdirSync(perfiles)).toEqual([]);
 });

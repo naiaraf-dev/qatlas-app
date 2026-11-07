@@ -1,6 +1,5 @@
 import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { decidirUrlSinResolver, type PoliticaDeRed } from '../red/reglas';
@@ -67,7 +66,7 @@ export const PREFERENCIAS_VENTANA = {
 } as const;
 
 export interface NavegadorVisible {
-  /** El único contexto, con la ventana: es el del perfil temporal. */
+  /** El único contexto, con la ventana: es el del perfil de la ventana. */
   contexto: BrowserContext;
   /** Cierra la ventana y borra el perfil. */
   cerrar: () => Promise<void>;
@@ -75,15 +74,17 @@ export interface NavegadorVisible {
 
 /**
  * El navegador con ventana del login asistido: los mismos argumentos y el mismo sandbox, detrás del
- * proxy de login, con un perfil temporal propio para poder apagar el gestor de contraseñas. El perfil
- * se borra al cerrar. Solo para que la persona entre; el escaneo nunca corre acá.
+ * proxy de login, con un perfil propio para poder apagar el gestor de contraseñas. El perfil va dentro
+ * de `carpetaPerfil`, la de la ejecución en la carpeta de datos (ADR 018), nunca en el temporal del
+ * sistema, y se borra al cerrar; si algo lo corta, se va con la carpeta de la ejecución. Solo para que
+ * la persona entre; el escaneo nunca corre acá.
  */
-export async function abrirNavegadorVisible(proxy: {
-  servidor: string;
-  usuario: string;
-  clave: string;
-}): Promise<NavegadorVisible> {
-  const perfil = await mkdtemp(path.join(os.tmpdir(), 'qatlas-asistido-'));
+export async function abrirNavegadorVisible(
+  proxy: { servidor: string; usuario: string; clave: string },
+  carpetaPerfil: string,
+): Promise<NavegadorVisible> {
+  // Nombre corto: en Linux, la ruta del perfil cuenta para el socket de Chromium (ADR 018).
+  const perfil = await mkdtemp(path.join(carpetaPerfil, 'asistido-'));
   const borrarPerfil = () => rm(perfil, { recursive: true, force: true, maxRetries: 5 });
   try {
     await mkdir(path.join(perfil, 'Default'));

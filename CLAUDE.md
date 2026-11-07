@@ -36,7 +36,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - La básica pasó a la fase 2 (ADR 025): si el origen base redirige a otro origen, Chromium le manda el
   `Authorization` que puso la ruta. `ESTRATEGIAS_PENDIENTES` en `@qatlas/shared` la deja visible y deshabilitada;
   `e2e/basica-encabezado.e2e.ts` reproduce la fuga con `test.fail`.
-- La ventana del asistido usa un perfil temporal propio con el gestor de contraseñas apagado (ADR 028).
+- La ventana del asistido usa un perfil propio con el gestor de contraseñas apagado, dentro de la carpeta de la
+  ejecución en la carpeta de datos (ADR 018 y 028): `crearRunner` recibe `carpetaPerfil`.
 - Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
 - El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
   manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).

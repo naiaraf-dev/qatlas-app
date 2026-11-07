@@ -260,6 +260,16 @@ describe('Configuración del navegador', () => {
     expect(preferencias).not.toContain('true');
     expect(visible).toContain('JSON.stringify(PREFERENCIAS_VENTANA)');
     expect(visible).toContain('launchPersistentContext(perfil');
+    // En la carpeta de la ejecución, nunca en el temporal del sistema (ADR 018).
+    expect(visible).toContain("mkdtemp(path.join(carpetaPerfil, 'asistido-'))");
+    expect(motor).not.toMatch(/tmpdir/);
+    const entrada = readFileSync(path.join(RUNNER, 'motor/entrada-runner.ts'), 'utf8');
+    expect(entrada).toContain('carpetaPerfil: process.cwd()');
+    const procesos = readFileSync(
+      path.join(RAIZ, 'apps/desktop/src/main/ejecuciones/procesos.ts'),
+      'utf8',
+    );
+    expect(procesos).toContain('cwd: perfil,');
     expect(visible.match(/borrarPerfil\(\)/g)?.length).toBe(2);
   });
 

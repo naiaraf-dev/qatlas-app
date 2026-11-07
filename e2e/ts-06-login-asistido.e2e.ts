@@ -91,9 +91,9 @@ registerHooks({
       contexto,
     ),
 });
-/** Los perfiles de la ventana del asistido que hay en una carpeta temporal. */
+/** Los perfiles de la ventana del asistido que hay en la carpeta de la ejecución. */
 const perfilesDeVentana = (carpeta: string): string[] =>
-  readdirSync(carpeta).filter((nombre) => nombre.startsWith('qatlas-asistido-'));
+  readdirSync(carpeta).filter((nombre) => nombre.startsWith('asistido-'));
 
 const CREDENCIAL_PROXY = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 
@@ -140,7 +140,8 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
   const { ServicioBoveda, ServicioProyectos, ServicioEjecuciones: Ejecuciones } = await servicios();
   const raiz = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts06-'));
   const carpetaBoveda = path.join(raiz, 'boveda');
-  // El perfil del navegador con ventana va al temporal: acá, a una carpeta del test para revisarla.
+  // La carpeta de la ejecución, que en la app está en la carpeta de datos (ADR 018). El temporal del
+  // proceso apunta ahí también, como en la app, para revisar todo junto.
   const temporal = mkdtempSync(path.join(raiz, 'tmp-'));
   const entornoAntes = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };
   process.env.TEMP = temporal;
@@ -190,8 +191,9 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
           alTerminar: () => {
             eventos.emit('salir');
           },
+          carpetaPerfil: temporal,
           abrirVisible: async (proxy) => {
-            visible = await abrirNavegadorVisible(proxy);
+            visible = await abrirNavegadorVisible(proxy, temporal);
             return visible;
           },
         });
@@ -250,7 +252,7 @@ test('TS-06: lo que se escribe en la ventana del login asistido no queda en ning
       .toBe(true);
     const pagina = visible?.contexto.pages()[0];
     if (!pagina) throw new Error('No se abrió la ventana');
-    // El perfil de la ventana es propio y va al temporal (se borra al cerrar, paso 6).
+    // El perfil de la ventana es propio y va a la carpeta de la ejecución (se borra al cerrar, paso 6).
     expect(perfilesDeVentana(temporal)).toHaveLength(1);
     await pagina.locator('#usuario').fill(USUARIOS_APP.admin.usuario);
     await pagina.locator('#clave').fill(CANARIO);
@@ -353,7 +355,8 @@ test('la ventana del asistido no ofrece guardar la contraseña: el gestor de Chr
       rmSync(perfilNormal, { recursive: true, force: true, maxRetries: 3 });
     }
 
-    const visible = await abrirNavegadorVisible(datosProxy);
+    const carpetaVentana = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts06-ventana-'));
+    const visible = await abrirNavegadorVisible(datosProxy, carpetaVentana);
     try {
       const registro = await decisionDelGestor(visible.contexto, origen);
       expect(registro).toContain('Saving disabled');
@@ -363,6 +366,8 @@ test('la ventana del asistido no ofrece guardar la contraseña: el gestor de Chr
       expect(registro).toContain('Leak detection disabled');
     } finally {
       await visible.cerrar();
+      expect(readdirSync(carpetaVentana)).toEqual([]);
+      rmSync(carpetaVentana, { recursive: true, force: true, maxRetries: 3 });
     }
   } finally {
     await proxy.cerrar();

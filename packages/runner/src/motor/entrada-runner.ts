@@ -25,6 +25,9 @@ instalarAgente(new Set(), ({ destino, regla }) => {
 
 const runner = crearRunner({
   enviar,
+  // El proceso principal lo arranca con la carpeta de la ejecución como directorio de trabajo, dentro
+  // de la carpeta de datos (ADR 018). No se toma del temporal: si TEMP faltara, igual queda ahí.
+  carpetaPerfil: process.cwd(),
   alTerminar: (codigo) => {
     process.exit(codigo);
   },

@@ -11,8 +11,11 @@ semilla TOTP llega en la fase 2, cifrada como un secreto más). Mientras tanto, 
 **La ventana.** El runner abre un Chromium con ventana, aparte del navegador del escaneo, con los mismos argumentos,
 el sandbox de Chromium encendido y detrás del proxy de login. Sin video, traza, HAR ni capturas.
 
-**Sin «Guardar contraseña».** La ventana usa un perfil temporal propio (`launchPersistentContext`), creado en el
-temporal del sistema y borrado al cerrar, con el gestor de contraseñas apagado en sus preferencias:
+**Sin «Guardar contraseña».** La ventana usa un perfil propio (`launchPersistentContext`), creado dentro de la
+carpeta de la ejecución en la carpeta de datos (`perfiles/<ejecución>/asistido-…`, ADR 018), nunca en el temporal del
+sistema. Se borra al cerrar la ventana; si algo lo corta, se va con la carpeta de la ejecución al terminar, y al
+arrancar con la limpieza de perfiles huérfanos. El runner recibe esa carpeta explícita (su directorio de trabajo,
+que fija el proceso principal), no la deduce de `TEMP`. El gestor de contraseñas está apagado en sus preferencias:
 `credentials_enable_service`, `credentials_enable_autosignin`, `profile.password_manager_enabled` y
 `profile.password_manager_leak_detection` en falso. No hay un argumento de Chromium para esto, y los contextos de
 `launch` son de incógnito, así que las preferencias no se pueden poner ahí. Una sonda con
@@ -44,6 +47,6 @@ Vitest y en electron-vite, se resuelve a la variante con SQLCipher con `register
 
 ## Consecuencias
 
-- El perfil temporal de la ventana se escribe en disco mientras está abierta, como el de cualquier contexto de
+- El perfil de la ventana se escribe en la carpeta de datos mientras está abierta, como el de cualquier contexto de
   Chromium: lo que el sitio guarda (cookies, almacenamiento) está ahí hasta que se cierra y se borra.
 - En Linux sin pantalla, el asistido no se puede usar. En CI corre con `xvfb-run`.
