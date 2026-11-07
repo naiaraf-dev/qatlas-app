@@ -21,7 +21,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/crypto && tsc -p packages/db && tsc -p packages/runner && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.web.json && tsc -p security-tests && tsc -p tsconfig.tools.json",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/redaction && tsc -p packages/crypto && tsc -p packages/db && tsc -p packages/runner && tsc -p apps/desktop/tsconfig.node.json && tsc -p apps/desktop/tsconfig.web.json && tsc -p security-tests && tsc -p tsconfig.tools.json",
     "test": "vitest run",
     "test:security": "vitest run --project security",
     "audit:electron": "npx --yes @doyensec/electronegativity@1.10.3 -i apps/desktop/src -r -o electronegativity.sarif",
@@ -31,7 +31,7 @@
     "navegador:instalar": "playwright install --no-shell chromium && npm run navegador:verificar",
     "navegador:verificar": "node scripts/verificar-navegador.mjs",
     "nativos:verificar": "node scripts/verificar-nativos.mjs",
-    "test:coverage": "vitest run --project unit --coverage packages/crypto packages/db packages/shared packages/runner apps/desktop/src/main/boveda apps/desktop/src/main/proyectos apps/desktop/src/main/ejecuciones",
+    "test:coverage": "vitest run --project unit --coverage packages/crypto packages/redaction packages/db packages/shared packages/runner apps/desktop/src/main/boveda apps/desktop/src/main/proyectos apps/desktop/src/main/ejecuciones",
     "test:crypto:electron": "node scripts/test-crypto-electron.mjs"
   },
   "devDependencies": {

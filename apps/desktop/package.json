@@ -15,6 +15,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@qatlas/crypto": "*",
     "@qatlas/db": "*",
+    "@qatlas/redaction": "*",
     "@qatlas/runner": "*",
     "@qatlas/shared": "*",
     "argon2": "0.45.2",
