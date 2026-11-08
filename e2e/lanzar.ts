@@ -40,7 +40,8 @@ export async function lanzarApp(
   const diagnostico: string[] = [];
   app.process().stderr?.on('data', (datos: Buffer) => {
     for (const linea of datos.toString().split(/\r?\n/)) {
-      if (!linea.includes('[ejecucion]')) continue;
+      // Los logs técnicos de registrar() (ADR 034).
+      if (!linea.includes('[qatlas]')) continue;
       diagnostico.push(linea);
       console.log(linea);
     }

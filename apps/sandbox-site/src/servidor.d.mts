@@ -21,7 +21,10 @@ export interface ZonaAutenticada {
   };
   vencerSesiones(): void;
   aprobarSegundoFactor(): void;
-  emitirEnlace(rol: 'admin' | 'lector', opciones?: { reutilizable?: boolean }): string;
+  emitirEnlace(
+    rol: 'admin' | 'lector',
+    opciones?: { reutilizable?: boolean; token?: string },
+  ): string;
 }
 
 export interface SandboxActivo {
@@ -55,8 +58,16 @@ export interface SandboxActivo {
     wsMensajes: string[];
   };
   autenticacion: ZonaAutenticada;
+  /** El log del backend de prueba (TS-13): lo que imprimió el servidor. */
+  registroBackend: string[];
   cerrar(): Promise<void>;
 }
+
+/** El canario de las páginas de /fugas cuando no se pasa uno (el del oráculo). */
+export const CANARIO_POR_DEFECTO: string;
+/** Un JWT y una clave PEM de prueba: inventados, armados por partes. */
+export const JWT_DE_PRUEBA: string;
+export const PEM_DE_PRUEBA: string;
 
 export function iniciarSandbox(opciones?: {
   puerto?: number;
@@ -65,4 +76,6 @@ export function iniciarSandbox(opciones?: {
   sesion?: { inactividadMs?: number; maximoMs?: number; maximoPaginas?: number };
   ahora?: () => number;
   hosts?: { app: string; idp: string; portal: string };
+  /** TS-01: la contraseña del admin, el token de los enlaces y lo que filtran las páginas de /fugas. */
+  canario?: string;
 }): Promise<SandboxActivo>;

@@ -28,7 +28,8 @@ traer datos de la página.
 ## Consecuencias
 
 - La semana 8 agrega la fusión y las transiciones de estado sin cambiar estas tablas.
-- Hasta la semana 7, el detalle se guarda sin redactar, cifrado. No sale de la app: no hay exportación todavía.
+- Hasta la semana 7, el detalle se guardaba sin redactar, cifrado. Desde la semana 7 se redacta antes de cifrarlo,
+  y lo guardado antes se redacta al desbloquear (ADR 032 y 033).
 - Las tres tablas tienen `proyecto_id` y están en `TABLAS_DE_PROYECTO`: se purgan con el proyecto.
 
 ## Verificación
