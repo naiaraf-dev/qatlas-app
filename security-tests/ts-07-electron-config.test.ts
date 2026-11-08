@@ -128,6 +128,16 @@ describe('TS-07 · Content Security Policy de producción', () => {
     expect(csp).not.toMatch(/https?:\/\//);
   });
 
+  it('las imágenes solo vienen de la app: sin data: ni blob: (las evidencias se dibujan en un canvas)', () => {
+    expect(directives.get('img-src')).toEqual(["'self'"]);
+    expect(csp).not.toContain('data:');
+    expect(csp).not.toContain('blob:');
+  });
+
+  it('media-src está en none: el video de una evidencia son fotogramas en un canvas', () => {
+    expect(directives.get('media-src')).toEqual(["'none'"]);
+  });
+
   it.each(['object-src', 'frame-src', 'base-uri', 'form-action', 'frame-ancestors'])(
     '%s está en none',
     (name) => {

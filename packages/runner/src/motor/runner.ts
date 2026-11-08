@@ -3,7 +3,8 @@ import type { Browser } from 'playwright-core';
 import { recortar, redactarTexto, redactarUrl } from '@qatlas/redaction';
 import { MensajeAlRunner, type MensajeDelRunner } from '../protocolo';
 import { causaDeFalla, detalleDeFalla, perfilDemasiadoLargo } from './diagnostico';
-import { rastrear, type OpcionesRastreo } from './crawler';
+import { enMundoAislado, rastrear, type OpcionesRastreo } from './crawler';
+import { Grabacion } from './grabacion';
 import { GestorDeSesion, type DatosDeLogin } from './gestor-sesion';
 import {
   abrirContexto,
@@ -69,6 +70,8 @@ export function crearRunner({
       },
     };
   };
+  /** Las evidencias del escaneo en curso: recibe las confirmaciones del proceso principal. */
+  let grabacion: Grabacion | undefined;
   /** Quien espera la respuesta a un `necesita-login`. Hay uno a la vez. */
   let esperaDeLogin: ((datos: DatosDeLogin | null) => void) | null = null;
 
@@ -199,12 +202,22 @@ export function crearRunner({
       },
     };
 
+    grabacion = new Grabacion(mensaje.evidencias, enviar, enMundoAislado);
+
     if (!mensaje.autenticacion) {
       const { contexto, vigilancia } = await abrirContexto(navegador, configuracion.politica, {
         soloLectura: mensaje.soloLectura,
         alRegistrar,
       });
-      const resultado = await rastrear(contexto, vigilancia, opciones, eventos);
+      const resultado = await rastrear(
+        contexto,
+        vigilancia,
+        opciones,
+        eventos,
+        Date.now,
+        undefined,
+        grabacion,
+      );
       enviar({
         tipo: 'escaneo-terminado',
         ...resultado,
@@ -238,7 +251,15 @@ export function crearRunner({
       return;
     }
     const { contexto, vigilancia } = gestor.actual();
-    const resultado = await rastrear(contexto, vigilancia, opciones, eventos, Date.now, gestor);
+    const resultado = await rastrear(
+      contexto,
+      vigilancia,
+      opciones,
+      eventos,
+      Date.now,
+      gestor,
+      grabacion,
+    );
     enviar({
       tipo: 'escaneo-terminado',
       ...resultado,
@@ -273,6 +294,9 @@ export function crearRunner({
         espera?.(null);
         return;
       }
+      case 'evidencia-procesada':
+        grabacion?.procesados(recibido.fotogramas);
+        return;
       default:
         ejecutar(recibido).then(
           () => terminar(0),

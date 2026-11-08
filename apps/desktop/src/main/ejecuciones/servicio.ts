@@ -51,6 +51,12 @@ import {
 } from '@qatlas/runner';
 import { z } from 'zod';
 import type { ServicioBoveda } from '../boveda/servicio';
+import {
+  esMensajeDeEvidencia,
+  opcionesDeEvidencias,
+  type EvidenciasDeEjecucion,
+  type ServicioEvidencias,
+} from '../evidencias/servicio';
 import { registrar } from '../registro';
 import {
   claveDeMensaje,
@@ -116,7 +122,18 @@ const RESUMEN_VACIO: ResumenEjecucion = {
   renovaciones: 0,
   secretosRedactados: 0,
   diagnostico: null,
+  capturas: 0,
+  videos: 0,
+  fotogramasPerdidos: 0,
+  topesAlcanzados: [],
 };
+
+/** Un tramo de video abierto al terminar por uno de estos motivos se conserva: es la falla (f2). */
+const ERRORES_DEL_NAVEGADOR: ReadonlySet<MotivoFinEjecucion> = new Set([
+  'runner-caido',
+  'navegador-no-disponible',
+  'proxy-caido',
+]);
 
 /** Una sesión guardada nunca dura más que esto en memoria, diga lo que diga el sitio (ADR 026). */
 const VIDA_MAXIMA_SESION_MS = 12 * 60 * 60_000;
@@ -188,6 +205,10 @@ interface EnCurso {
   guardadas: number;
   terminada: boolean;
   paginaActual: string | null;
+  /** La última página guardada: las ocurrencias y las evidencias se enlazan a ella. */
+  paginaId: string | null;
+  /** Solo en un escaneo. Se cierra al terminar y se aborta al bloquear. */
+  evidencias: EvidenciasDeEjecucion | null;
   /** Lo que espera `probarLogin`. */
   alTerminar?: (resultado: ResultadoPrueba | null) => void;
   /** El resultado de una prueba de login: se entrega recién cuando la prueba quedó terminada y limpia. */
@@ -230,6 +251,8 @@ export class ServicioEjecuciones {
     private readonly alProgreso: (progreso: ProgresoEjecucion) => void = () => undefined,
     /** Solo el control positivo de TS-01 pasa otro: la app usa siempre el de siempre. */
     private readonly redactor: Redactor = REDACTOR,
+    /** Sin esto, los escaneos no guardan evidencias (los tests de otras cosas). */
+    private readonly evidencias?: ServicioEvidencias,
   ) {}
 
   /** Lo que quedó sin terminar no se relanza solo: no sale tráfico sin una acción del usuario. */
@@ -348,8 +371,10 @@ export class ServicioEjecuciones {
           urlOrigen: h.urlOrigen,
           detalle: h.detalleCifrado ? (detalles[siguienteDetalle++] ?? '').slice(0, 2000) : '',
           secretosRedactados: h.secretosRedactados,
+          paginaId: h.paginaVisitadaId,
         })),
         paginas: leerPaginasVisitadas(base, ejecucionId).map((p) => ({
+          id: p.id,
           url: p.url,
           status: p.statusHttp,
           tiempoCargaMs: p.tiempoCargaMs,
@@ -564,6 +589,8 @@ export class ServicioEjecuciones {
       guardadas: 0,
       terminada: false,
       paginaActual: null,
+      paginaId: null,
+      evidencias: null,
       comparador: null,
       subclaveHallazgos: null,
       consolaPrevia: new Map(),
@@ -606,6 +633,16 @@ export class ServicioEjecuciones {
         };
         sesionPrevia = this.sesionGuardada(enCurso.proyectoId, enCurso.credencialId);
       }
+      enCurso.evidencias =
+        this.evidencias?.iniciar({
+          ejecucionId: enCurso.id,
+          proyectoId: enCurso.proyectoId,
+          modoSensible: datos.modoDatosSensibles,
+          comparador: () => enCurso.comparador,
+          enviarAlRunner: (mensaje) => {
+            enCurso.runner?.enviar(mensaje);
+          },
+        }) ?? null;
       enCurso.runner?.enviar({
         tipo: 'escaneo',
         configuracion,
@@ -617,6 +654,7 @@ export class ServicioEjecuciones {
         exclusiones: datos.exclusiones,
         autenticacion,
         sesionPrevia,
+        evidencias: opcionesDeEvidencias(datos),
       });
     });
   }
@@ -729,6 +767,11 @@ export class ServicioEjecuciones {
   }
 
   private alMensajeDelRunner(enCurso: EnCurso, mensaje: MensajeDelRunner): void {
+    if (esMensajeDeEvidencia(mensaje)) {
+      // Sin evidencias (una prueba de login), no hay nada que hacer con esto.
+      if (!enCurso.terminada) enCurso.evidencias?.recibir(mensaje);
+      return;
+    }
     switch (mensaje.tipo) {
       case 'conexion':
         this.anotar(enCurso, mensaje.proceso, mensaje);
@@ -984,7 +1027,7 @@ export class ServicioEjecuciones {
           base,
           filasDeRegistro(enCurso.proyectoId, enCurso.id, 'pagina.url', completa.registros),
         );
-        agregarPaginaVisitada(base, {
+        enCurso.paginaId = agregarPaginaVisitada(base, {
           proyectoId: enCurso.proyectoId,
           ejecucionId: enCurso.id,
           url: corta.texto,
@@ -994,6 +1037,7 @@ export class ServicioEjecuciones {
           profundidad: pagina.profundidad,
         });
       });
+      if (enCurso.paginaId) enCurso.evidencias?.alPagina(enCurso.paginaId);
     } catch {
       // Bóveda cerrada: la ejecución se está cancelando.
     }
@@ -1005,6 +1049,7 @@ export class ServicioEjecuciones {
     hallazgo: Extract<MensajeDelRunner, { tipo: 'hallazgo' }>['hallazgo'],
   ): void {
     enCurso.resumen.hallazgos += 1;
+    enCurso.evidencias?.alHallazgo(hallazgo.severidad);
     const ocurrenciaId = randomUUID();
     const opciones = { comparador: enCurso.comparador };
     const titulo = this.redactor.texto(hallazgo.titulo, opciones);
@@ -1059,6 +1104,7 @@ export class ServicioEjecuciones {
             urlOrigen: urlOrigen?.texto ?? null,
             detalleCifrado,
             secretosRedactados: secretos,
+            paginaVisitadaId: enCurso.paginaId,
           },
         );
         agregarRedacciones(
@@ -1233,6 +1279,11 @@ export class ServicioEjecuciones {
       } catch {
         // Al desbloquear queda marcada como interrumpida.
       }
+      // Lo que no llegó a la base se borra: sin su semilla guardada, es ilegible.
+      if (enCurso.evidencias) {
+        enCurso.evidencias.abortar();
+        this.evidencias?.soltar(enCurso.evidencias);
+      }
       this.olvidarSecretos(enCurso);
       this.informar(enCurso, estado);
       enCurso.alTerminar?.(enCurso.resultadoPrueba ?? null);
@@ -1245,6 +1296,44 @@ export class ServicioEjecuciones {
     // siendo la actual, y la cola espera. Lo registrado (conexiones y resumen) se guarda ya.
     this.guardarTardia(enCurso);
     this.liberarProcesos(enCurso, () => {
+      void this.cerrarEvidencias(enCurso, motivo).then(() => {
+        this.terminarDeFinalizar(enCurso, guardar, estado);
+      });
+    });
+  }
+
+  /**
+   * Con el runner ya fuera, no llegan más fotogramas: se cierran la traza, el HAR y el último tramo. La
+   * ejecución figura terminada recién después, con sus evidencias en el resumen.
+   */
+  private async cerrarEvidencias(
+    enCurso: EnCurso,
+    motivo: MotivoFinEjecucion | null,
+  ): Promise<void> {
+    const evidencias = enCurso.evidencias;
+    if (!evidencias) return;
+    try {
+      const resumen = await evidencias.terminar(
+        motivo !== null && ERRORES_DEL_NAVEGADOR.has(motivo),
+      );
+      enCurso.resumen.capturas = resumen.capturas;
+      enCurso.resumen.videos = resumen.videos;
+      enCurso.resumen.fotogramasPerdidos = resumen.fotogramasPerdidos;
+      enCurso.resumen.topesAlcanzados = resumen.topesAlcanzados;
+      enCurso.resumen.secretosRedactados += resumen.secretosRedactados;
+    } catch {
+      // Bóveda cerrada mientras tanto: lo que no llegó a la base se borra al desbloquear.
+    } finally {
+      this.evidencias?.soltar(evidencias);
+    }
+  }
+
+  private terminarDeFinalizar(
+    enCurso: EnCurso,
+    guardar: (abierta: BaseCifrada) => void,
+    estado: 'finalizada' | 'fallida' | 'cancelada',
+  ): void {
+    {
       try {
         this.boveda.conAcceso((abierta) => {
           // Si mientras tanto se eliminó el proyecto, no queda fila que actualizar.
@@ -1267,7 +1356,7 @@ export class ServicioEjecuciones {
       } catch {
         // Bóveda bloqueada: la cola se marcó al bloquear.
       }
-    });
+    }
   }
 
   /** El comparador, la subclave y los mensajes de consola de la ejecución se olvidan al terminar. */

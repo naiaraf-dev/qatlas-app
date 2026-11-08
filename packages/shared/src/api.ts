@@ -88,4 +88,21 @@ export interface QatlasApi {
     /** Devuelve la función para dejar de escuchar. */
     alProgreso(oyente: (progreso: ProgresoEjecucion) => void): () => void;
   };
+  evidencias: {
+    listar(
+      req: IpcRequest<'evidencias:listar'>,
+    ): Promise<IpcResult<IpcResponse<'evidencias:listar'>>>;
+    obtenerVista(
+      req: IpcRequest<'evidencias:obtenerVista'>,
+    ): Promise<IpcResult<IpcResponse<'evidencias:obtenerVista'>>>;
+    obtenerFotograma(
+      req: IpcRequest<'evidencias:obtenerFotograma'>,
+    ): Promise<IpcResult<IpcResponse<'evidencias:obtenerFotograma'>>>;
+    noCumplenModoSensible(
+      req: IpcRequest<'evidencias:noCumplenModoSensible'>,
+    ): Promise<IpcResult<IpcResponse<'evidencias:noCumplenModoSensible'>>>;
+    resolverModoSensible(
+      req: IpcRequest<'evidencias:resolverModoSensible'>,
+    ): Promise<IpcResult<IpcResponse<'evidencias:resolverModoSensible'>>>;
+  };
 }

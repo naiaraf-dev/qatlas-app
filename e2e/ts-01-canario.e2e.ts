@@ -531,6 +531,14 @@ test('control positivo: con la redacción apagada, el mismo escaneo deja el cana
     url: (url) => ({ texto: url as TextoRedactado, registros: [] }),
     secuencia: (textos) =>
       textos.map((texto) => ({ texto: texto as TextoRedactado, registros: [] })),
+    encabezados: (encabezados) => ({
+      encabezados: encabezados.map(({ nombre, valor }) => ({
+        nombre,
+        valor: valor as TextoRedactado,
+      })),
+      registros: [],
+    }),
+    cuerpo: (cuerpo) => ({ texto: cuerpo as TextoRedactado, registros: [] }),
   };
   try {
     await conTemporal(path.join(raiz, 'tmp'), async () => {

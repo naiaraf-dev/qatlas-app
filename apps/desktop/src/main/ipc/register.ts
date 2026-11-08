@@ -4,6 +4,7 @@ import { createIpcHandler, type HandlerOptions, type IpcImplementation } from '.
 import { elegirCopiaARestaurar, elegirDestinoDeCopia } from '../boveda/dialogos';
 import type { ServicioBoveda } from '../boveda/servicio';
 import type { ServicioEjecuciones } from '../ejecuciones/servicio';
+import type { ServicioEvidencias } from '../evidencias/servicio';
 import type { ServicioProyectos } from '../proyectos/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
@@ -18,13 +19,14 @@ export interface IpcDependencies {
   boveda: ServicioBoveda;
   proyectos: ServicioProyectos;
   ejecuciones: ServicioEjecuciones;
+  evidencias: ServicioEvidencias;
   alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
-  const { boveda, proyectos, ejecuciones } = deps;
+  const { boveda, proyectos, ejecuciones, evidencias } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -85,11 +87,17 @@ function buildImplementations(deps: IpcDependencies): Implementations {
       boveda.bloquear();
       return { estado: 'bloqueada' };
     },
-    'vault:getSettings': () => ({ bloqueoMinutos: boveda.configuracion().bloqueoMinutos }),
-    'vault:setSettings': ({ bloqueoMinutos }) => {
-      const guardada = boveda.cambiarConfiguracion({ bloqueoMinutos }).bloqueoMinutos;
-      deps.alCambiarBloqueoMinutos(guardada);
-      return { bloqueoMinutos: guardada };
+    'vault:getSettings': () => {
+      const { bloqueoMinutos, retencionDias } = boveda.configuracion();
+      return { bloqueoMinutos, retencionDias };
+    },
+    'vault:setSettings': ({ bloqueoMinutos, retencionDias }) => {
+      const anterior = boveda.configuracion().retencionDias;
+      const guardada = boveda.cambiarConfiguracion({ bloqueoMinutos, retencionDias });
+      deps.alCambiarBloqueoMinutos(guardada.bloqueoMinutos);
+      // EVI-06: cambiar la retención queda en la auditoría, sin el valor.
+      if (guardada.retencionDias !== anterior) evidencias.registrarCambioDeRetencion();
+      return { bloqueoMinutos: guardada.bloqueoMinutos, retencionDias: guardada.retencionDias };
     },
     'vault:createBackup': async () => {
       const destino = await elegirDestinoDeCopia(deps.getWindow());
@@ -118,7 +126,10 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     },
     'proyectos:eliminar': ({ id, nombreConfirmacion }) => {
       ejecuciones.cortarDeProyecto(id);
-      return proyectos.eliminar(id, nombreConfirmacion);
+      const respuesta = proyectos.eliminar(id, nombreConfirmacion);
+      // Sus filas (y semillas) ya no están: los archivos se borran también (TS-10).
+      if (respuesta.resultado === 'eliminado') evidencias.despuesDeEliminarProyecto();
+      return respuesta;
     },
     'proyectos:aceptarAutorizacion': ({ id, aceptacion }) =>
       proyectos.aceptarAutorizacion(id, aceptacion),
@@ -135,6 +146,14 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     'ejecuciones:cancelar': ({ ejecucionId }) => ejecuciones.cancelar(ejecucionId),
     'ejecuciones:listar': ({ proyectoId }) => ejecuciones.listar(proyectoId),
     'ejecuciones:detalle': ({ ejecucionId }) => ejecuciones.detalle(ejecucionId),
+    'evidencias:listar': ({ ejecucionId }) => evidencias.listar(ejecucionId),
+    'evidencias:obtenerVista': ({ evidenciaId }) => evidencias.vista(evidenciaId),
+    'evidencias:obtenerFotograma': ({ evidenciaId, indice }) =>
+      evidencias.fotograma(evidenciaId, indice),
+    'evidencias:noCumplenModoSensible': ({ proyectoId }) =>
+      evidencias.noCumplenModoSensible(proyectoId),
+    'evidencias:resolverModoSensible': ({ proyectoId, accion }) =>
+      evidencias.resolverModoSensible(proyectoId, accion),
   };
 }
 

@@ -18,6 +18,7 @@ import {
   type HallazgoDetectado,
 } from './chequeos';
 import type { SesionDelRastreo } from './gestor-sesion';
+import type { Grabacion } from './grabacion';
 import type { Vigilancia } from './motor';
 import { Frontera, normalizarUrl, sinQuery } from './urls';
 
@@ -84,7 +85,7 @@ const esperar = (ms: number) =>
  * Corre código en un mundo aislado: comparte el DOM con la página, pero no sus variables. La página no
  * ve nada de esto ni lo puede alterar, y su CSP no lo bloquea (ADR 021).
  */
-async function enMundoAislado<T>(cdp: CDPSession, expresion: string): Promise<T | null> {
+export async function enMundoAislado<T>(cdp: CDPSession, expresion: string): Promise<T | null> {
   try {
     const { frameTree } = await cdp.send('Page.getFrameTree');
     const { executionContextId } = await cdp.send('Page.createIsolatedWorld', {
@@ -268,6 +269,7 @@ export async function rastrear(
   eventos: EventosRastreo,
   ahora: () => number = Date.now,
   sesion?: SesionDelRastreo,
+  grabacion?: Grabacion,
 ): Promise<ResultadoRastreo> {
   const limite = ahora() + opciones.maxMinutos * 60_000;
   const pausa = 1000 / opciones.maxRps;
@@ -290,11 +292,15 @@ export async function rastrear(
   let pagina: Page = await fuente.contexto.newPage();
   let cdp: CDPSession = await fuente.contexto.newCDPSession(pagina);
   escuchar(pagina, () => datos);
+  const grabadas: Page[] = [pagina];
+  await grabacion?.vincular(pagina);
   const vincular = async () => {
     vigilancia = fuente.vigilancia;
     pagina = await fuente.contexto.newPage();
     cdp = await fuente.contexto.newCDPSession(pagina);
     escuchar(pagina, () => datos);
+    grabadas.push(pagina);
+    await grabacion?.vincular(pagina);
   };
   /** Después de un login nuevo, el contexto es otro. */
   const alDia = async () => {
@@ -342,322 +348,339 @@ export async function rastrear(
     }
     analizadas.add(pendiente.url);
 
-    datos = datosVacios();
-    vigilancia.reiniciar();
-    await respetarRitmo();
-    let estado: number | null = null;
-    let navego = false;
+    // Cada página es un tramo de las evidencias: su video se conserva o no según lo que pase acá. El
+    // `finally` lo cierra en todas las salidas de la vuelta (ADR 036).
+    grabacion?.iniciarTramo(pendiente.url);
+    let hallazgosDePagina = 0;
+    let errorNavegacion = false;
     try {
-      const respuesta = await pagina.goto(pendiente.url, {
-        timeout: opciones.timeoutPaginaMs,
-        waitUntil: 'load',
-      });
-      estado = respuesta?.status() ?? null;
-      navego = true;
-    } catch {
-      // Un destino bloqueado o que no responde: lo dicen el registro y los chequeos de abajo.
-    }
-    await redInactiva();
-    await Promise.allSettled(datos.pendientes);
+      datos = datosVacios();
+      vigilancia.reiniciar();
+      await respetarRitmo();
+      let estado: number | null = null;
+      let navego = false;
+      try {
+        const respuesta = await pagina.goto(pendiente.url, {
+          timeout: opciones.timeoutPaginaMs,
+          waitUntil: 'load',
+        });
+        estado = respuesta?.status() ?? null;
+        navego = true;
+      } catch {
+        // Un destino bloqueado o que no responde: lo dicen el registro y los chequeos de abajo.
+      }
+      errorNavegacion = !navego || estado === null;
+      await redInactiva();
+      await Promise.allSettled(datos.pendientes);
 
-    if (sesion) {
-      const ultima = datos.respuestas.filter((r) => r.principal).at(-1);
-      const formularioDeLogin =
-        navego && estado !== null && estado < 400
-          ? await pagina
-              .locator(sesion.selectorContrasena)
-              .first()
-              .isVisible()
-              .catch(() => false)
-          : false;
-      const sospecha = sesion.sospechar({
-        urlFinal: navego ? pagina.url() : null,
-        estado,
-        bloqueadaPorNosotros: Boolean(ultima?.bloqueada),
-        navegacionesBloqueadas: datos.navegacionesFallidas,
-        formularioDeLogin,
-      });
-      if (sospecha) {
-        const confirmacion = await sesion.confirmarYRenovar();
-        if (confirmacion === 'detener') {
-          resultado.detenido = 'sesion';
-          break;
+      if (sesion) {
+        const ultima = datos.respuestas.filter((r) => r.principal).at(-1);
+        const formularioDeLogin =
+          navego && estado !== null && estado < 400
+            ? await pagina
+                .locator(sesion.selectorContrasena)
+                .first()
+                .isVisible()
+                .catch(() => false)
+            : false;
+        const sospecha = sesion.sospechar({
+          urlFinal: navego ? pagina.url() : null,
+          estado,
+          bloqueadaPorNosotros: Boolean(ultima?.bloqueada),
+          navegacionesBloqueadas: datos.navegacionesFallidas,
+          formularioDeLogin,
+        });
+        if (sospecha) {
+          const confirmacion = await sesion.confirmarYRenovar();
+          if (confirmacion === 'detener') {
+            resultado.detenido = 'sesion';
+            break;
+          }
+          if (confirmacion === 'renovada') {
+            // Sin hallazgos de la pantalla de login: la página se vuelve a visitar con la sesión nueva.
+            analizadas.delete(pendiente.url);
+            frontera.reencolar(pendiente);
+            await alDia();
+            continue;
+          }
         }
-        if (confirmacion === 'renovada') {
-          // Sin hallazgos de la pantalla de login: la página se vuelve a visitar con la sesión nueva.
-          analizadas.delete(pendiente.url);
-          frontera.reencolar(pendiente);
-          await alDia();
-          continue;
-        }
       }
-    }
 
-    // Si la navegación falló, la pestaña puede seguir mostrando la página anterior.
-    const final = (navego ? normalizarUrl(pagina.url()) : null) ?? pendiente.url;
-    // Una redirección dentro del alcance: los hallazgos son de donde terminó, y se analiza una vez.
-    const finalEnAlcance =
-      final !== pendiente.url && decidirUrlSinResolver(final, opciones.politica).permitida;
-    if (finalEnAlcance) {
-      frontera.marcarVista(final);
-      if (analizadas.has(final)) continue;
-      analizadas.add(final);
-    }
-    const url = sinQuery(finalEnAlcance ? final : pendiente.url);
-    const principal = datos.respuestas.filter((r) => r.principal).at(-1);
-    const bloqueadosPorNosotros = [
-      ...vigilancia.bloqueadas(),
-      ...datos.respuestas.filter((r) => r.bloqueada).map((r) => r.url),
-    ];
-
-    const medicion =
-      estado !== null && estado < 400 && !principal?.bloqueada
-        ? await enMundoAislado<{ carga: number | null; lcp: number | null }>(
-            cdp,
-            EXPRESION_MEDICION,
-          )
-        : null;
-    resultado.paginasVisitadas += 1;
-    eventos.alPagina({
-      url: pendiente.url,
-      status: principal?.bloqueada ? null : estado,
-      tiempoCargaMs: medicion?.carga ?? null,
-      profundidad: pendiente.profundidad,
-    });
-
-    const reportar = (hallazgo: HallazgoDetectado) => {
-      eventos.alHallazgo(hallazgo);
-    };
-
-    // Un token o una clave en la URL: queda en el historial, en los logs y en el Referer.
-    for (const parametro of parametrosSensibles(pendiente.url)) {
-      reportar({
-        tipo: 'parametro-sensible',
-        severidad: parametro.severidad,
-        url,
-        urlOrigen: null,
-        clave: parametro.nombre,
-        titulo: `Parámetro sensible en la URL: ${parametro.nombre}`,
-        detalle: '',
-      });
-    }
-
-    // Recursos que bloqueamos nosotros: informativo, una vez por host.
-    for (const host of new Set(bloqueadosPorNosotros.map(hostDe).filter(Boolean))) {
-      reportar({
-        tipo: 'recurso-externo-bloqueado',
-        severidad: SEVERIDAD['recurso-externo-bloqueado'],
-        url,
-        urlOrigen: null,
-        clave: host,
-        titulo: `Recurso fuera del alcance bloqueado: ${host}`,
-        detalle: '',
-      });
-    }
-    if (principal?.bloqueada || estado === null) continue;
-
-    const deEstado = hallazgoDeEstado(
-      estado,
-      url,
-      pendiente.origen ? sinQuery(pendiente.origen) : null,
-    );
-    if (deEstado) {
-      reportar(deEstado);
-      continue;
-    }
-
-    // Recursos con error y requests fallidas, salvo lo que cortamos nosotros.
-    const bloqueadas = new Set(bloqueadosPorNosotros);
-    for (const respuesta of datos.respuestas) {
-      if (respuesta.principal || respuesta.bloqueada || respuesta.estado < 400) continue;
-      reportar({
-        tipo: 'recurso-con-error',
-        severidad: SEVERIDAD['recurso-con-error'],
-        url,
-        urlOrigen: null,
-        clave: `${respuesta.estado} ${new URL(respuesta.url).pathname}`,
-        titulo: `Un recurso responde ${respuesta.estado}`,
-        detalle: respuesta.url,
-      });
-    }
-    for (const fallida of datos.fallidas) {
-      if (bloqueadas.has(fallida.url)) continue;
-      // Lo que cortamos nosotros (alcance o solo lectura), lo que abortó una navegación y el
-      // contenido mixto, que es su propio hallazgo.
-      if (
-        fallida.error === 'net::ERR_ABORTED' ||
-        fallida.error.startsWith('net::ERR_BLOCKED_BY_CLIENT') ||
-        fallida.error === 'mixed-content'
-      ) {
-        continue;
+      // Si la navegación falló, la pestaña puede seguir mostrando la página anterior.
+      const final = (navego ? normalizarUrl(pagina.url()) : null) ?? pendiente.url;
+      // Una redirección dentro del alcance: los hallazgos son de donde terminó, y se analiza una vez.
+      const finalEnAlcance =
+        final !== pendiente.url && decidirUrlSinResolver(final, opciones.politica).permitida;
+      if (finalEnAlcance) {
+        frontera.marcarVista(final);
+        if (analizadas.has(final)) continue;
+        analizadas.add(final);
       }
-      reportar({
-        tipo: 'recurso-con-error',
-        severidad: SEVERIDAD['recurso-con-error'],
-        url,
-        urlOrigen: null,
-        clave: `fallida ${fallida.error}`,
-        titulo: 'Una request falló',
-        detalle: `${fallida.error} ${fallida.url}`,
-      });
-    }
+      const url = sinQuery(finalEnAlcance ? final : pendiente.url);
+      const principal = datos.respuestas.filter((r) => r.principal).at(-1);
+      const bloqueadosPorNosotros = [
+        ...vigilancia.bloqueadas(),
+        ...datos.respuestas.filter((r) => r.bloqueada).map((r) => r.url),
+      ];
 
-    for (const excepcion of datos.excepciones) {
-      reportar({
-        tipo: 'error-javascript',
-        severidad: SEVERIDAD['error-javascript'],
-        url,
-        urlOrigen: null,
-        clave: claveDeMensaje(excepcion),
-        titulo: 'Excepción de JavaScript no capturada',
-        detalle: excepcion.slice(0, 1000),
+      const medicion =
+        estado !== null && estado < 400 && !principal?.bloqueada
+          ? await enMundoAislado<{ carga: number | null; lcp: number | null }>(
+              cdp,
+              EXPRESION_MEDICION,
+            )
+          : null;
+      resultado.paginasVisitadas += 1;
+      eventos.alPagina({
+        url: pendiente.url,
+        status: principal?.bloqueada ? null : estado,
+        tiempoCargaMs: medicion?.carga ?? null,
+        profundidad: pendiente.profundidad,
       });
-    }
-    const hostsBloqueados = [...new Set(bloqueadosPorNosotros.map(hostDe))];
-    for (const mensaje of datos.consola) {
-      if (mensaje.tipo !== 'error') continue;
-      if (!consoleErrorRelevante(mensaje.texto, [...bloqueadosPorNosotros, ...hostsBloqueados])) {
-        continue;
-      }
-      reportar({
-        tipo: 'console-error',
-        severidad: SEVERIDAD['console-error'],
-        url,
-        urlOrigen: null,
-        clave: claveDeMensaje(mensaje.texto),
-        titulo: 'console.error en la página',
-        detalle: mensaje.texto.slice(0, 1000),
-      });
-    }
-    if (datos.consola.some((m) => m.texto.includes('Mixed Content'))) {
-      reportar({
-        tipo: 'contenido-mixto',
-        severidad: SEVERIDAD['contenido-mixto'],
-        url,
-        urlOrigen: null,
-        clave: 'contenido-mixto',
-        titulo: 'Contenido mixto: la página HTTPS pide recursos por HTTP',
-        detalle: datos.consola
-          .filter((m) => m.texto.includes('Mixed Content'))
-          .map((m) => m.texto)
-          .join('\n')
-          .slice(0, 1000),
-      });
-    }
 
-    const https = pendiente.url.startsWith('https:');
-    const cookies = new Set<string>();
-    for (const respuesta of datos.respuestas) {
-      for (const encabezado of respuesta.cookies) {
-        const cookie = analizarCookie(encabezado, https);
-        if (!cookie || cookies.has(cookie.nombre)) continue;
-        cookies.add(cookie.nombre);
-        const faltan = [cookie.faltaHttpOnly && 'HttpOnly', cookie.faltaSecure && 'Secure'].filter(
-          Boolean,
-        );
+      const reportar = (hallazgo: HallazgoDetectado) => {
+        hallazgosDePagina += 1;
+        eventos.alHallazgo(hallazgo);
+      };
+
+      // Un token o una clave en la URL: queda en el historial, en los logs y en el Referer.
+      for (const parametro of parametrosSensibles(pendiente.url)) {
         reportar({
-          tipo: 'cookie-insegura',
-          severidad: cookie.deSesion ? SEVERIDAD['cookie-insegura'] : 'informativa',
+          tipo: 'parametro-sensible',
+          severidad: parametro.severidad,
           url,
           urlOrigen: null,
-          clave: cookie.nombre,
-          titulo: cookie.deSesion
-            ? `Cookie de sesión sin ${faltan.join(' ni ')}`
-            : TITULO_COOKIE_SIN_VENCIMIENTO,
+          clave: parametro.nombre,
+          titulo: `Parámetro sensible en la URL: ${parametro.nombre}`,
           detalle: '',
         });
       }
-    }
 
-    for (const hallazgo of hallazgosDeRendimiento(url, {
-      cargaMs: medicion?.carga ?? null,
-      lcpMs: medicion?.lcp ?? null,
-      pesoBytes: datos.pesoBytes,
-      requestsLentas: datos.requestsLentas,
-    })) {
-      reportar(hallazgo);
-    }
+      // Recursos que bloqueamos nosotros: informativo, una vez por host.
+      for (const host of new Set(bloqueadosPorNosotros.map(hostDe).filter(Boolean))) {
+        reportar({
+          tipo: 'recurso-externo-bloqueado',
+          severidad: SEVERIDAD['recurso-externo-bloqueado'],
+          url,
+          urlOrigen: null,
+          clave: host,
+          titulo: `Recurso fuera del alcance bloqueado: ${host}`,
+          detalle: '',
+        });
+      }
+      if (principal?.bloqueada || estado === null) continue;
 
-    await enMundoAislado(cdp, axe());
-    const violaciones = (await enMundoAislado<Accesibilidad[]>(cdp, EXPRESION_AXE)) ?? [];
-    for (const violacion of violaciones) {
-      reportar({
-        tipo: 'accesibilidad',
-        severidad: severidadDeAccesibilidad(violacion.impacto),
+      const deEstado = hallazgoDeEstado(
+        estado,
         url,
-        urlOrigen: null,
-        clave: violacion.id,
-        titulo: `Accesibilidad: ${violacion.ayuda.slice(0, 200)}`,
-        detalle: violacion.nodos.join('\n'),
-      });
-    }
-
-    const analisis = await enMundoAislado<Analisis>(cdp, EXPRESION_PAGINA);
-    if (!analisis) continue;
-    if (analisis.contrasena && !analisis.seguro) {
-      reportar({
-        tipo: 'login-sin-cifrar',
-        severidad: SEVERIDAD['login-sin-cifrar'],
-        url,
-        urlOrigen: null,
-        clave: 'contrasena-sin-cifrar',
-        titulo: 'Formulario de login sobre HTTP',
-        detalle: '',
-      });
-    }
-
-    const encolar = (href: string) => {
-      const siguiente = normalizarUrl(href);
-      if (!siguiente || pendiente.profundidad + 1 > opciones.maxProfundidad) return;
-      if (!decidirUrlSinResolver(siguiente, opciones.politica).permitida) return;
-      if (sesion?.esUrlDeLogin(siguiente)) return;
-      if (frontera.agregar(siguiente, pendiente.profundidad + 1, pendiente.url) === 'trampa') {
-        resultado.urlsDescartadas += 1;
-      }
-    };
-    for (const link of analisis.links) {
-      if (coincideExclusion([link.href, ...link.textos], opciones.exclusiones)) {
-        resultado.linksExcluidos += 1;
-        resultado.noRecorridosExclusiones += 1;
+        pendiente.origen ? sinQuery(pendiente.origen) : null,
+      );
+      if (deEstado) {
+        reportar(deEstado);
         continue;
       }
-      encolar(link.href);
-    }
 
-    // Botones (TS-05): en solo lectura, ninguno. Si no, los que no envían un formulario ni coinciden
-    // con una exclusión, de a uno, para descubrir rutas de una SPA.
-    if (opciones.soloLectura) {
-      resultado.noRecorridosSoloLectura += analisis.botones.length;
-      continue;
-    }
-    let clics = 0;
-    for (const boton of analisis.botones) {
-      if (boton.envia || coincideExclusion(boton.textos, opciones.exclusiones)) {
-        resultado.noRecorridosExclusiones += 1;
+      // Recursos con error y requests fallidas, salvo lo que cortamos nosotros.
+      const bloqueadas = new Set(bloqueadosPorNosotros);
+      for (const respuesta of datos.respuestas) {
+        if (respuesta.principal || respuesta.bloqueada || respuesta.estado < 400) continue;
+        reportar({
+          tipo: 'recurso-con-error',
+          severidad: SEVERIDAD['recurso-con-error'],
+          url,
+          urlOrigen: null,
+          clave: `${respuesta.estado} ${new URL(respuesta.url).pathname}`,
+          titulo: `Un recurso responde ${respuesta.estado}`,
+          detalle: respuesta.url,
+        });
+      }
+      for (const fallida of datos.fallidas) {
+        if (bloqueadas.has(fallida.url)) continue;
+        // Lo que cortamos nosotros (alcance o solo lectura), lo que abortó una navegación y el
+        // contenido mixto, que es su propio hallazgo.
+        if (
+          fallida.error === 'net::ERR_ABORTED' ||
+          fallida.error.startsWith('net::ERR_BLOCKED_BY_CLIENT') ||
+          fallida.error === 'mixed-content'
+        ) {
+          continue;
+        }
+        reportar({
+          tipo: 'recurso-con-error',
+          severidad: SEVERIDAD['recurso-con-error'],
+          url,
+          urlOrigen: null,
+          clave: `fallida ${fallida.error}`,
+          titulo: 'Una request falló',
+          detalle: `${fallida.error} ${fallida.url}`,
+        });
+      }
+
+      for (const excepcion of datos.excepciones) {
+        reportar({
+          tipo: 'error-javascript',
+          severidad: SEVERIDAD['error-javascript'],
+          url,
+          urlOrigen: null,
+          clave: claveDeMensaje(excepcion),
+          titulo: 'Excepción de JavaScript no capturada',
+          detalle: excepcion.slice(0, 1000),
+        });
+      }
+      const hostsBloqueados = [...new Set(bloqueadosPorNosotros.map(hostDe))];
+      for (const mensaje of datos.consola) {
+        if (mensaje.tipo !== 'error') continue;
+        if (!consoleErrorRelevante(mensaje.texto, [...bloqueadosPorNosotros, ...hostsBloqueados])) {
+          continue;
+        }
+        reportar({
+          tipo: 'console-error',
+          severidad: SEVERIDAD['console-error'],
+          url,
+          urlOrigen: null,
+          clave: claveDeMensaje(mensaje.texto),
+          titulo: 'console.error en la página',
+          detalle: mensaje.texto.slice(0, 1000),
+        });
+      }
+      if (datos.consola.some((m) => m.texto.includes('Mixed Content'))) {
+        reportar({
+          tipo: 'contenido-mixto',
+          severidad: SEVERIDAD['contenido-mixto'],
+          url,
+          urlOrigen: null,
+          clave: 'contenido-mixto',
+          titulo: 'Contenido mixto: la página HTTPS pide recursos por HTTP',
+          detalle: datos.consola
+            .filter((m) => m.texto.includes('Mixed Content'))
+            .map((m) => m.texto)
+            .join('\n')
+            .slice(0, 1000),
+        });
+      }
+
+      const https = pendiente.url.startsWith('https:');
+      const cookies = new Set<string>();
+      for (const respuesta of datos.respuestas) {
+        for (const encabezado of respuesta.cookies) {
+          const cookie = analizarCookie(encabezado, https);
+          if (!cookie || cookies.has(cookie.nombre)) continue;
+          cookies.add(cookie.nombre);
+          const faltan = [
+            cookie.faltaHttpOnly && 'HttpOnly',
+            cookie.faltaSecure && 'Secure',
+          ].filter(Boolean);
+          reportar({
+            tipo: 'cookie-insegura',
+            severidad: cookie.deSesion ? SEVERIDAD['cookie-insegura'] : 'informativa',
+            url,
+            urlOrigen: null,
+            clave: cookie.nombre,
+            titulo: cookie.deSesion
+              ? `Cookie de sesión sin ${faltan.join(' ni ')}`
+              : TITULO_COOKIE_SIN_VENCIMIENTO,
+            detalle: '',
+          });
+        }
+      }
+
+      for (const hallazgo of hallazgosDeRendimiento(url, {
+        cargaMs: medicion?.carga ?? null,
+        lcpMs: medicion?.lcp ?? null,
+        pesoBytes: datos.pesoBytes,
+        requestsLentas: datos.requestsLentas,
+      })) {
+        reportar(hallazgo);
+      }
+
+      await enMundoAislado(cdp, axe());
+      const violaciones = (await enMundoAislado<Accesibilidad[]>(cdp, EXPRESION_AXE)) ?? [];
+      for (const violacion of violaciones) {
+        reportar({
+          tipo: 'accesibilidad',
+          severidad: severidadDeAccesibilidad(violacion.impacto),
+          url,
+          urlOrigen: null,
+          clave: violacion.id,
+          titulo: `Accesibilidad: ${violacion.ayuda.slice(0, 200)}`,
+          detalle: violacion.nodos.join('\n'),
+        });
+      }
+
+      const analisis = await enMundoAislado<Analisis>(cdp, EXPRESION_PAGINA);
+      if (!analisis) continue;
+      if (analisis.contrasena && !analisis.seguro) {
+        reportar({
+          tipo: 'login-sin-cifrar',
+          severidad: SEVERIDAD['login-sin-cifrar'],
+          url,
+          urlOrigen: null,
+          clave: 'contrasena-sin-cifrar',
+          titulo: 'Formulario de login sobre HTTP',
+          detalle: '',
+        });
+      }
+
+      const encolar = (href: string) => {
+        const siguiente = normalizarUrl(href);
+        if (!siguiente || pendiente.profundidad + 1 > opciones.maxProfundidad) return;
+        if (!decidirUrlSinResolver(siguiente, opciones.politica).permitida) return;
+        if (sesion?.esUrlDeLogin(siguiente)) return;
+        if (frontera.agregar(siguiente, pendiente.profundidad + 1, pendiente.url) === 'trampa') {
+          resultado.urlsDescartadas += 1;
+        }
+      };
+      for (const link of analisis.links) {
+        if (coincideExclusion([link.href, ...link.textos], opciones.exclusiones)) {
+          resultado.linksExcluidos += 1;
+          resultado.noRecorridosExclusiones += 1;
+          continue;
+        }
+        encolar(link.href);
+      }
+
+      // Botones (TS-05): en solo lectura, ninguno. Si no, los que no envían un formulario ni coinciden
+      // con una exclusión, de a uno, para descubrir rutas de una SPA.
+      if (opciones.soloLectura) {
+        resultado.noRecorridosSoloLectura += analisis.botones.length;
         continue;
       }
-      if (clics >= CLICS_POR_PAGINA || ahora() >= limite) break;
-      clics += 1;
-      await respetarRitmo();
-      try {
-        await pagina.locator(SELECTOR_BOTONES).nth(boton.indice).click({ timeout: 2000 });
-        await redInactiva();
-      } catch {
-        continue;
-      }
-      const despues = normalizarUrl(pagina.url());
-      if (despues && despues !== final) {
-        encolar(despues);
+      let clics = 0;
+      for (const boton of analisis.botones) {
+        if (boton.envia || coincideExclusion(boton.textos, opciones.exclusiones)) {
+          resultado.noRecorridosExclusiones += 1;
+          continue;
+        }
+        if (clics >= CLICS_POR_PAGINA || ahora() >= limite) break;
+        clics += 1;
+        grabacion?.accion(boton.textos[0] ?? '');
         await respetarRitmo();
-        await pagina
-          .goto(pendiente.url, { timeout: opciones.timeoutPaginaMs })
-          .catch(() => undefined);
-        await redInactiva();
+        try {
+          await pagina.locator(SELECTOR_BOTONES).nth(boton.indice).click({ timeout: 2000 });
+          await redInactiva();
+        } catch {
+          continue;
+        }
+        const despues = normalizarUrl(pagina.url());
+        if (despues && despues !== final) {
+          encolar(despues);
+          await respetarRitmo();
+          await pagina
+            .goto(pendiente.url, { timeout: opciones.timeoutPaginaMs })
+            .catch(() => undefined);
+          await redInactiva();
+        }
       }
+    } finally {
+      await grabacion?.terminarTramo(pagina, cdp, {
+        hallazgos: hallazgosDePagina,
+        errorNavegacion,
+      });
     }
   }
   if (!resultado.detenido && frontera.quedan > 0) resultado.detenido = 'max-paginas';
   resultado.urlsDescartadas = frontera.descartadasPorTrampa;
+  await grabacion?.cerrar(grabadas);
   await pagina.close().catch(() => undefined);
   return resultado;
 }
