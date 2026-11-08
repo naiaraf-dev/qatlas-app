@@ -163,6 +163,13 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
   // No hay login: límite, login fallido o pausa cancelada. El proceso principal sabe por qué.
   z.object({ tipo: z.literal('login-denegado') }).strict(),
   z.object({ tipo: z.literal('cancelar') }).strict(),
+  // Qué textos de la página tienen un secreto: esos elementos se tapan en la captura (EVI-04).
+  z
+    .object({
+      tipo: z.literal('tapar-en-captura'),
+      indices: z.array(z.number().int().nonnegative()).max(2000),
+    })
+    .strict(),
   // El proceso principal ya escribió estos fotogramas: el runner puede mandar más (f5).
   z
     .object({ tipo: z.literal('evidencia-procesada'), fotogramas: z.number().int().positive() })
@@ -380,5 +387,13 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
     })
     .strict(),
   z.object({ tipo: z.literal('traza'), evento: EventoTraza }).strict(),
+  // Antes de una captura: el texto visible de cada elemento, para que el principal diga qué tapar.
+  z
+    .object({
+      tipo: z.literal('textos-de-captura'),
+      tramo: Tramo,
+      textos: z.array(z.string().max(5000)).max(2000),
+    })
+    .strict(),
 ]);
 export type MensajeDelRunner = z.infer<typeof MensajeDelRunner>;

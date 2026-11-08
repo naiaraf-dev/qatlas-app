@@ -418,3 +418,18 @@ describe('Modo datos sensibles sobre lo que ya existe (f6)', () => {
     );
   });
 });
+
+describe('Secretos a la vista en la captura (EVI-04)', () => {
+  it('dice qué textos visibles tienen un secreto, sin guardar nada', async () => {
+    const { id, ev } = ejecucion(crearProyecto());
+    const token = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJhbmEifQ', 'firma-22'].join('.');
+    ev.recibir({
+      tipo: 'textos-de-captura',
+      tramo: 1,
+      textos: ['Hola', `token ${token}`, 'Ficha de cliente'],
+    });
+    expect(alRunner).toEqual([{ tipo: 'tapar-en-captura', indices: [1] }]);
+    await ev.terminar(false);
+    expect(evidencias.listar(id)).toEqual([]);
+  });
+});

@@ -85,7 +85,7 @@ const SEVERIDADES_QUE_CONSERVAN: ReadonlySet<SeveridadHallazgo> = new Set([
 
 type MensajeDeEvidencia = Extract<
   MensajeDelRunner,
-  { tipo: 'tramo-inicio' | 'tramo-fin' | 'fotograma' | 'captura' | 'traza' }
+  { tipo: 'tramo-inicio' | 'tramo-fin' | 'fotograma' | 'captura' | 'traza' | 'textos-de-captura' }
 >;
 
 export type ResumenEvidencias = Pick<
@@ -99,6 +99,7 @@ const TIPOS_DE_MENSAJE: ReadonlySet<string> = new Set([
   'fotograma',
   'captura',
   'traza',
+  'textos-de-captura',
 ]);
 export const esMensajeDeEvidencia = (mensaje: MensajeDelRunner): mensaje is MensajeDeEvidencia =>
   TIPOS_DE_MENSAJE.has(mensaje.tipo);
@@ -183,6 +184,11 @@ export class EvidenciasDeEjecucion {
 
   /** Cada mensaje de evidencia del runner, en orden. Las capturas nunca se descartan: esperan su turno. */
   recibir(mensaje: MensajeDeEvidencia): void {
+    if (mensaje.tipo === 'textos-de-captura') {
+      // Fuera de la cola: el runner espera esto para tomar la captura, y no escribe nada.
+      this.responderMascaras(mensaje.textos);
+      return;
+    }
     if (mensaje.tipo === 'fotograma') {
       // El runner libera el lugar recién cuando esto se escribió (f5).
       this.encolar(async () => {
@@ -195,6 +201,23 @@ export class EvidenciasDeEjecucion {
       return;
     }
     this.encolar(() => this.procesar(mensaje));
+  }
+
+  /**
+   * Qué textos visibles tienen un secreto, con la misma redacción de todo lo demás (patrones y las
+   * credenciales del proyecto). El runner tapa esos elementos en la captura. Nada de esto se guarda.
+   */
+  private responderMascaras(textos: readonly string[]): void {
+    const opciones = { comparador: this.p.comparador() };
+    const indices: number[] = [];
+    textos.forEach((texto, indice) => {
+      if (this.servicio.redactor.texto(texto, opciones).registros.length > 0) indices.push(indice);
+    });
+    try {
+      this.p.enviarAlRunner({ tipo: 'tapar-en-captura', indices });
+    } catch {
+      // El runner ya salió: no hay captura que tomar.
+    }
   }
 
   private confirmar(): void {
@@ -220,7 +243,9 @@ export class EvidenciasDeEjecucion {
     });
   }
 
-  private async procesar(mensaje: Exclude<MensajeDeEvidencia, { tipo: 'fotograma' }>) {
+  private async procesar(
+    mensaje: Exclude<MensajeDeEvidencia, { tipo: 'fotograma' | 'textos-de-captura' }>,
+  ) {
     switch (mensaje.tipo) {
       case 'tramo-inicio':
         await this.cerrarTramo(false);

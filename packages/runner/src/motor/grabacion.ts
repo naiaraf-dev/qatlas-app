@@ -23,6 +23,41 @@ const MAX_VALOR_ENCABEZADO = 8192;
 
 const SELECTOR_CAMPOS = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 const SELECTOR_CONTRASENAS = 'input[type=password]';
+/** Cuánto se espera la respuesta del proceso principal sobre qué tapar. Sin respuesta, no hay captura. */
+const LIMITE_MASCARAS_MS = 5_000;
+export const MAX_TEXTOS_CAPTURA = 2000;
+const MAX_TEXTO_CAPTURA = 5000;
+
+/**
+ * El texto visible de cada elemento (el propio, sin el de sus hijos) y el valor de los campos, con un
+ * XPath para taparlo sin tocar el DOM. Corre en el mundo aislado: la página no lo ve (ADR 036).
+ */
+export const EXPRESION_TEXTOS_VISIBLES = `(() => {
+  const salida = [];
+  const xpath = (el) => {
+    const partes = [];
+    for (let n = el; n && n.nodeType === Node.ELEMENT_NODE; n = n.parentElement) {
+      let i = 1;
+      for (let h = n.previousElementSibling; h; h = h.previousElementSibling) if (h.tagName === n.tagName) i += 1;
+      partes.unshift(n.tagName.toLowerCase() + '[' + i + ']');
+    }
+    return '/' + partes.join('/');
+  };
+  const visible = (el) => {
+    const caja = el.getBoundingClientRect();
+    return caja.width > 0 && caja.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+  };
+  for (const el of document.querySelectorAll('body *')) {
+    if (salida.length >= ${MAX_TEXTOS_CAPTURA}) break;
+    if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE'].includes(el.tagName) || !visible(el)) continue;
+    let texto = '';
+    for (const hijo of el.childNodes) if (hijo.nodeType === Node.TEXT_NODE) texto += hijo.nodeValue;
+    if ((el.tagName === 'INPUT' && el.type !== 'password') || el.tagName === 'TEXTAREA') texto += ' ' + el.value;
+    texto = texto.trim();
+    if (texto) salida.push({ xpath: xpath(el), texto: texto.slice(0, ${MAX_TEXTO_CAPTURA}) });
+  }
+  return salida;
+})()`;
 
 type Enviar = (mensaje: MensajeDelRunner) => void;
 type EnMundoAislado = <T>(cdp: CDPSession, expresion: string) => Promise<T | null>;
@@ -130,6 +165,8 @@ export class Grabacion {
   private readonly tramoDe = new WeakMap<Request, number | null>();
   private readonly pendientes = new Set<Promise<unknown>>();
   private readonly inicio: number;
+  /** Quien espera la respuesta del principal sobre qué tapar en la captura. Hay una a la vez. */
+  private esperaDeMascaras: ((indices: readonly number[] | null) => void) | null = null;
 
   constructor(
     private readonly opciones: OpcionesEvidencias,
@@ -147,6 +184,38 @@ export class Grabacion {
   /** El proceso principal confirma lo que ya escribió: libera lugar para más fotogramas. */
   procesados(fotogramas: number): void {
     this.enVuelo = Math.max(0, this.enVuelo - fotogramas);
+  }
+
+  /** La respuesta del principal: qué textos tienen un secreto y hay que tapar (EVI-04). */
+  mascaras(indices: readonly number[]): void {
+    const espera = this.esperaDeMascaras;
+    this.esperaDeMascaras = null;
+    espera?.(indices);
+  }
+
+  /**
+   * Los elementos con un secreto a la vista: el principal pasa su texto por la redacción, con las
+   * credenciales del proyecto, y dice cuáles tapar. Sin respuesta a tiempo, null: no hay captura.
+   */
+  private async secretosALaVista(cdp: CDPSession, tramo: number): Promise<string[] | null> {
+    const elementos =
+      (await conLimite(
+        this.enMundoAislado<{ xpath: string; texto: string }[]>(cdp, EXPRESION_TEXTOS_VISIBLES),
+        LIMITE_LECTURA_MS,
+      ).catch(() => null)) ?? null;
+    if (!elementos) return null;
+    if (elementos.length === 0) return [];
+    const respuesta = new Promise<readonly number[] | null>((listo) => {
+      this.esperaDeMascaras = listo;
+    });
+    this.enviar({ tipo: 'textos-de-captura', tramo, textos: elementos.map((e) => e.texto) });
+    const indices = await conLimite(respuesta, LIMITE_MASCARAS_MS).catch(() => null);
+    this.esperaDeMascaras = null;
+    if (!indices) return null;
+    return indices.flatMap((i) => {
+      const elemento = elementos[i];
+      return elemento ? [elemento.xpath] : [];
+    });
   }
 
   /** Cada página nueva del crawler. El screencast, solo si hay video. */
@@ -211,7 +280,7 @@ export class Grabacion {
     const tramo = this.tramo;
     if (tramo === null) return;
     if (hallazgos > 0 && !errorNavegacion) {
-      await this.capturar(pagina, tramo);
+      await this.capturar(pagina, cdp, tramo);
       await this.snapshot(cdp, tramo);
     }
     await this.esperarTraza();
@@ -236,14 +305,21 @@ export class Grabacion {
     });
   }
 
-  /** Capturas: nunca se descartan (f5). Con los campos de contraseña y los selectores sensibles tapados. */
-  private async capturar(pagina: Page, tramo: number): Promise<void> {
+  /**
+   * Capturas: nunca se descartan (f5). Con los campos de contraseña y los selectores sensibles tapados
+   * (EVI-02), y también los elementos donde el detector encontró un secreto a la vista (EVI-04).
+   */
+  private async capturar(pagina: Page, cdp: CDPSession, tramo: number): Promise<void> {
     if (!this.opciones.capturas || this.capturas >= this.opciones.maxCapturas) return;
     try {
+      const conSecretos = await this.secretosALaVista(cdp, tramo);
+      // Sin saber qué tiene secretos, la captura podría mostrar uno: no se toma.
+      if (!conSecretos) return;
       const selectores = [
         SELECTOR_CONTRASENAS,
         ...this.opciones.selectoresSensibles,
         ...(this.opciones.enmascararFormularios ? [SELECTOR_CAMPOS] : []),
+        ...conSecretos.map((xpath) => `xpath=${xpath}`),
       ];
       const mascaras = selectores.map((s) => pagina.locator(s));
       let enmascarados = 0;

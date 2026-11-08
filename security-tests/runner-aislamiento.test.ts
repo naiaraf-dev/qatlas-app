@@ -241,7 +241,10 @@ describe('Configuración del navegador', () => {
       expect(texto, nombre).not.toMatch(/\.screenshot\(|screencast/);
     }
     const grabacion = readFileSync(path.join(RUNNER, 'motor/grabacion.ts'), 'utf8');
-    expect(grabacion).not.toMatch(/path:|from 'node:fs'|writeFile|createWriteStream/);
+    // `path:` como opción de Playwright (screenshot, screencast); `xpath:` no cuenta.
+    expect(grabacion).not.toMatch(/\bpath:|from 'node:fs'|writeFile|createWriteStream/);
+    // Control: la búsqueda sí ve la opción.
+    expect("pagina.screenshot({ path: 'x.png' })").toMatch(/\bpath:/);
   });
 
   it('el login nunca se graba: sesion.ts y gestor-sesion.ts no conocen la grabación (EVI-01)', () => {

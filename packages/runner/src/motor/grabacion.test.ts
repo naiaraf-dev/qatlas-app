@@ -47,11 +47,34 @@ function paginaFalsa(opciones: { capturaFalla?: boolean } = {}) {
 }
 
 const cdp = {} as CDPSession;
-const sinMundo = () => Promise.resolve(null);
 
-function grabar(opciones = OPCIONES) {
+/** El texto visible de la página falsa: dos elementos. El segundo tiene «un secreto». */
+const TEXTOS = [
+  { xpath: '/html[1]/body[1]/p[1]', texto: 'Hola' },
+  { xpath: '/html[1]/body[1]/p[2]', texto: 'clave de soporte' },
+];
+const mundo = (() => Promise.resolve(TEXTOS)) as unknown as ConstructorParameters<
+  typeof Grabacion
+>[2];
+
+/**
+ * El segundo parámetro es lo que contesta el «proceso principal» cuando le preguntan qué tapar. Null:
+ * no contesta.
+ */
+function grabar(opciones = OPCIONES, responder: number[] | null = [1]) {
   const enviados: MensajeDelRunner[] = [];
-  const grabacion = new Grabacion(opciones, (m) => enviados.push(m), sinMundo);
+  const grabacion: Grabacion = new Grabacion(
+    opciones,
+    (m) => {
+      enviados.push(m);
+      if (m.tipo === 'textos-de-captura' && responder) {
+        queueMicrotask(() => {
+          grabacion.mascaras(responder);
+        });
+      }
+    },
+    mundo,
+  );
   return { grabacion, enviados };
 }
 
@@ -118,6 +141,15 @@ describe('Fotogramas (f5)', () => {
 });
 
 describe('Capturas (EVI-02 y EVI-05)', () => {
+  it('sin respuesta del principal sobre qué tapar, no hay captura (falla cerrado)', async () => {
+    const { grabacion, enviados } = grabar(OPCIONES, null);
+    const { pagina } = paginaFalsa();
+    await grabacion.vincular(pagina);
+    grabacion.iniciarTramo('http://app.example.test/');
+    await grabacion.terminarTramo(pagina, cdp, { hallazgos: 1, errorNavegacion: false });
+    expect(enviados.filter((m) => m.tipo === 'captura')).toEqual([]);
+  }, 15_000);
+
   it('tapan las contraseñas y los selectores sensibles; solo de páginas con hallazgos', async () => {
     const { grabacion, enviados } = grabar();
     const { pagina, mascaras } = paginaFalsa();
@@ -126,8 +158,14 @@ describe('Capturas (EVI-02 y EVI-05)', () => {
     await grabacion.terminarTramo(pagina, cdp, { hallazgos: 0, errorNavegacion: false });
     grabacion.iniciarTramo('http://app.example.test/b');
     await grabacion.terminarTramo(pagina, cdp, { hallazgos: 2, errorNavegacion: false });
-    expect(mascaras).toEqual([['input[type=password]', '.dni']]);
-    expect(enviados.find((m) => m.tipo === 'captura')).toMatchObject({ tramo: 2, enmascarados: 2 });
+    expect(mascaras).toEqual([['input[type=password]', '.dni', 'xpath=/html[1]/body[1]/p[2]']]);
+    // El principal recibió los textos visibles para decidir, y nada más.
+    expect(enviados.find((m) => m.tipo === 'textos-de-captura')).toEqual({
+      tipo: 'textos-de-captura',
+      tramo: 2,
+      textos: ['Hola', 'clave de soporte'],
+    });
+    expect(enviados.find((m) => m.tipo === 'captura')).toMatchObject({ tramo: 2, enmascarados: 3 });
   });
 
   it('con el modo datos sensibles, además todos los campos de formulario', async () => {

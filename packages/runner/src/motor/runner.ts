@@ -297,6 +297,9 @@ export function crearRunner({
       case 'evidencia-procesada':
         grabacion?.procesados(recibido.fotogramas);
         return;
+      case 'tapar-en-captura':
+        grabacion?.mascaras(recibido.indices);
+        return;
       default:
         ejecutar(recibido).then(
           () => terminar(0),
