@@ -34,7 +34,8 @@ que la página pueda verlo ni alterarlo: el sitio probado es hostil por defecto.
 | ----------------- | ----------------------- | --------------------- | -------------------------- | -------- | ------------------------------------- |
 | `axe-core` 4.14.0 | Reglas de accesibilidad | No                    | 3,4 MB; se inyectan 650 KB | MPL-2.0  | Deque; versiones cada uno o dos meses |
 
-Sin dependencias propias. La MPL-2.0 va a los avisos de terceros del instalador (semana 10).
+Sin dependencias propias. La MPL-2.0 va a los avisos de terceros del instalador (semana 10); ya está en
+`THIRD_PARTY_NOTICES.md`.
 
 ## Límites
 

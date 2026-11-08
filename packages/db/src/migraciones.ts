@@ -240,6 +240,29 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX credencial_proyecto ON credencial(proyecto_id);
     `,
   },
+  {
+    version: 7,
+    // Redacción y detector de secretos (semana 7, ADR 030 a 034). Lo guardado antes se redacta al
+    // desbloquear, proyecto por proyecto: `redaccion_version` dice hasta dónde llegó.
+    sql: `
+      ALTER TABLE proyecto ADD COLUMN redaccion_version INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE hallazgo_ocurrencia ADD COLUMN secretos_redactados INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE hallazgo_ocurrencia ADD COLUMN revision_pendiente INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE redaccion (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        ejecucion_id TEXT REFERENCES ejecucion(id),
+        origen TEXT NOT NULL,
+        regla TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        cantidad INTEGER NOT NULL
+      );
+      CREATE INDEX redaccion_ejecucion ON redaccion(ejecucion_id);
+      CREATE INDEX redaccion_proyecto ON redaccion(proyecto_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

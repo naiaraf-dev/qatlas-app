@@ -3,8 +3,10 @@ import { createSocket } from 'node:dgram';
 import { createServer } from 'node:http';
 import { createServer as crearServidorTls } from 'node:https';
 import { crearZonaAutenticada, HOST_IDP, HOST_PORTAL } from './autenticacion.mjs';
+import { CANARIO_POR_DEFECTO, crearFugas } from './fugas.mjs';
 
 export { HOST_IDP, HOST_PORTAL, USUARIO_BASICA, USUARIOS_APP } from './autenticacion.mjs';
+export { CANARIO_POR_DEFECTO, JWT_DE_PRUEBA, PEM_DE_PRUEBA } from './fugas.mjs';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
@@ -109,6 +111,7 @@ const inicio = (puertoHttps) =>
   <li><a href="/buscar?t=1">Búsqueda</a></li>
   <li><a href="/spa">Aplicación de una página</a></li>
   <li><a href="/ws-escritura">WebSocket que escribe</a></li>
+  <li><a href="/fugas">Fugas de secretos</a></li>
   ${puertoHttps ? `<li><a href="https://${HOST_SITIO}:${puertoHttps}/mixto">Contenido mixto</a></li>` : ''}
 </ul>`,
   );
@@ -378,7 +381,11 @@ export function iniciarSandbox({
   ahora = Date.now,
   // Con qué nombre se ve cada parte. En la app de escritorio, sin resolver propio: 127.0.0.1 y localhost.
   hosts = { app: HOST_SITIO, idp: HOST_IDP, portal: HOST_PORTAL },
+  // TS-01: un canario único. Es la contraseña del admin de la zona con login, el token de los enlaces
+  // que se pidan con él, y lo que filtran las páginas de /fugas. Sin esto, las fugas usan uno fijo.
+  canario = undefined,
 } = {}) {
+  const fugas = crearFugas({ canario: canario ?? CANARIO_POR_DEFECTO });
   const registro = {
     fugas: [],
     trampas: [],
@@ -404,6 +411,7 @@ export function iniciarSandbox({
   const zona = crearZonaAutenticada({
     sesion,
     ahora,
+    canario,
     origenes: () => ({
       app: origen(hosts.app),
       idp: origen(hosts.idp),
@@ -438,6 +446,7 @@ export function iniciarSandbox({
     const { pathname } = new URL(req.url ?? '/', `http://${HOST_ESCUCHA}`);
     registro.rutas.push(pathname);
     if (await zona.atender(req, res, nombreHost, leerCuerpo)) return;
+    if (fugas.atender(req, res, pathname)) return;
     const clave = `${req.method} ${pathname}`;
     switch (clave) {
       case 'GET /':
@@ -716,6 +725,8 @@ export function iniciarSandbox({
       url: `http://${HOST_ESCUCHA}:${puertoReal}`,
       registro,
       autenticacion: zona.api,
+      /** El log del backend de prueba (TS-13): lo que imprimió el servidor. */
+      registroBackend: fugas.registroBackend,
       cerrar: () => {
         for (const socket of websocketsAbiertos) socket.destroy();
         return Promise.all([

@@ -21,6 +21,7 @@ import { isLikelySyncedPath, resolveDataDirectory } from './security/data-dir';
 import { verificarNativos, type ModuloNativo } from './security/nativos';
 import { ConnectionLog } from './security/network-policy';
 import { SECURE_WEB_PREFERENCES } from './security/web-preferences';
+import { iniciarRegistro, registrar } from './registro';
 
 /** Lo define electron.vite.config.ts en el build. */
 declare const __QATLAS_NATIVOS__: readonly ModuloNativo[];
@@ -46,6 +47,8 @@ const dataDirectory = resolveDataDirectory(process.platform, process.env, app.ge
 app.setPath('userData', dataDirectory);
 app.setPath('sessionData', path.join(dataDirectory, 'session'));
 const dataDirectorySynced = isLikelySyncedPath(dataDirectory);
+// Logs técnicos dentro de la carpeta de datos, con rotación (3.13, ADR 034). También a la consola.
+iniciarRegistro({ carpeta: path.join(dataDirectory, 'logs'), consola: true });
 
 // Esquema propio para la interfaz empaquetada.
 protocol.registerSchemesAsPrivileged([
@@ -190,10 +193,15 @@ async function cargarServicios(): Promise<{
   const { ServicioBoveda: Servicio } = await import('./boveda/servicio');
   const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
   const { ServicioEjecuciones: Ejecuciones } = await import('./ejecuciones/servicio');
+  const { redactarLoGuardado } = await import('./ejecuciones/redaccion-guardada');
   // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
   const dependientes: { ejecuciones?: ServicioEjecuciones } = {};
   const boveda = new Servicio({
     carpeta: dataDirectory,
+    // Lo guardado antes de la redacción (semana 7) se redacta al abrir la base (ADR 033).
+    alAbrir: (base, maestra) => {
+      redactarLoGuardado(base, maestra);
+    },
     antesDeBloquear: (base) => {
       dependientes.ejecuciones?.alBloquearse(base);
     },
@@ -296,8 +304,8 @@ void app.whenReady().then(async () => {
       isAllowedSender: isAllowedOrigin,
       isVaultLocked: () => boveda.estado() !== 'desbloqueada',
       onRejected: (channel, code) => {
-        // Sin datos de la solicitud: solo canal y motivo.
-        console.warn(`[ipc] rechazado ${channel}: ${code}`);
+        // Sin datos de la solicitud: solo canal y motivo. Un canal que no existe se rechaza del log.
+        registrar('ipc.rechazado', { canal: channel, codigo: code });
       },
     },
   );

@@ -43,7 +43,16 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Los `.node` de argon2 y SQLCipher están en `scripts/nativos-hashes.json` (ADR 007). Al actualizar uno de esos
   paquetes, revisar el binario y registrarlo con `node scripts/verificar-nativos.mjs --calcular`; nunca
   desactivar la verificación.
-- Próximo: semana 7, redacción y detector de secretos; TS-01 completo.
+- Fase 1, semana 7a terminada: `packages/redaction` (redacción de red y detector de secretos), redacción en el
+  proceso principal de todo lo que se guarda o se muestra, credenciales por HMAC, clave de los hallazgos con HMAC
+  del proyecto, redacción de lo guardado al desbloquear, logs técnicos, TS-01 (canario) y TS-13 parcial. Ver las
+  ADR 030 a 034.
+- Próximo: semana 7b, evidencias (capturas, traza, HAR, video, visor).
+- Todo texto del sitio pasa por la redacción en el proceso principal antes de guardarse, mostrarse o registrarse
+  (`ejecuciones/redaccion.ts`). Una columna nueva con texto del sitio es `TextoRedactado`; nunca un cast.
+- Logs: solo `registrar()` (`main/registro.ts`), con eventos, códigos de `CODIGOS_PERMITIDOS`, IDs y tiempos. Nunca
+  URLs, hosts ni contenido, aunque estén redactados. Nada de `console.*` en el proceso principal.
+- Un patrón nuevo del detector entra con un ejemplo positivo y uno negativo, inventados y armados por partes.
 - El runner es `crearRunner` (runner.ts); entrada-runner.ts solo lo conecta al `parentPort`. Un E2E que necesita
   manejar la ventana del login asistido corre los servicios y el runner en su proceso (`ts-06-login-asistido.e2e.ts`).
 - El estado de sesión nunca va a la base ni a disco. Un cambio que deja sin valor una sesión avisa con el callback
@@ -56,8 +65,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
 - La auditoría guarda solo IDs y nombres de campos (ADR 015).
 - Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006),
-  `asarUnpack` con verificación sobre el binario final (ADR 007), avisos de terceros del instalador, con
-  la MPL-2.0 de la Public Suffix List (ADR 011), y empaquetar Chromium en `resources/navegadores`, firmado
+  `asarUnpack` con verificación sobre el binario final (ADR 007), avisos de terceros del instalador, a partir
+  de `THIRD_PARTY_NOTICES.md` (gitleaks, axe-core y la Public Suffix List) más el resto de las dependencias, y empaquetar Chromium en `resources/navegadores`, firmado
   (ADR 020). En Linux, el sandbox de Chromium necesita configuración (en CI se usa `sysctl`): si algún día
   se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a

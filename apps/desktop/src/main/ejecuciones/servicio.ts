@@ -5,7 +5,10 @@ import {
   agregarConexiones,
   agregarHallazgo,
   agregarPaginaVisitada,
+  agregarRedacciones,
+  actualizarDetalleOcurrencia,
   leerHallazgosDeEjecucion,
+  leerProyecto,
   leerPaginasVisitadas,
   insertarEjecucion,
   leerConexionesDeEjecucion,
@@ -17,7 +20,14 @@ import {
   leerUltimasConexiones,
   type BaseCifrada,
   type FilaEjecucion,
+  type NuevaRedaccion,
 } from '@qatlas/db';
+import {
+  contarRedacciones,
+  type ComparadorDeSecretos,
+  type Resultado,
+  type TextoRedactado,
+} from '@qatlas/redaction';
 import {
   credencialUsable,
   estrategiaDisponible,
@@ -41,6 +51,16 @@ import {
 } from '@qatlas/runner';
 import { z } from 'zod';
 import type { ServicioBoveda } from '../boveda/servicio';
+import { registrar } from '../registro';
+import {
+  claveDeMensaje,
+  comparadorDelProyecto,
+  filasDeRegistro,
+  REDACTOR,
+  subclaveDeHallazgos,
+  TIPOS_DE_MENSAJE,
+  type Redactor,
+} from './redaccion';
 import {
   AutorizacionNoVigente,
   type DatosDeEjecucion,
@@ -94,6 +114,8 @@ const RESUMEN_VACIO: ResumenEjecucion = {
   logins: 0,
   loginsInesperados: 0,
   renovaciones: 0,
+  secretosRedactados: 0,
+  diagnostico: null,
 };
 
 /** Una sesión guardada nunca dura más que esto en memoria, diga lo que diga el sitio (ADR 026). */
@@ -147,8 +169,17 @@ interface EnCurso {
   espera: ProgresoEjecucion['espera'];
   runner?: ProcesoRunner;
   resumen: ResumenEjecucion;
+  /** Los secretos de las credenciales del proyecto, por su HMAC (ADR 031). Se descarta al terminar. */
+  comparador: ComparadorDeSecretos | null;
+  /** Para la clave de los mensajes (ADR 032). Se borra al terminar. */
+  subclaveHallazgos: Buffer | null;
+  /**
+   * El último mensaje de consola de cada página, sin redactar y solo en memoria: para un secreto
+   * partido en dos mensajes consecutivos. Se vacía al terminar.
+   */
+  consolaPrevia: Map<string, { ocurrenciaId: string; crudo: string; cuenta: number }>;
   pendientes: {
-    destino: string;
+    destino: TextoRedactado;
     permitida: boolean;
     regla: string;
     proceso: Proceso;
@@ -197,6 +228,8 @@ export class ServicioEjecuciones {
     private readonly lanzador: LanzadorDeProcesos,
     private readonly ahora: () => number = Date.now,
     private readonly alProgreso: (progreso: ProgresoEjecucion) => void = () => undefined,
+    /** Solo el control positivo de TS-01 pasa otro: la app usa siempre el de siempre. */
+    private readonly redactor: Redactor = REDACTOR,
   ) {}
 
   /** Lo que quedó sin terminar no se relanza solo: no sale tráfico sin una acción del usuario. */
@@ -314,6 +347,7 @@ export class ServicioEjecuciones {
           url: h.url,
           urlOrigen: h.urlOrigen,
           detalle: h.detalleCifrado ? (detalles[siguienteDetalle++] ?? '').slice(0, 2000) : '',
+          secretosRedactados: h.secretosRedactados,
         })),
         paginas: leerPaginasVisitadas(base, ejecucionId).map((p) => ({
           url: p.url,
@@ -530,10 +564,18 @@ export class ServicioEjecuciones {
       guardadas: 0,
       terminada: false,
       paginaActual: null,
+      comparador: null,
+      subclaveHallazgos: null,
+      consolaPrevia: new Map(),
     };
     this.actual = enCurso;
-    this.boveda.conAcceso((base) => {
+    this.boveda.conAcceso((base, maestra) => {
       actualizarEjecucion(base, id, { estado: 'en-curso', inicio: new Date().toISOString() });
+      const proyecto = leerProyecto(base, proyectoId);
+      if (proyecto) {
+        enCurso.comparador = comparadorDelProyecto(base, maestra, proyecto);
+        enCurso.subclaveHallazgos = subclaveDeHallazgos(maestra, proyecto);
+      }
     });
     return enCurso;
   }
@@ -739,10 +781,12 @@ export class ServicioEjecuciones {
         this.finalizar(enCurso, 'finalizada', null);
         return;
       case 'ventana-no-disponible':
-        // Como el navegador del escaneo: la causa y las líneas de Chromium sin rutas, nada de la ejecución.
-        console.warn(
-          `[ejecucion] ventana del navegador no disponible: ${mensaje.causa} ${mensaje.detalle}`,
-        );
+        // Al log, solo la causa y el ID (ADR 034); las líneas de Chromium, al resumen cifrado.
+        registrar('ejecucion.ventana-no-disponible', {
+          ejecucion: enCurso.id,
+          causa: mensaje.causa,
+        });
+        enCurso.resumen.diagnostico = this.redactor.texto(mensaje.detalle).texto;
         enCurso.proxyLogin?.detener();
         enCurso.proxyLogin = undefined;
         enCurso.espera = null;
@@ -751,8 +795,12 @@ export class ServicioEjecuciones {
         this.informar(enCurso);
         return;
       case 'navegador-no-disponible':
-        // Sin datos de la ejecución: solo la causa, y las líneas de error de Chromium sin rutas.
-        console.warn(`[ejecucion] navegador no disponible: ${mensaje.causa} ${mensaje.detalle}`);
+        // Al log, solo la causa y el ID (ADR 034); las líneas de Chromium, al resumen cifrado.
+        registrar('ejecucion.navegador-no-disponible', {
+          ejecucion: enCurso.id,
+          causa: mensaje.causa,
+        });
+        enCurso.resumen.diagnostico = this.redactor.texto(mensaje.detalle).texto;
         this.finalizar(enCurso, 'fallida', 'navegador-no-disponible');
         return;
       case 'rechazado':
@@ -916,23 +964,31 @@ export class ServicioEjecuciones {
     enCurso: EnCurso,
     pagina: Extract<MensajeDelRunner, { tipo: 'pagina' }>,
   ): void {
-    enCurso.paginaActual = sinQuery(pagina.url);
+    const opciones = { comparador: enCurso.comparador };
+    const completa = this.redactor.url(pagina.url, opciones);
+    const corta = this.redactor.url(sinQuery(pagina.url), opciones);
+    enCurso.paginaActual = corta.texto;
     enCurso.resumen.paginasVisitadas += 1;
+    enCurso.resumen.secretosRedactados += contarRedacciones(completa.registros);
     try {
-      const completa =
-        enCurso.paginaActual === pagina.url
+      const completaCifrada =
+        completa.texto === corta.texto
           ? null
           : this.proyectos.cifrarDato(
               enCurso.proyectoId,
               contextoUrlPagina(enCurso.proyectoId, enCurso.id),
-              pagina.url,
+              completa.texto,
             );
       this.boveda.conAcceso((base) => {
+        agregarRedacciones(
+          base,
+          filasDeRegistro(enCurso.proyectoId, enCurso.id, 'pagina.url', completa.registros),
+        );
         agregarPaginaVisitada(base, {
           proyectoId: enCurso.proyectoId,
           ejecucionId: enCurso.id,
-          url: enCurso.paginaActual as string,
-          urlCompletaCifrada: completa,
+          url: corta.texto,
+          urlCompletaCifrada: completaCifrada,
           statusHttp: pagina.status,
           tiempoCargaMs: pagina.tiempoCargaMs === null ? null : Math.round(pagina.tiempoCargaMs),
           profundidad: pagina.profundidad,
@@ -950,12 +1006,39 @@ export class ServicioEjecuciones {
   ): void {
     enCurso.resumen.hallazgos += 1;
     const ocurrenciaId = randomUUID();
+    const opciones = { comparador: enCurso.comparador };
+    const titulo = this.redactor.texto(hallazgo.titulo, opciones);
+    const url = this.redactor.url(hallazgo.url, opciones);
+    const urlOrigen =
+      hallazgo.urlOrigen === null ? null : this.redactor.url(hallazgo.urlOrigen, opciones);
+    const esMensaje = TIPOS_DE_MENSAJE.has(hallazgo.tipo);
+    const detalle = hallazgo.detalle
+      ? this.redactarDetalle(enCurso, ocurrenciaId, url.texto, hallazgo.detalle, esMensaje)
+      : null;
+    const claveDelSitio = esMensaje ? null : this.redactor.texto(hallazgo.clave, opciones);
+    const clave =
+      claveDelSitio?.texto ??
+      (enCurso.subclaveHallazgos
+        ? claveDeMensaje(enCurso.subclaveHallazgos, detalle?.texto ?? url.texto)
+        : this.redactor.texto('msj').texto);
+    const porOrigen: [string, Resultado | null][] = [
+      ['hallazgo.titulo', titulo],
+      ['hallazgo.url', url],
+      ['hallazgo.url-origen', urlOrigen],
+      ['hallazgo.detalle', detalle],
+      ['hallazgo.clave', claveDelSitio],
+    ];
+    const secretos = porOrigen.reduce(
+      (total, [, resultado]) => total + contarRedacciones(resultado?.registros ?? []),
+      0,
+    );
+    enCurso.resumen.secretosRedactados += secretos;
     try {
-      const detalleCifrado = hallazgo.detalle
+      const detalleCifrado = detalle
         ? this.proyectos.cifrarDato(
             enCurso.proyectoId,
             contextoDetalle(enCurso.proyectoId, ocurrenciaId),
-            hallazgo.detalle,
+            detalle.texto,
           )
         : null;
       this.boveda.conAcceso((base) => {
@@ -966,18 +1049,85 @@ export class ServicioEjecuciones {
             ejecucionId: enCurso.id,
             tipo: hallazgo.tipo,
             severidad: hallazgo.severidad,
-            titulo: hallazgo.titulo,
-            descripcion: hallazgo.titulo,
-            url: hallazgo.url,
-            clave: hallazgo.clave,
+            titulo: titulo.texto,
+            descripcion: titulo.texto,
+            url: url.texto,
+            clave,
           },
-          { id: ocurrenciaId, urlOrigen: hallazgo.urlOrigen, detalleCifrado },
+          {
+            id: ocurrenciaId,
+            urlOrigen: urlOrigen?.texto ?? null,
+            detalleCifrado,
+            secretosRedactados: secretos,
+          },
+        );
+        agregarRedacciones(
+          base,
+          porOrigen.flatMap(([origen, resultado]): NuevaRedaccion[] =>
+            filasDeRegistro(enCurso.proyectoId, enCurso.id, origen, resultado?.registros ?? []),
+          ),
         );
       });
     } catch {
       // Bóveda cerrada: la ejecución se está cancelando.
     }
     this.informar(enCurso);
+  }
+
+  /**
+   * El detalle de un hallazgo. Un mensaje de consola se mira junto con el anterior de la misma página:
+   * si un secreto quedó partido entre los dos, se redacta también la parte que quedó en el anterior, que
+   * ya estaba guardado, y se vuelve a cifrar.
+   */
+  private redactarDetalle(
+    enCurso: EnCurso,
+    ocurrenciaId: string,
+    pagina: string,
+    detalle: string,
+    esMensaje: boolean,
+  ): Resultado {
+    const opciones = { comparador: enCurso.comparador };
+    if (!esMensaje) return this.redactor.texto(detalle, opciones);
+    const previa = enCurso.consolaPrevia.get(pagina);
+    let resultado: Resultado;
+    if (previa) {
+      const [antes, ahora] = this.redactor.secuencia([previa.crudo, detalle], opciones);
+      resultado = ahora ?? this.redactor.texto(detalle, opciones);
+      const cuentaAntes = contarRedacciones(antes?.registros ?? []);
+      if (antes && cuentaAntes > previa.cuenta) {
+        try {
+          const cifrado = this.proyectos.cifrarDato(
+            enCurso.proyectoId,
+            contextoDetalle(enCurso.proyectoId, previa.ocurrenciaId),
+            antes.texto,
+          );
+          this.boveda.conAcceso((base) => {
+            actualizarDetalleOcurrencia(base, previa.ocurrenciaId, cifrado, cuentaAntes);
+            agregarRedacciones(base, [
+              {
+                proyectoId: enCurso.proyectoId,
+                ejecucionId: enCurso.id,
+                origen: 'hallazgo.detalle',
+                regla: 'secreto-partido',
+                tipo: 'credencial',
+                cantidad: cuentaAntes - previa.cuenta,
+              },
+            ]);
+          });
+          enCurso.resumen.secretosRedactados += cuentaAntes - previa.cuenta;
+        } catch {
+          // Bóveda cerrada: la ejecución se está cancelando.
+        }
+      }
+    } else {
+      resultado = this.redactor.texto(detalle, opciones);
+    }
+    enCurso.consolaPrevia.set(pagina, {
+      ocurrenciaId,
+      crudo: detalle,
+      cuenta: contarRedacciones(resultado.registros),
+    });
+    return resultado;
   }
 
   /** El progreso en vivo, para la interfaz (EJE). */
@@ -1001,6 +1151,8 @@ export class ServicioEjecuciones {
     proceso: Proceso,
     { destino, permitida, regla }: { destino: string; permitida: boolean; regla: string },
   ): void {
+    const redactado = this.redactor.texto(destino, { comparador: enCurso.comparador });
+    enCurso.resumen.secretosRedactados += contarRedacciones(redactado.registros);
     if (permitida) enCurso.resumen.conexionesPermitidas += 1;
     else enCurso.resumen.conexionesBloqueadas += 1;
     // El resumen cuenta todo; un sitio que martilla no puede llenar la base.
@@ -1008,7 +1160,7 @@ export class ServicioEjecuciones {
     if (guardable) {
       enCurso.guardadas += 1;
       enCurso.pendientes.push({
-        destino,
+        destino: redactado.texto,
         permitida,
         regla,
         proceso,
@@ -1081,6 +1233,7 @@ export class ServicioEjecuciones {
       } catch {
         // Al desbloquear queda marcada como interrumpida.
       }
+      this.olvidarSecretos(enCurso);
       this.informar(enCurso, estado);
       enCurso.alTerminar?.(enCurso.resultadoPrueba ?? null);
       if (this.actual === enCurso) this.actual = null;
@@ -1104,6 +1257,8 @@ export class ServicioEjecuciones {
       } catch {
         // Con la bóveda ya cerrada: al desbloquear queda marcada como interrumpida.
       }
+      // El runner y el proxy ya salieron: no llega nada más que redactar.
+      this.olvidarSecretos(enCurso);
       this.informar(enCurso, estado);
       enCurso.alTerminar?.(enCurso.resultadoPrueba ?? null);
       if (this.actual === enCurso) this.actual = null;
@@ -1113,6 +1268,15 @@ export class ServicioEjecuciones {
         // Bóveda bloqueada: la cola se marcó al bloquear.
       }
     });
+  }
+
+  /** El comparador, la subclave y los mensajes de consola de la ejecución se olvidan al terminar. */
+  private olvidarSecretos(enCurso: EnCurso): void {
+    enCurso.comparador?.descartar();
+    enCurso.comparador = null;
+    enCurso.subclaveHallazgos?.fill(0);
+    enCurso.subclaveHallazgos = null;
+    enCurso.consolaPrevia.clear();
   }
 
   /**

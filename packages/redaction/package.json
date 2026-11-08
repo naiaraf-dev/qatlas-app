@@ -1,0 +1,10 @@
+{
+  "name": "@qatlas/redaction",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Redacción de red y detector de secretos de QAtlas (EVI-03 y EVI-04). Funciones puras, sin dependencias.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

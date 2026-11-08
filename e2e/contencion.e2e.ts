@@ -26,6 +26,7 @@ import {
   abrirContexto,
   abrirNavegador,
   ARGUMENTOS_CHROMIUM,
+  presupuestoProbarLogin,
   probarLogin,
   type RegistroNavegador,
 } from '../packages/runner/src/motor/motor';
@@ -649,6 +650,12 @@ test.describe('Prueba de login: una contraseña mala nunca da verde', () => {
     { accion: 'rellenar', selector: '#clave', origen: 'secreto' },
     { accion: 'click', selector: 'button[type=submit]' },
   ];
+  const TIMEOUT_LOGIN_MS = 3000;
+  // El test tiene que durar más que `probarLogin`, que siempre responde dentro de su presupuesto: una
+  // falla muestra el resultado de QAtlas, no un timeout genérico. Un test llama hasta tres veces.
+  test.describe.configure({
+    timeout: 3 * presupuestoProbarLogin({ pasos: PASOS, timeoutMs: TIMEOUT_LOGIN_MS }) + 15_000,
+  });
   const urlLogin = () => `http://${HOST_SITIO}:${sitio.puerto}/login`;
   const intentar = async (indicador: IndicadorExito, clave: string): Promise<boolean> =>
     probarLogin(await contexto(politica(), false), {
@@ -657,7 +664,7 @@ test.describe('Prueba de login: una contraseña mala nunca da verde', () => {
       indicador,
       usuario: CREDENCIALES_DE_PRUEBA.usuario,
       secreto: new TextEncoder().encode(clave),
-      timeoutMs: 1500,
+      timeoutMs: TIMEOUT_LOGIN_MS,
     });
 
   const indicadores = (): [string, IndicadorExito][] => [
@@ -717,7 +724,7 @@ test.describe('Prueba de login: una contraseña mala nunca da verde', () => {
       indicador: { tipo: 'aparece', selector: 'a[href="/cerrar-sesion"]' },
       usuario: CREDENCIALES_DE_PRUEBA.usuario,
       secreto,
-      timeoutMs: 1500,
+      timeoutMs: TIMEOUT_LOGIN_MS,
     });
     expect(secreto.every((byte) => byte === 0)).toBe(true);
   });

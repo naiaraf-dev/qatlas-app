@@ -1,4 +1,5 @@
 import { blob, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { TextoRedactado } from '@qatlas/redaction';
 
 // Los campos comunes de la sección 5 de la especificación.
 const comunes = {
@@ -55,6 +56,8 @@ export const proyecto = sqliteTable('proyecto', {
     .$type<string[]>()
     .notNull(),
   sesionMaxMinutos: integer('sesion_max_minutos'),
+  /** Hasta qué versión de la redacción se pasó lo guardado de este proyecto (ADR 033). */
+  redaccionVersion: integer('redaccion_version').notNull().default(0),
   permitirLoginHttp: integer('permitir_login_http', { mode: 'boolean' }).notNull(),
   claveProyectoCifrada: blob('clave_proyecto_cifrada', { mode: 'buffer' }).notNull(),
 });
@@ -108,7 +111,8 @@ export const paginaVisitada = sqliteTable('pagina_visitada', {
   ejecucionId: text('ejecucion_id')
     .notNull()
     .references(() => ejecucion.id),
-  url: text('url').notNull(),
+  // Texto del sitio: solo texto redactado (ADR 032).
+  url: text('url').$type<TextoRedactado>().notNull(),
   urlCompletaCifrada: blob('url_completa_cifrada', { mode: 'buffer' }),
   statusHttp: integer('status_http'),
   tiempoCargaMs: integer('tiempo_carga_ms'),
@@ -129,10 +133,11 @@ export const hallazgo = sqliteTable('hallazgo', {
     .references(() => ejecucion.id),
   tipo: text('tipo').notNull(),
   severidad: text('severidad').notNull(),
-  titulo: text('titulo').notNull(),
-  descripcion: text('descripcion').notNull(),
-  url: text('url').notNull(),
-  clave: text('clave').notNull(),
+  // Texto del sitio: solo texto redactado. La clave de un mensaje es un HMAC (ADR 032).
+  titulo: text('titulo').$type<TextoRedactado>().notNull(),
+  descripcion: text('descripcion').$type<TextoRedactado>().notNull(),
+  url: text('url').$type<TextoRedactado>().notNull(),
+  clave: text('clave').$type<TextoRedactado>().notNull(),
   huella: text('huella'),
   estado: text('estado').notNull(),
   primeraVezEn: text('primera_vez_en').notNull(),
@@ -153,9 +158,30 @@ export const hallazgoOcurrencia = sqliteTable('hallazgo_ocurrencia', {
   ejecucionId: text('ejecucion_id')
     .notNull()
     .references(() => ejecucion.id),
-  url: text('url').notNull(),
-  urlOrigen: text('url_origen'),
+  url: text('url').$type<TextoRedactado>().notNull(),
+  urlOrigen: text('url_origen').$type<TextoRedactado>(),
+  /** Redactado y después cifrado con la clave del proyecto (ADR 021 y 032). */
   detalleCifrado: blob('detalle_cifrado', { mode: 'buffer' }),
+  /** Cuántos secretos se redactaron en esta aparición: la interfaz lo avisa (EVI-04). */
+  secretosRedactados: integer('secretos_redactados').notNull().default(0),
+  /** Con secretos redactados: la exportación (semana 9) pide revisarla (RN-REP-03). */
+  revisionPendiente: integer('revision_pendiente', { mode: 'boolean' }).notNull().default(false),
+});
+
+/**
+ * El registro de redacciones: qué se redactó, dónde y por qué regla, nunca el valor (EVI-03 y EVI-04).
+ * `ejecucionId` es null para lo que se redactó al migrar datos guardados antes (ADR 033).
+ */
+export const redaccion = sqliteTable('redaccion', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  ejecucionId: text('ejecucion_id').references(() => ejecucion.id),
+  origen: text('origen').notNull(),
+  regla: text('regla').notNull(),
+  tipo: text('tipo').notNull(),
+  cantidad: integer('cantidad').notNull(),
 });
 
 /** Sin referencia a la credencial: eliminarla no borra el rastro de los intentos ya hechos. */
@@ -201,7 +227,7 @@ export const conexion = sqliteTable('conexion', {
     .references(() => ejecucion.id),
   fecha: text('fecha').notNull(),
   proceso: text('proceso', { enum: ['proxy', 'navegador', 'runner'] }).notNull(),
-  destino: text('destino').notNull(),
+  destino: text('destino').$type<TextoRedactado>().notNull(),
   permitida: integer('permitida', { mode: 'boolean' }).notNull(),
   regla: text('regla').notNull(),
 });

@@ -185,6 +185,28 @@
       "severidad": "informativa",
       "clave": "127.0.0.1",
       "detalle": "Otro servicio local, en un puerto no declarado"
+    },
+    {
+      "id": "fuga-consola",
+      "tipo": "console-error",
+      "url": "/fugas/consola",
+      "severidad": "baja",
+      "detalle": "El canario, un JWT, una clave PEM y el canario partido en dos mensajes. QAtlas lo guarda redactado."
+    },
+    {
+      "id": "fuga-registro-backend",
+      "tipo": "console-error",
+      "url": "/fugas/registro",
+      "severidad": "baja",
+      "detalle": "TS-13: el log del backend, con el canario y un JWT, mostrado en la consola. QAtlas lo guarda redactado."
+    },
+    {
+      "id": "fuga-url",
+      "tipo": "parametro-sensible",
+      "url": "/fugas/url",
+      "severidad": "media",
+      "clave": "clave",
+      "detalle": "El canario viaja en la URL, en un parámetro «clave»"
     }
   ],
   "soloLectura": [
@@ -500,5 +522,45 @@
       "descripcion": "Con maximoPaginas, la sesión vence sola a mitad del escaneo, sin depender del tiempo: el escaneo vuelve a entrar y recorre todo igual.",
       "maximoPaginas": 4
     }
+  },
+  "fugasDeSecretos": {
+    "descripcion": "Semana 7 (TS-01, TS-13, EVI-03, EVI-04): cómo filtra el sandbox un secreto de prueba, y qué hace QAtlas. «redactado»: se guarda con [REDACTADO:tipo]; «no se captura»: QAtlas todavía no guarda eso (llega con las evidencias de la semana 7b). Con la opción «canario» (TS-01) el canario es único, es la contraseña del admin de la zona con login, y aparece además /app/depuracion.",
+    "casos": [
+      {
+        "pagina": "/fugas/consola",
+        "como": "console.error con el canario, un JWT, una clave PEM, y el canario partido en dos mensajes seguidos",
+        "qatlas": "redactado"
+      },
+      {
+        "pagina": "/fugas/url",
+        "como": "el canario en un parámetro de la URL",
+        "qatlas": "redactado"
+      },
+      {
+        "pagina": "/fugas/encabezado",
+        "como": "el canario en un encabezado de respuesta (x-depuracion)",
+        "qatlas": "no se captura"
+      },
+      {
+        "pagina": "/fugas/html",
+        "como": "el canario en el texto de la página",
+        "qatlas": "no se captura"
+      },
+      {
+        "pagina": "/fugas/json",
+        "como": "el canario y un JWT en un JSON que pide la página",
+        "qatlas": "no se captura"
+      },
+      {
+        "pagina": "/fugas/registro",
+        "como": "TS-13: el log del backend imprime el canario y un JWT, y la página lo muestra en la consola",
+        "qatlas": "redactado"
+      },
+      {
+        "pagina": "/app/depuracion",
+        "como": "solo con canario: con sesión, la contraseña en la consola",
+        "qatlas": "redactado"
+      }
+    ]
   }
 }

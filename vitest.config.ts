@@ -12,6 +12,7 @@ export default defineConfig({
       provider: 'v8',
       include: [
         'packages/crypto/src/**/*.ts',
+        'packages/redaction/src/**/*.ts',
         'packages/db/src/**/*.ts',
         'packages/runner/src/red/reglas.ts',
         'packages/runner/src/red/proxy.ts',

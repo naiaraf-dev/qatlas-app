@@ -39,6 +39,8 @@ let ejecuciones: ServicioEjecuciones;
 let registro: string[];
 /** Para probar el orden del final: el runner sale cuando el test lo dice, y el borrado espera. */
 let salidaManual: boolean;
+/** Los runners de mentira que todavía no salieron: al terminar cada test, salen todos. */
+const runnersVivos = new Set<EventEmitter>();
 let terminarBorrado: (() => void) | undefined;
 let falloProxy: boolean;
 let mensajes: MensajeAlRunner[];
@@ -71,6 +73,13 @@ const lanzador: LanzadorDeProcesos = {
   iniciarRunner: () => {
     registro.push('runner');
     const eventos = new EventEmitter();
+    // Como el real (procesos.ts): si ya salió, quien se suscribe después se entera enseguida.
+    let salio = false;
+    runnersVivos.add(eventos);
+    eventos.once('salir', () => {
+      salio = true;
+      runnersVivos.delete(eventos);
+    });
     const proceso: ProcesoRunner = {
       enviar: (mensaje) => {
         // `postMessage` clona: lo que llega al otro lado es una copia.
@@ -78,7 +87,10 @@ const lanzador: LanzadorDeProcesos = {
         if (mensaje.tipo === 'cancelar' && !salidaManual) eventos.emit('salir');
       },
       alMensaje: (oyente) => eventos.on('mensaje', oyente),
-      alSalir: (oyente) => eventos.on('salir', oyente),
+      alSalir: (oyente) => {
+        if (salio) oyente();
+        else eventos.on('salir', oyente);
+      },
       detener: () => {
         registro.push('runner-detenido');
         eventos.emit('salir');
@@ -189,8 +201,12 @@ beforeEach(async () => {
   await boveda.crear(CONTRASENA, false);
 });
 
-afterEach(() => {
+afterEach(async () => {
   boveda.bloquear();
+  // Toda limpieza termina dentro de este test, no en el siguiente: ningún runner queda esperando el
+  // corte por tiempo (que caería, 10 s después, en otro test).
+  for (const eventos of [...runnersVivos]) eventos.emit('salir');
+  await pausa();
   rmSync(carpeta, { recursive: true, force: true });
 });
 
@@ -563,6 +579,7 @@ describe('Resultados del escaneo', () => {
         url: 'http://localhost:5173/consola',
         urlOrigen: null,
         detalle: DETALLE,
+        secretosRedactados: 0,
       },
     ]);
   });
@@ -1375,9 +1392,13 @@ describe('Escaneo autenticado (ADR 025 a 027)', () => {
         estado: 'fallida',
         resumen: { motivo: 'ventana-no-disponible' },
       });
+      // Al log, solo el evento, el ID y la causa (ADR 034); las líneas de Chromium, al resumen cifrado.
       expect(avisos).toEqual([
-        '[ejecucion] ventana del navegador no disponible: pantalla [1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+        `[qatlas] ejecucion.ventana-no-disponible {"ejecucion":"${id}","causa":"pantalla"}`,
       ]);
+      expect(resumen(proyecto, id)?.resumen.diagnostico).toBe(
+        '[1:1:ERROR:ozone_platform_x11.cc(240)] Missing X server or $DISPLAY',
+      );
     } finally {
       espia.mockRestore();
     }

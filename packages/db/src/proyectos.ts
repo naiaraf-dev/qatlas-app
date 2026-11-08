@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, getTableColumns, gte, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import type { BaseCifrada } from './conexion';
 import {
@@ -13,6 +13,7 @@ import {
   intentoLogin,
   paginaVisitada,
   proyecto,
+  redaccion,
   type DetalleAuditoria,
 } from './esquema';
 
@@ -27,8 +28,11 @@ export type FilaHallazgo = typeof hallazgo.$inferSelect;
 export type FilaOcurrencia = typeof hallazgoOcurrencia.$inferSelect;
 
 type Comunes = 'createdAt' | 'updatedAt';
-export type NuevoProyecto = Omit<FilaProyecto, Comunes>;
-type DatosProyecto = Omit<FilaProyecto, Comunes | 'id' | 'claveProyectoCifrada'>;
+export type NuevoProyecto = Omit<FilaProyecto, Comunes | 'redaccionVersion'>;
+type DatosProyecto = Omit<
+  FilaProyecto,
+  Comunes | 'id' | 'claveProyectoCifrada' | 'redaccionVersion'
+>;
 type NuevaAutorizacion = Omit<
   FilaAutorizacion,
   Comunes | 'id' | 'fecha' | 'verificacionDominio' | 'invalidadaEn'
@@ -318,7 +322,9 @@ export function agregarHallazgo(
     FilaHallazgo,
     'proyectoId' | 'ejecucionId' | 'tipo' | 'severidad' | 'titulo' | 'descripcion' | 'url' | 'clave'
   >,
-  ocurrencia: Pick<FilaOcurrencia, 'urlOrigen' | 'detalleCifrado'> & { id: string },
+  ocurrencia: Pick<FilaOcurrencia, 'urlOrigen' | 'detalleCifrado' | 'secretosRedactados'> & {
+    id: string;
+  },
 ): void {
   const ahora = new Date().toISOString();
   const hallazgoId = randomUUID();
@@ -347,6 +353,9 @@ export function agregarHallazgo(
         url: fila.url,
         urlOrigen: ocurrencia.urlOrigen,
         detalleCifrado: ocurrencia.detalleCifrado,
+        secretosRedactados: ocurrencia.secretosRedactados,
+        // Con secretos redactados, la exportación pide revisarla (RN-REP-03).
+        revisionPendiente: ocurrencia.secretosRedactados > 0,
         ...marcas(ahora),
       })
       .run();
@@ -358,8 +367,9 @@ export function leerHallazgosDeEjecucion(
   ejecucionId: string,
 ): (FilaHallazgo & {
   ocurrenciaId: string;
-  urlOrigen: string | null;
+  urlOrigen: FilaOcurrencia['urlOrigen'];
   detalleCifrado: Buffer | null;
+  secretosRedactados: number;
 })[] {
   return orm(base)
     .select({
@@ -367,6 +377,7 @@ export function leerHallazgosDeEjecucion(
       ocurrenciaId: hallazgoOcurrencia.id,
       urlOrigen: hallazgoOcurrencia.urlOrigen,
       detalleCifrado: hallazgoOcurrencia.detalleCifrado,
+      secretosRedactados: hallazgoOcurrencia.secretosRedactados,
     })
     .from(hallazgo)
     .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
@@ -403,4 +414,122 @@ export function leerIntentosLogin(
 
 export function leerAuditoria(base: BaseCifrada): FilaAuditoria[] {
   return orm(base).select().from(auditoria).orderBy(asc(auditoria.createdAt)).all();
+}
+
+export type FilaRedaccion = typeof redaccion.$inferSelect;
+export type NuevaRedaccion = Omit<FilaRedaccion, Comunes | 'id'>;
+
+/** El registro de lo que se redactó: regla, tipo y cantidad, nunca el valor. */
+export function agregarRedacciones(base: BaseCifrada, filas: readonly NuevaRedaccion[]): void {
+  if (filas.length === 0) return;
+  const ahora = new Date().toISOString();
+  orm(base)
+    .insert(redaccion)
+    .values(filas.map((fila) => ({ ...fila, id: randomUUID(), ...marcas(ahora) })))
+    .run();
+}
+
+export function leerRedacciones(base: BaseCifrada, proyectoId: string): FilaRedaccion[] {
+  return orm(base).select().from(redaccion).where(eq(redaccion.proyectoId, proyectoId)).all();
+}
+
+/** El detalle de una aparición, otra vez redactado (un secreto partido en dos mensajes). */
+export function actualizarDetalleOcurrencia(
+  base: BaseCifrada,
+  id: string,
+  detalleCifrado: Buffer,
+  secretosRedactados: number,
+): void {
+  orm(base)
+    .update(hallazgoOcurrencia)
+    .set({
+      detalleCifrado,
+      secretosRedactados,
+      revisionPendiente: secretosRedactados > 0,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(hallazgoOcurrencia.id, id))
+    .run();
+}
+
+// --- Redacción de lo guardado antes (ADR 033) ---------------------------------------------------
+
+/** Los proyectos que todavía no pasaron por esta versión de la redacción. */
+export function proyectosSinRedactar(base: BaseCifrada, version: number): FilaProyecto[] {
+  return orm(base).select().from(proyecto).where(lt(proyecto.redaccionVersion, version)).all();
+}
+
+export function marcarProyectoRedactado(base: BaseCifrada, id: string, version: number): void {
+  orm(base).update(proyecto).set({ redaccionVersion: version }).where(eq(proyecto.id, id)).run();
+}
+
+/** Todo lo que puede tener texto del sitio en un proyecto, para redactarlo. Lee como texto común. */
+export function leerParaRedactar(base: BaseCifrada, proyectoId: string) {
+  const crudo = (consulta: string) =>
+    base.prepare(consulta).all(proyectoId) as Record<string, unknown>[];
+  return {
+    paginas: crudo(
+      'SELECT id, ejecucion_id, url, url_completa_cifrada FROM pagina_visitada WHERE proyecto_id = ?',
+    ) as { id: string; ejecucion_id: string; url: string; url_completa_cifrada: Buffer | null }[],
+    hallazgos: crudo(
+      'SELECT id, tipo, titulo, descripcion, url, clave FROM hallazgo WHERE proyecto_id = ?',
+    ) as {
+      id: string;
+      tipo: string;
+      titulo: string;
+      descripcion: string;
+      url: string;
+      clave: string;
+    }[],
+    ocurrencias: crudo(
+      'SELECT id, hallazgo_id, url, url_origen, detalle_cifrado, secretos_redactados FROM hallazgo_ocurrencia WHERE proyecto_id = ?',
+    ) as {
+      id: string;
+      hallazgo_id: string;
+      url: string;
+      url_origen: string | null;
+      detalle_cifrado: Buffer | null;
+      secretos_redactados: number;
+    }[],
+    conexiones: crudo('SELECT id, destino FROM conexion WHERE proyecto_id = ?') as {
+      id: string;
+      destino: string;
+    }[],
+  };
+}
+
+export function reescribirPagina(
+  base: BaseCifrada,
+  id: string,
+  cambios: { url: FilaPaginaVisitada['url']; urlCompletaCifrada: Buffer | null },
+): void {
+  orm(base).update(paginaVisitada).set(cambios).where(eq(paginaVisitada.id, id)).run();
+}
+
+export function reescribirHallazgo(
+  base: BaseCifrada,
+  id: string,
+  cambios: Pick<FilaHallazgo, 'titulo' | 'descripcion' | 'url' | 'clave'>,
+): void {
+  orm(base).update(hallazgo).set(cambios).where(eq(hallazgo.id, id)).run();
+}
+
+export function reescribirOcurrencia(
+  base: BaseCifrada,
+  id: string,
+  cambios: Pick<FilaOcurrencia, 'url' | 'urlOrigen' | 'detalleCifrado' | 'secretosRedactados'>,
+): void {
+  orm(base)
+    .update(hallazgoOcurrencia)
+    .set({ ...cambios, revisionPendiente: cambios.secretosRedactados > 0 })
+    .where(eq(hallazgoOcurrencia.id, id))
+    .run();
+}
+
+export function reescribirConexion(
+  base: BaseCifrada,
+  id: string,
+  destino: FilaConexion['destino'],
+): void {
+  orm(base).update(conexion).set({ destino }).where(eq(conexion.id, id)).run();
 }

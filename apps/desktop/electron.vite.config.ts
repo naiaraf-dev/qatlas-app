@@ -11,6 +11,7 @@ const WORKSPACE_PACKAGES = [
   '@qatlas/shared/contrasena',
   '@qatlas/shared/dominios',
   '@qatlas/crypto',
+  '@qatlas/redaction',
   '@qatlas/db',
   '@qatlas/runner',
 ];

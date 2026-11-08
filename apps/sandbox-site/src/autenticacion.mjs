@@ -58,9 +58,11 @@ const leerCookies = (req) =>
 
 const aleatorio = () => randomBytes(12).toString('hex');
 
-function rolDe(usuario, clave) {
+/** Con un canario (TS-01), la contraseña del admin es el canario. */
+function rolDe(usuario, clave, canario) {
   for (const [rol, datos] of Object.entries(USUARIOS_APP)) {
-    if (datos.usuario === usuario && datos.clave === clave) return rol;
+    const esperada = rol === 'admin' && canario ? canario : datos.clave;
+    if (datos.usuario === usuario && esperada === clave) return rol;
   }
   return null;
 }
@@ -71,7 +73,12 @@ function rolDe(usuario, clave) {
  * @param {() => number} [opciones.ahora]
  * @param {() => { app: string, idp: string, portal: string }} opciones.origenes  Con el puerto real.
  */
-export function crearZonaAutenticada({ sesion = {}, ahora = Date.now, origenes }) {
+export function crearZonaAutenticada({
+  sesion = {},
+  ahora = Date.now,
+  origenes,
+  canario = undefined,
+}) {
   const inactividadMs = sesion.inactividadMs ?? 10 * 60_000;
   const maximoMs = sesion.maximoMs ?? 60 * 60_000;
   const maximoPaginas = sesion.maximoPaginas ?? Number.POSITIVE_INFINITY;
@@ -146,6 +153,7 @@ export function crearZonaAutenticada({ sesion = {}, ahora = Date.now, origenes }
   <li><a href="/app/informes">Informes</a></li>
   <li><a href="/app/compartir?token=enlace-inventado-de-prueba&amp;vista=lista">Compartir un informe</a></li>
   <li><a href="/app/admin">Administración</a></li>
+  ${canario ? '<li><a href="/app/depuracion">Depuración</a></li>' : ''}
   <li><a href="/app/salir">Salir</a></li>
 </ul>
 </nav>`,
@@ -163,6 +171,20 @@ export function crearZonaAutenticada({ sesion = {}, ahora = Date.now, origenes }
         return true;
       case '/app/informes':
         html(res, 200, paginaApp('Informes', `<p>Informes de ${datos.rol}.</p>${volver}`));
+        return true;
+      case '/app/depuracion':
+        // TS-01, solo con un canario: una página con sesión que imprime la contraseña en la consola.
+        if (!canario) return false;
+        html(
+          res,
+          200,
+          paginaApp(
+            'Depuración',
+            `<p>Datos de la sesión.</p><script>console.error(${JSON.stringify(
+              `sesión de ${datos.rol} con la clave ${canario}`,
+            )});</script>${volver}`,
+          ),
+        );
         return true;
       case '/app/compartir':
         // Plantado: el token del enlace va en la URL (parámetro sensible).
@@ -209,7 +231,7 @@ export function crearZonaAutenticada({ sesion = {}, ahora = Date.now, origenes }
         return true;
       case 'POST /app/login': {
         const datos = new URLSearchParams(await leerCuerpo(req));
-        const rol = rolDe(datos.get('usuario'), datos.get('clave'));
+        const rol = rolDe(datos.get('usuario'), datos.get('clave'), canario);
         if (rol) abrirSesion(res, rol, 'formulario');
         else
           html(
@@ -242,7 +264,7 @@ document.getElementById('form-login').addEventListener('submit', () => {
         return true;
       case 'POST /app/login-mfa': {
         const datos = new URLSearchParams(await leerCuerpo(req));
-        const rol = rolDe(datos.get('usuario'), datos.get('clave'));
+        const rol = rolDe(datos.get('usuario'), datos.get('clave'), canario);
         if (!rol) {
           html(
             res,
@@ -417,7 +439,7 @@ setInterval(async () => {
       }
       if (req.method === 'POST') {
         const datos = new URLSearchParams(await leerCuerpo(req));
-        const rol = rolDe(datos.get('usuario'), datos.get('clave'));
+        const rol = rolDe(datos.get('usuario'), datos.get('clave'), canario);
         if (!rol || !redirectValido(pedido.get('redirect_uri') ?? '')) {
           html(
             res,
@@ -504,8 +526,7 @@ setInterval(async () => {
       for (const factor of factores.values()) factor.aprobado = true;
     },
     /** Un enlace del portal. De un solo uso, salvo que se pida otra cosa. */
-    emitirEnlace(rol, { reutilizable = false } = {}) {
-      const token = aleatorio();
+    emitirEnlace(rol, { reutilizable = false, token = aleatorio() } = {}) {
       enlaces.set(token, { rol, reutilizable });
       return new URL(`/app/entrar?token=${token}`, origenes().app).href;
     },

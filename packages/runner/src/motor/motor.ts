@@ -228,10 +228,88 @@ export function urlSinQuery(texto: string): string {
   return url.origin + url.pathname;
 }
 
-export async function indicadorCumplido(pagina: Page, indicador: IndicadorExito): Promise<boolean> {
+/** Se rechaza cuando una operación no termina a tiempo. */
+export class LimiteVencido extends Error {
+  constructor() {
+    super('limite-vencido');
+  }
+}
+
+/**
+ * Acota una operación de Playwright que no tiene timeout propio (`newPage`, `close`, `isVisible`,
+ * `evaluate`). Sin esto, una que no responde cuelga la prueba de login entera.
+ */
+export function conLimite<T>(promesa: Promise<T>, ms: number): Promise<T> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const vencido = new Promise<never>((_, rechazar) => {
+    temporizador = setTimeout(() => {
+      rechazar(new LimiteVencido());
+    }, ms);
+  });
+  promesa.catch(() => undefined);
+  return Promise.race([promesa, vencido]).finally(() => {
+    clearTimeout(temporizador);
+  });
+}
+
+/** Lo máximo que puede tardar una sola lectura del indicador. */
+const LECTURA_MS = 1000;
+
+/**
+ * El estado actual del indicador, leído una vez. Tira si no se puede leer: quien llama decide.
+ *
+ * `desaparece` exige evidencia positiva: el elemento no está en un documento que terminó de cargar, y
+ * las dos cosas se miran a la vez, en el mismo documento. Durante una navegación el documento viejo ya
+ * no está y el nuevo todavía no tiene nada: sin esto, el formulario de una contraseña mala «desaparece»
+ * un instante y daría verde.
+ */
+export async function indicadorCumplido(
+  pagina: Page,
+  indicador: IndicadorExito,
+  limiteMs = LECTURA_MS,
+): Promise<boolean> {
   if (indicador.tipo === 'url') return aPatron(indicador.patron).test(urlSinQuery(pagina.url()));
-  const visibles = await pagina.locator(indicador.selector).first().isVisible();
-  return indicador.tipo === 'aparece' ? visibles : !visibles;
+  if (indicador.tipo === 'aparece') {
+    return conLimite(pagina.locator(indicador.selector).first().isVisible(), limiteMs);
+  }
+  const { completo, visibles } = await conLimite(
+    pagina.locator(indicador.selector).evaluateAll((elementos) => ({
+      completo: document.readyState === 'complete',
+      visibles: elementos.some((elemento) => {
+        const caja = elemento.getBoundingClientRect();
+        return (
+          caja.width > 0 && caja.height > 0 && getComputedStyle(elemento).visibility !== 'hidden'
+        );
+      }),
+    })),
+    limiteMs,
+  );
+  return completo && !visibles;
+}
+
+/**
+ * Espera el indicador: primero mira el estado actual, y después vuelve a mirar hasta el límite. Nunca
+ * espera un evento (como la próxima navegación), que se perdería si ya pasó. `desaparece` tiene que
+ * cumplirse en dos lecturas seguidas.
+ */
+export async function esperarIndicador(
+  pagina: Page,
+  indicador: IndicadorExito,
+  timeoutMs: number,
+): Promise<boolean> {
+  const limite = Date.now() + timeoutMs;
+  const necesarias = indicador.tipo === 'desaparece' ? 2 : 1;
+  let seguidas = 0;
+  for (;;) {
+    const restante = Math.max(limite - Date.now(), 1);
+    const cumplido = await indicadorCumplido(pagina, indicador, Math.min(restante, LECTURA_MS))
+      // Una lectura que falla (el documento cambió en el medio, o no respondió) no es un éxito.
+      .catch(() => false);
+    seguidas = cumplido ? seguidas + 1 : 0;
+    if (seguidas >= necesarias) return true;
+    if (Date.now() >= limite) return false;
+    await esperar(100);
+  }
 }
 
 export interface OpcionesLogin {
@@ -255,13 +333,38 @@ export async function probarLogin(
   contexto: BrowserContext,
   opciones: OpcionesLogin,
 ): Promise<boolean> {
-  const pagina = await contexto.newPage();
+  // Todo acotado: la respuesta llega en `presupuestoLogin`, aunque Chromium no responda.
+  const presupuesto = presupuestoLogin(opciones);
+  let pagina: Page | undefined;
   try {
-    return await loginEnPagina(pagina, opciones);
+    let abandonada = false;
+    const abierta = contexto.newPage();
+    // Si se abre después del límite, nadie la usa: se cierra igual.
+    abierta.then((p) => (abandonada ? p.close() : undefined)).catch(() => undefined);
+    pagina = await conLimite(abierta, opciones.timeoutMs).catch((error: unknown) => {
+      abandonada = true;
+      throw error;
+    });
+    return await conLimite(loginEnPagina(pagina, opciones), presupuesto);
+  } catch {
+    return false;
   } finally {
     opciones.secreto.fill(0);
-    await pagina.close().catch(() => undefined);
+    if (pagina) await conLimite(pagina.close(), opciones.timeoutMs).catch(() => undefined);
   }
+}
+
+/**
+ * Lo máximo que tarda `loginEnPagina`: la carga, cada paso y la espera del indicador tienen
+ * `timeoutMs` cada uno, más las lecturas del indicador antes de enviar y la última.
+ */
+export function presupuestoLogin({ pasos, timeoutMs }: Pick<OpcionesLogin, 'pasos' | 'timeoutMs'>) {
+  return timeoutMs * (pasos.length + 2) + 2 * LECTURA_MS;
+}
+
+/** Lo máximo que tarda `probarLogin`, con la apertura y el cierre de la página. */
+export function presupuestoProbarLogin(opciones: Pick<OpcionesLogin, 'pasos' | 'timeoutMs'>) {
+  return presupuestoLogin(opciones) + 2 * opciones.timeoutMs;
 }
 
 /**
@@ -275,6 +378,7 @@ export async function loginEnPagina(
   pagina.setDefaultTimeout(timeoutMs);
   try {
     await pagina.goto(urlLogin, { timeout: timeoutMs, waitUntil: 'load' });
+    // Si ya se cumple antes de enviar, no dice nada. Si no se puede leer, tampoco: tira y falla.
     if (await indicadorCumplido(pagina, indicador)) return false;
     for (const paso of pasos) {
       if (paso.accion === 'click') {
@@ -287,12 +391,7 @@ export async function loginEnPagina(
         await pagina.locator(paso.selector).first().fill(new TextDecoder().decode(secreto));
       }
     }
-    const limite = Date.now() + timeoutMs;
-    while (Date.now() < limite) {
-      if (await indicadorCumplido(pagina, indicador)) return true;
-      await esperar(100);
-    }
-    return false;
+    return await esperarIndicador(pagina, indicador, timeoutMs);
   } catch {
     // Sin el mensaje: un error de Playwright puede traer texto de la página.
     return false;

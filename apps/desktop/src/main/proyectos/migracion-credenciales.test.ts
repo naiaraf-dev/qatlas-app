@@ -46,6 +46,12 @@ const CREDENCIAL = {
 
 /** Lo inverso de la migración 6, solo para fabricar la copia vieja. */
 const AL_ESQUEMA_5 = `
+  -- Lo de la versión 7 (semana 7, redacción).
+  DROP TABLE redaccion;
+  ALTER TABLE proyecto DROP COLUMN redaccion_version;
+  ALTER TABLE hallazgo_ocurrencia DROP COLUMN secretos_redactados;
+  ALTER TABLE hallazgo_ocurrencia DROP COLUMN revision_pendiente;
+  -- Lo de la versión 6.
   ALTER TABLE proyecto DROP COLUMN dominios_autenticacion;
   ALTER TABLE proyecto DROP COLUMN sesion_max_minutos;
   ALTER TABLE autorizacion DROP COLUMN dominios_autenticacion_aceptados;

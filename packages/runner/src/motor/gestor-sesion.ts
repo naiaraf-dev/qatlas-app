@@ -2,8 +2,7 @@ import type { Browser, BrowserContext } from 'playwright-core';
 import { decidirNombre, type PoliticaDeRed } from '../red/reglas';
 import type { HallazgoDetectado } from './chequeos';
 import {
-  esperar,
-  indicadorCumplido,
+  esperarIndicador,
   urlSinQuery,
   type AlRegistrar,
   type NavegadorVisible,
@@ -187,11 +186,7 @@ export class GestorDeSesion implements SesionDelRastreo {
         return false;
       }
       // El indicador puede tardar en aparecer en una SPA.
-      for (let i = 0; i < 10; i++) {
-        if (await indicadorCumplido(pagina, indicador).catch(() => false)) return true;
-        await esperar(100);
-      }
-      return false;
+      return await esperarIndicador(pagina, indicador, 1000);
     } catch {
       return false;
     } finally {

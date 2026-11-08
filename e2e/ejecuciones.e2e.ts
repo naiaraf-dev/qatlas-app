@@ -400,11 +400,14 @@ test('sin el navegador instalado, la ejecución falla y no se descarga nada', as
   await expect(ejecuciones().first()).toContainText('Ejecución: Fallida', { timeout: 30_000 });
   await expect(ejecuciones().first()).toContainText('El navegador de pruebas no está disponible');
   expect(readdirSync(vacia)).toEqual([]);
-  // La causa llega al log, y la interfaz no la muestra.
+  // La causa llega al log técnico (ADR 034), en la consola y en el archivo de la carpeta de datos, y la
+  // interfaz no la muestra.
   await expect
     .poll(() => sinNavegador.diagnostico.join('\n'))
-    .toContain('navegador no disponible: ruta');
-  await expect(page.locator('body')).not.toContainText('[ejecucion]');
+    .toMatch(/\[qatlas\] ejecucion\.navegador-no-disponible ejecucion=[0-9a-f-]{36} causa=ruta/);
+  const log = readFileSync(path.join(carpeta, 'QAtlas', 'logs', 'qatlas.log'), 'utf8');
+  expect(log).toMatch(/"evento":"ejecucion\.navegador-no-disponible".*"causa":"ruta"/);
+  await expect(page.locator('body')).not.toContainText('[qatlas]');
 
   await app.close();
   rmSync(otra, { recursive: true, force: true });

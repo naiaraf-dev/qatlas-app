@@ -425,6 +425,16 @@ que había en pantalla y en la red. Controles:
 | EVI-06 | **Retención:** las evidencias se eliminan (borrado criptográfico) tras 90 días por defecto, salvo las de hallazgos incluidos en reportes.                                                                                                                                    |
 | EVI-07 | Los videos se graban solo cuando falla una prueba (se descartan los de ejecuciones exitosas).                                                                                                                                                                                |
 
+**Implementado en la semana 7** (ADR 030 a 034). EVI-03 y EVI-04 viven en `packages/redaction`:
+patrones de formato conocido, nombres sensibles por segmentos, entropía solo en contextos sospechosos y
+el valor exacto de los secretos de las credenciales del proyecto, buscados por su HMAC sin guardarlos.
+Cada redacción deja `[REDACTADO:tipo]` y un registro de qué, dónde y por qué regla, nunca el valor. Se
+aplica, en el proceso principal, a todo lo que QAtlas guarda o muestra: URLs de páginas y hallazgos,
+detalle de los hallazgos (consola, excepciones, selectores), destinos del monitor de conexiones y
+diagnósticos. Lo guardado antes se redacta al desbloquear. Un hallazgo con secretos redactados avisa «se
+redactaron N secretos» y queda marcado para la revisión de la exportación (RN-REP-03). Encabezados,
+cuerpos, HAR y trazas, con las evidencias de la semana 7b: las funciones ya existen.
+
 ## 3.9 Exportación y compartición
 
 Exportar es la única forma en que los datos salen de QAtlas por decisión
@@ -530,6 +540,12 @@ se limpia automáticamente a los 30 segundos.
 
 - Logs locales, estructurados, con redacción automática (los mismos
   filtros de EVI-03 y EVI-04) y rotación (máximo 7 días o 50 MB).
+  **Desde la semana 7 (ADR 034), solo técnicos**: se escriben también
+  con la bóveda bloqueada y no se pueden cifrar con sus claves, así que
+  llevan solo eventos, códigos de una lista cerrada, IDs y tiempos.
+  Nada de URLs, hosts, nombres de proyectos ni contenido de páginas,
+  aunque esté redactado: eso va a la base cifrada. Están en
+  `<carpeta de datos>/logs`.
 
 - Nunca contienen secretos, contenidos de formularios, cuerpos de
   respuestas ni la contraseña maestra.
@@ -1148,7 +1164,8 @@ compartir de forma segura.
   (verificado por TS-01).
 
 - RN-REP-03: no se puede exportar con alertas de secretos sin revisar
-  sin una confirmación explícita.
+  sin una confirmación explícita. Desde la semana 7, cada aparición de un
+  hallazgo con secretos redactados queda marcada con revisión pendiente.
 
 ### 6.5.1 Tipos de reporte y formatos
 
@@ -2240,7 +2257,10 @@ puedan compartir sin exponer información.
 6.  Semana 6: crawler y chequeos; login sin grabación (TS-06).
 
 7.  Semana 7: redacción, detector de secretos, evidencias cifradas;
-    TS-01 (canario).
+    TS-01 (canario). En dos partes: 7a, redacción y detector, logs
+    técnicos y TS-01 sobre lo que existe (hecha); 7b, evidencias
+    (capturas, traza, HAR, video, visor). TS-01 suma las exportaciones y
+    el diagnóstico en la semana 9.
 
 8.  Semana 8: hallazgos, huella y regresiones; filtros del monitor de
     conexiones, que se adelantó a la semana 5 sin ellos.

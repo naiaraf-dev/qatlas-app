@@ -1,5 +1,6 @@
 import { tmpdir } from 'node:os';
 import type { Browser } from 'playwright-core';
+import { recortar, redactarTexto, redactarUrl } from '@qatlas/redaction';
 import { MensajeAlRunner, type MensajeDelRunner } from '../protocolo';
 import { causaDeFalla, detalleDeFalla, perfilDemasiadoLargo } from './diagnostico';
 import { rastrear, type OpcionesRastreo } from './crawler';
@@ -27,6 +28,21 @@ export interface OpcionesRunner {
    */
   carpetaPerfil: string;
   abrirVisible?: (proxy: Parameters<typeof abrirNavegadorVisible>[0]) => Promise<NavegadorVisible>;
+}
+
+type Hallazgo = Extract<MensajeDelRunner, { tipo: 'hallazgo' }>['hallazgo'];
+
+/** Primera capa de redacción de un hallazgo, con los largos del protocolo. */
+function redactarHallazgo(hallazgo: Hallazgo): Hallazgo {
+  return {
+    ...hallazgo,
+    url: recortar(redactarUrl(hallazgo.url).texto, 2048),
+    urlOrigen:
+      hallazgo.urlOrigen === null ? null : recortar(redactarUrl(hallazgo.urlOrigen).texto, 2048),
+    clave: recortar(redactarTexto(hallazgo.clave).texto, 300),
+    titulo: recortar(redactarTexto(hallazgo.titulo).texto, 300),
+    detalle: recortar(redactarTexto(hallazgo.detalle).texto, 2000),
+  };
 }
 
 export function crearRunner({
@@ -168,16 +184,18 @@ export function crearRunner({
         tiempoCargaMs: number | null;
         profundidad: number;
       }) => {
+        // Primera capa de redacción (ADR 032): los patrones genéricos, antes de salir del runner. La
+        // garantía es la del proceso principal, que además conoce los secretos de las credenciales.
         enviar({
           tipo: 'pagina',
-          url: pagina.url,
+          url: recortar(redactarUrl(pagina.url).texto, 2048),
           status: pagina.status,
           tiempoCargaMs: pagina.tiempoCargaMs === null ? null : Math.round(pagina.tiempoCargaMs),
           profundidad: pagina.profundidad,
         });
       },
       alHallazgo: (hallazgo: Extract<MensajeDelRunner, { tipo: 'hallazgo' }>['hallazgo']) => {
-        enviar({ tipo: 'hallazgo', hallazgo });
+        enviar({ tipo: 'hallazgo', hallazgo: redactarHallazgo(hallazgo) });
       },
     };
 
