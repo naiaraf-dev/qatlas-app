@@ -77,6 +77,9 @@ export default defineConfig(({ mode }) => ({
       // Sin mapas de código en producción: no exponen el código fuente.
       sourcemap: false,
       minify: true,
+      // Nada se incrusta como data: (Vite lo hace con los archivos de menos de 4 KB, como un subconjunto
+      // de una fuente): la CSP no admite data:, y ese archivo quedaba bloqueado.
+      assetsInlineLimit: 0,
     },
   },
 }));

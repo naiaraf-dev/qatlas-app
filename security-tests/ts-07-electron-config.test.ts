@@ -221,3 +221,13 @@ describe('TS-07 · Herramientas de desarrollo y menú en producción (3.6)', () 
     }
   });
 });
+
+describe('TS-07 · Nada incrustado como data: en el build de la interfaz', () => {
+  it('Vite no incrusta archivos chicos (fuentes, imágenes) como data:, que la CSP bloquea', () => {
+    const configuracion = readFileSync(
+      path.resolve(import.meta.dirname, '../apps/desktop/electron.vite.config.ts'),
+      'utf8',
+    );
+    expect(configuracion).toMatch(/assetsInlineLimit: 0/);
+  });
+});

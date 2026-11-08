@@ -131,7 +131,7 @@ export function Boveda() {
               className="min-h-11 w-28 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
             />
           </div>
-          <Button type="submit">Guardar</Button>
+          <Button type="submit">Guardar retención</Button>
           {guardadaRetencion && <p className="self-center text-muted">Guardado.</p>}
         </form>
         <p className="mt-3 text-[13.5px] text-muted">
