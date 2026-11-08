@@ -21,7 +21,8 @@ guardaba cifrado pero sin redactar (ADR 023), y las URLs se guardaban tal cual.
 - **Formatos conocidos, de alta precisión** (`patrones.ts`): claves privadas PEM, JWT, claves de AWS,
   tokens de GitHub, GitLab, Slack, npm, claves de Stripe, Google, Anthropic, OpenAI y SendGrid, `Bearer` y
   `Basic`, y usuario y contraseña dentro de una URL. Algunos se adaptaron de las reglas de gitleaks
-  (licencia MIT, con su aviso en el archivo). Trufflehog no, por su licencia AGPL-3.0.
+  (licencia MIT): cada uno lo dice en su campo `origen`, y el aviso está en el archivo y en
+  `THIRD_PARTY_NOTICES.md`. Trufflehog no, por su licencia AGPL-3.0.
 - **Nombres sensibles, por segmentos** (como el chequeo de la 6b, que ahora usa la misma lista): el valor
   de `password=`, `"apiKey": …`, `X-Auth-Token` o `access_token` se redacta siempre. `tokenizer` y
   `authors`, no. Un segmento, o hasta tres seguidos unidos (`X-API-Key` → «apikey»).

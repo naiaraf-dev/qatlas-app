@@ -2,6 +2,8 @@
  * Redacción y detector de secretos. Todos los secretos son inventados y se arman por partes: ninguno
  * aparece literal en el repo, para que no lo confunda un escáner de secretos.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ComparadorDeSecretos,
@@ -85,6 +87,21 @@ describe('Patrones (EVI-04)', () => {
       expect(POSITIVOS[patron.id], patron.id).toBeDefined();
       expect(NEGATIVOS[patron.id], patron.id).toBeDefined();
       expect(patron.expresion.flags, patron.id).toContain('g');
+    }
+  });
+
+  it('los adaptados de gitleaks están en los avisos de terceros, con su licencia MIT', () => {
+    const raiz = path.resolve(import.meta.dirname, '../../..');
+    const avisos = readFileSync(path.join(raiz, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+    const fuente = readFileSync(path.join(import.meta.dirname, 'patrones.ts'), 'utf8');
+    expect(avisos).toContain('https://github.com/gitleaks/gitleaks');
+    expect(avisos).toContain('Copyright (c) 2019 Zachary Rice');
+    expect(fuente).toContain('Copyright (c) 2019 Zachary Rice');
+    const adaptados = PATRONES.filter((p) => p.origen === 'gitleaks');
+    expect(adaptados.length).toBeGreaterThan(0);
+    for (const { id } of adaptados) {
+      expect(avisos, id).toContain(id);
+      expect(fuente.slice(0, fuente.indexOf('export')), id).toContain(id);
     }
   });
 

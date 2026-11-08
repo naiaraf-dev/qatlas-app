@@ -25,7 +25,7 @@ es un sufijo no se puede deducir con reglas: hace falta la lista de sufijos púb
 | `tldts-core` 7.4.20 (transitiva) | Lógica del anterior       | No                    | 513 KB           | MIT      | Mismo mantenedor                     |
 
 Los datos provienen de la Public Suffix List, con licencia **MPL-2.0**: hay que citarla en los avisos de
-terceros del instalador (semana 10). Se actualiza subiendo la versión con Dependabot. En ejecución no
+terceros del instalador (semana 10). Ya está en `THIRD_PARTY_NOTICES.md`. Se actualiza subiendo la versión con Dependabot. En ejecución no
 descarga nada. Solo se usa en el proceso principal; la interfaz recibe el resultado por `proyectos:validar`,
 así hay una sola regla.
 
