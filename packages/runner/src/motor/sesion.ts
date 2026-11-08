@@ -5,6 +5,7 @@ import { SEVERIDAD, type HallazgoDetectado } from './chequeos';
 import { causaDeFalla, detalleDeFalla, type CausaNavegador } from './diagnostico';
 import {
   esperar,
+  esperarIndicador,
   indicadorCumplido,
   loginEnPagina,
   protegerContexto,
@@ -427,19 +428,6 @@ function secretosDe(datos: DatosAutenticacion, texto: string): string[] {
   } catch {
     return [texto];
   }
-}
-
-async function esperarIndicador(
-  pagina: Page,
-  indicador: IndicadorExito,
-  timeoutMs: number,
-): Promise<boolean> {
-  const limite = Date.now() + timeoutMs;
-  while (Date.now() < limite) {
-    if (await indicadorCumplido(pagina, indicador).catch(() => false)) return true;
-    await esperar(100);
-  }
-  return false;
 }
 
 async function entrar(
