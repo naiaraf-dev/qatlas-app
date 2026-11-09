@@ -17,7 +17,7 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 | ----------------------------------------------- | ------------------------------------------------- |
 | ![QAtlas en modo claro](docs/captura-claro.png) | ![QAtlas en modo oscuro](docs/captura-oscuro.png) |
 
-> **Estado:** fase 1, semana 7a — estructura base endurecida, bóveda cifrada, proyectos con autorización, runner aislado detrás de un proxy de salida, escaneo automático con su oráculo, escaneo autenticado con cuatro formas de login y roles (la autenticación básica, en la fase 2), y redacción y detector de secretos en todo lo que se guarda o se muestra, con logs solo técnicos. Ver el [plan por fases](docs/especificacion-qatlas.md).
+> **Estado:** fase 1, semana 7 — estructura base endurecida, bóveda cifrada, proyectos con autorización, runner aislado detrás de un proxy de salida, escaneo automático con su oráculo, escaneo autenticado con cuatro formas de login y roles (la autenticación básica, en la fase 2), redacción y detector de secretos en todo lo que se guarda o se muestra, con logs solo técnicos, y evidencias (capturas enmascaradas, video de las páginas con fallas, traza y HAR) cifradas sin pasar nunca en claro por el disco. Ver el [plan por fases](docs/especificacion-qatlas.md).
 
 ## Por qué
 
@@ -30,39 +30,43 @@ ningún dato salga del equipo salvo por una acción explícita del usuario.
 
 La seguridad no se agrega al final: es lo primero que se construye y se verifica en cada versión.
 
-| Control                                                                                              | Estado      |
-| ---------------------------------------------------------------------------------------------------- | ----------- |
-| Interfaz en sandbox, sin Node, con aislamiento de contexto                                           | ✅          |
-| Content Security Policy estricta (`connect-src 'none'`)                                              | ✅          |
-| Red de la interfaz: denegar por defecto, con registro                                                | ✅          |
-| Protocolo propio `app://` (sin `file://`), protegido contra path traversal                           | ✅          |
-| IPC tipado: valida origen, entrada **y salida**                                                      | ✅          |
-| Sin permisos del navegador, sin ventanas nuevas, sin `<webview>`                                     | ✅          |
-| Datos fuera de carpetas sincronizadas (OneDrive, Dropbox…)                                           | ✅          |
-| Scripts de instalación bloqueados (`ignore-scripts`) con lista permitida                             | ✅          |
-| Esquema de claves y cifrado (Argon2id, AES-256-GCM, HKDF): paquete crypto                            | ✅          |
-| Bóveda en la app: SQLCipher, primer inicio y desbloqueo con freno                                    | ✅          |
-| Bloqueo manual, por inactividad, al suspender, al bloquear el sistema y al cerrar                    | ✅          |
-| Canales IPC rechazados por defecto con la bóveda bloqueada                                           | ✅          |
-| Copia de seguridad cifrada y restauración, con ruta elegida en el proceso principal                  | ✅          |
-| Borrado criptográfico de proyectos: clave, `secure_delete`, lápidas (una copia conserva el proyecto) | ✅ parcial  |
-| Autorización versionada; sin autorización vigente el chequeo falla cerrado                           | ✅          |
-| Dominios permitidos: sin comodines amplios ni IPs, con opciones explícitas y auditadas               | ✅          |
-| Credenciales con cifrado de campo; ningún canal devuelve el secreto                                  | ✅          |
-| Auditoría local, con solo IDs y nombres de campos                                                    | ✅          |
-| Integridad de los módulos nativos (completa con fuses y firma, semana 10)                            | ✅ parcial  |
-| Test de datos personales en el repositorio                                                           | ✅          |
-| Proxy de salida: solo dominios y puertos del proyecto, DNS rebinding, sin interceptar TLS            | ✅          |
-| Runner en su proceso, sin claves, con entorno cerrado (no es un sandbox del sistema operativo)       | ✅ parcial  |
-| Navegador de pruebas con su sandbox encendido, perfil en memoria y segunda capa de bloqueo           | ✅          |
-| Monitor de conexiones: cada una, permitida o bloqueada, con su regla, sin rutas                      | ✅          |
-| Solo lectura y exclusiones: escrituras HTTP, WebSocket salientes, links y botones (TS-05)            | ✅          |
-| Escaneo: el sitio probado no ve ni puede alterar los chequeos (mundo aislado)                        | ✅          |
-| Detalle de los hallazgos cifrado con la clave del proyecto, hasta la redacción                       | ✅          |
-| Login en un contexto aparte, detrás de un proxy de login, sin grabar nada (TS-06)                    | ✅          |
-| Estado de sesión solo en memoria, cifrado, sin secretos ni dominios de autenticación                 | ✅          |
-| Sesión vencida: se confirma antes de actuar, y como mucho 3 logins por ejecución                     | ✅          |
-| Redacción y detector de secretos; test del secreto canario                                           | ⏳ semana 7 |
+| Control                                                                                              | Estado     |
+| ---------------------------------------------------------------------------------------------------- | ---------- |
+| Interfaz en sandbox, sin Node, con aislamiento de contexto                                           | ✅         |
+| Content Security Policy estricta (`connect-src 'none'`)                                              | ✅         |
+| Red de la interfaz: denegar por defecto, con registro                                                | ✅         |
+| Protocolo propio `app://` (sin `file://`), protegido contra path traversal                           | ✅         |
+| IPC tipado: valida origen, entrada **y salida**                                                      | ✅         |
+| Sin permisos del navegador, sin ventanas nuevas, sin `<webview>`                                     | ✅         |
+| Datos fuera de carpetas sincronizadas (OneDrive, Dropbox…)                                           | ✅         |
+| Scripts de instalación bloqueados (`ignore-scripts`) con lista permitida                             | ✅         |
+| Esquema de claves y cifrado (Argon2id, AES-256-GCM, HKDF): paquete crypto                            | ✅         |
+| Bóveda en la app: SQLCipher, primer inicio y desbloqueo con freno                                    | ✅         |
+| Bloqueo manual, por inactividad, al suspender, al bloquear el sistema y al cerrar                    | ✅         |
+| Canales IPC rechazados por defecto con la bóveda bloqueada                                           | ✅         |
+| Copia de seguridad cifrada y restauración, con ruta elegida en el proceso principal                  | ✅         |
+| Borrado criptográfico de proyectos: clave, `secure_delete`, lápidas (una copia conserva el proyecto) | ✅ parcial |
+| Autorización versionada; sin autorización vigente el chequeo falla cerrado                           | ✅         |
+| Dominios permitidos: sin comodines amplios ni IPs, con opciones explícitas y auditadas               | ✅         |
+| Credenciales con cifrado de campo; ningún canal devuelve el secreto                                  | ✅         |
+| Auditoría local, con solo IDs y nombres de campos                                                    | ✅         |
+| Integridad de los módulos nativos (completa con fuses y firma, semana 10)                            | ✅ parcial |
+| Test de datos personales en el repositorio                                                           | ✅         |
+| Proxy de salida: solo dominios y puertos del proyecto, DNS rebinding, sin interceptar TLS            | ✅         |
+| Runner en su proceso, sin claves, con entorno cerrado (no es un sandbox del sistema operativo)       | ✅ parcial |
+| Navegador de pruebas con su sandbox encendido, perfil en memoria y segunda capa de bloqueo           | ✅         |
+| Monitor de conexiones: cada una, permitida o bloqueada, con su regla, sin rutas                      | ✅         |
+| Solo lectura y exclusiones: escrituras HTTP, WebSocket salientes, links y botones (TS-05)            | ✅         |
+| Escaneo: el sitio probado no ve ni puede alterar los chequeos (mundo aislado)                        | ✅         |
+| Detalle de los hallazgos cifrado con la clave del proyecto, hasta la redacción                       | ✅         |
+| Login en un contexto aparte, detrás de un proxy de login, sin grabar nada (TS-06)                    | ✅         |
+| Estado de sesión solo en memoria, cifrado, sin secretos ni dominios de autenticación                 | ✅         |
+| Sesión vencida: se confirma antes de actuar, y como mucho 3 logins por ejecución                     | ✅         |
+| Redacción y detector de secretos; test del secreto canario                                           | ✅         |
+| Evidencias en memoria y cifradas: nada en claro en disco, tampoco temporales                         | ✅         |
+| Capturas con contraseñas, selectores sensibles y secretos a la vista tapados                         | ✅         |
+| Borrado criptográfico por evidencia, retención y modo datos sensibles                                | ✅         |
+| Visor sin renderizar el sitio: imágenes en un canvas, CSP sin `data:` ni `blob:`                     | ✅         |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·
 [especificación, sección 3](docs/especificacion-qatlas.md).

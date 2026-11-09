@@ -67,6 +67,18 @@ export interface SandboxActivo {
 export const CANARIO_POR_DEFECTO: string;
 /** Un JWT y una clave PEM de prueba: inventados, armados por partes. */
 export const JWT_DE_PRUEBA: string;
+/** Lo que se ve en las páginas de /evidencias (semana 7b). Inventado. */
+export const DATOS_SENSIBLES_DE_PRUEBA: Readonly<{
+  nombre: string;
+  documento: string;
+  email: string;
+  telefono: string;
+  clave: string;
+  oculto: string;
+  nota: string;
+}>;
+export const CAMPOS_DEL_FORMULARIO: number;
+export function valorDeCampo(n: number): string;
 export const PEM_DE_PRUEBA: string;
 
 export function iniciarSandbox(opciones?: {

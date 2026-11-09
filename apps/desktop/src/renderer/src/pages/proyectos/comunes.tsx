@@ -451,7 +451,7 @@ export function CamposControles({
       </Campo>
       <Casilla
         etiqueta="Modo datos sensibles"
-        ayuda="Para sistemas con datos reales: refuerza el enmascarado de las evidencias."
+        ayuda="Para sistemas con datos reales: sin video ni snapshots del DOM, y con todos los campos de formulario tapados en las capturas."
         marcada={valor.modoDatosSensibles}
         onChange={(modoDatosSensibles) => {
           onChange({ modoDatosSensibles });

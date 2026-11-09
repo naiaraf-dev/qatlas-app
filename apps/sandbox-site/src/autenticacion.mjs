@@ -37,6 +37,11 @@ ${cuerpo}
 </body>
 </html>`;
 
+/**
+ * Con «mostrar contraseña»: lo que se escribe aparece como texto, grande. Así, si el login se grabara, la
+ * contraseña estaría en los fotogramas y el OCR de TS-06 la encontraría (semana 7b). Un campo de tipo
+ * password solo muestra puntos: sin esto, TS-06 pasaría por la razón equivocada.
+ */
 const formularioLogin = (accion, titulo, extra = '') =>
   paginaApp(
     titulo,
@@ -44,7 +49,13 @@ const formularioLogin = (accion, titulo, extra = '') =>
   <label>Email <input id="usuario" name="usuario" type="email" autocomplete="off"></label>
   <label>Contraseña <input id="clave" name="clave" type="password" autocomplete="off"></label>
   <button type="submit">Entrar</button>
-</form>${extra}`,
+</form>
+<p>Contraseña escrita: <output id="eco-clave" style="font-size:40px;font-family:monospace"></output></p>
+<script>
+document.getElementById('clave').addEventListener('input', (e) => {
+  document.getElementById('eco-clave').textContent = e.target.value;
+});
+</script>${extra}`,
   );
 
 const leerCookies = (req) =>
@@ -109,9 +120,22 @@ export function crearZonaAutenticada({
     ahora() - datos.creada <= maximoMs &&
     datos.paginas < maximoPaginas;
 
-  function abrirSesion(res, rol, origen, destino = '/app/inicio') {
+  /**
+   * `mostrar`: un texto que la primera vista de la app muestra una sola vez. El enlace con token lo usa
+   * para dejar el token a la vista justo después de entrar, en la pantalla del login, que nunca se graba
+   * (TS-06, semana 7b). Las vistas siguientes ya no lo tienen.
+   */
+  function abrirSesion(res, rol, origen, destino = '/app/inicio', mostrar = null) {
     const id = aleatorio();
-    sesiones.set(id, { rol, origen, creada: ahora(), ultima: ahora(), paginas: 0, vencida: false });
+    sesiones.set(id, {
+      rol,
+      origen,
+      creada: ahora(),
+      ultima: ahora(),
+      paginas: 0,
+      vencida: false,
+      mostrar,
+    });
     registro.logins.push({ via: origen, rol });
     res.writeHead(302, {
       location: destino,
@@ -144,10 +168,12 @@ export function crearZonaAutenticada({
     res.end(cuerpo);
   };
 
-  const inicio = (rol) =>
+  const escapar = (texto) => texto.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const inicio = (rol, mostrar = null) =>
     paginaApp(
       'Inicio',
-      `<p id="menu-usuario">Sesión de ${rol}</p>
+      `${mostrar === null ? '' : `<p>Entraste con el enlace:</p><p style="font-size:40px;font-family:monospace">${escapar(mostrar)}</p>`}
+<p id="menu-usuario">Sesión de ${rol}</p>
 <nav aria-label="Secciones">
 <ul>
   <li><a href="/app/informes">Informes</a></li>
@@ -167,7 +193,9 @@ export function crearZonaAutenticada({
       case '/app':
       case '/app/':
       case '/app/inicio':
-        html(res, 200, inicio(datos.rol));
+        html(res, 200, inicio(datos.rol, datos.mostrar ?? null));
+        // Solo la primera vista.
+        datos.mostrar = null;
         return true;
       case '/app/informes':
         html(res, 200, paginaApp('Informes', `<p>Informes de ${datos.rol}.</p>${volver}`));
@@ -362,7 +390,7 @@ setInterval(async () => {
           return true;
         }
         if (!enlace.reutilizable) enlaces.delete(url.searchParams.get('token') ?? '');
-        abrirSesion(res, enlace.rol, 'token');
+        abrirSesion(res, enlace.rol, 'token', '/app/inicio', url.searchParams.get('token') ?? '');
         return true;
       }
       case 'GET /app/salir':

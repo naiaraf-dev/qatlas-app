@@ -17,9 +17,13 @@ import { leerCredenciales, type BaseCifrada, type NuevaRedaccion } from '@qatlas
 import {
   ComparadorDeSecretos,
   normalizarMensaje,
+  redactarEncabezados,
+  redactarFormulario,
+  redactarJson,
   redactarSecuencia,
   redactarTexto,
   redactarUrl,
+  type EncabezadoRedactado,
   type OpcionesRedaccion,
   type RegistroRedaccion,
   type Resultado,
@@ -37,6 +41,25 @@ export interface Redactor {
   texto: (texto: string, opciones?: OpcionesRedaccion) => Resultado;
   url: (url: string, opciones?: OpcionesRedaccion) => Resultado;
   secuencia: (textos: readonly string[], opciones?: OpcionesRedaccion) => Resultado[];
+  /** EVI-03: Authorization, Cookie, Set-Cookie y los nombres sensibles, enteros; el resto, por el detector. */
+  encabezados: (
+    encabezados: readonly { nombre: string; valor: string }[],
+    opciones?: OpcionesRedaccion,
+  ) => { encabezados: EncabezadoRedactado[]; registros: RegistroRedaccion[] };
+  /** El cuerpo de una solicitud, según su tipo: JSON y formularios por campo; lo demás, como texto. */
+  cuerpo: (cuerpo: string, tipoContenido: string | null, opciones?: OpcionesRedaccion) => Resultado;
+}
+
+/** El cuerpo de una solicitud según su `Content-Type`. */
+export function redactarCuerpoSolicitud(
+  cuerpo: string,
+  tipoContenido: string | null,
+  opciones: OpcionesRedaccion = {},
+): Resultado {
+  const tipo = (tipoContenido ?? '').toLowerCase();
+  if (tipo.includes('json')) return redactarJson(cuerpo, opciones);
+  if (tipo.includes('x-www-form-urlencoded')) return redactarFormulario(cuerpo, opciones);
+  return redactarTexto(cuerpo, opciones);
 }
 
 /** El de siempre. Solo el control positivo de TS-01 inyecta otro. */
@@ -44,6 +67,8 @@ export const REDACTOR: Redactor = {
   texto: redactarTexto,
   url: redactarUrl,
   secuencia: redactarSecuencia,
+  encabezados: redactarEncabezados,
+  cuerpo: redactarCuerpoSolicitud,
 };
 
 interface ProyectoConClave {

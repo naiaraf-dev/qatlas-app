@@ -356,12 +356,92 @@ function aEntrada(detalle: ProyectoDetalle): ProyectoEntrada {
   };
 }
 
+/**
+ * f6: el modo datos sensibles no graba video ni snapshots del DOM. Lo que ya existe no cumple: se puede
+ * eliminar con borrado criptográfico, con confirmación, o conservar. Las dos quedan en la auditoría.
+ */
+function ModoSensibleExistentes({
+  proyectoId,
+  nombre,
+  noCumplen,
+  onListo,
+}: {
+  proyectoId: string;
+  nombre: string;
+  noCumplen: { videos: number; snapshots: number };
+  onListo: () => void;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [fallo, setFallo] = useState(false);
+  const total = noCumplen.videos + noCumplen.snapshots;
+  const resolver = async (accion: 'eliminar' | 'conservar') => {
+    setFallo(false);
+    const res = await window.qatlas.evidencias.resolverModoSensible({ proyectoId, accion });
+    if (res.ok) onListo();
+    else setFallo(true);
+  };
+  return (
+    <>
+      <PageHeader title={`Modo datos sensibles en ${nombre}`} />
+      <Card title="Evidencias que no cumplen con este modo">
+        <div className="flex flex-col gap-3">
+          <p>
+            El proyecto ya tiene {noCumplen.videos} videos y {noCumplen.snapshots} snapshots del
+            DOM. Con el modo datos sensibles no se graban: pueden mostrar datos de personas.
+          </p>
+          <p className="text-muted">
+            Eliminarlas usa el borrado criptográfico: sin su clave, nada de lo que quede en el disco
+            se puede leer. Si las conservás, quedan como están. Las dos opciones quedan en la
+            auditoría, solo con la cantidad.
+          </p>
+          {fallo && <Aviso tipo="peligro">No se pudo completar. Probá de nuevo.</Aviso>}
+          {confirmando ? (
+            <>
+              <Aviso tipo="peligro">
+                Se van a eliminar {total} evidencias. No se puede deshacer.
+              </Aviso>
+              <div className="flex flex-wrap gap-2.5">
+                <Button variant="primary" onClick={() => void resolver('eliminar')}>
+                  Sí, eliminar {total} evidencias
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setConfirmando(false);
+                  }}
+                >
+                  Volver
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-wrap gap-2.5">
+              <Button
+                onClick={() => {
+                  setConfirmando(true);
+                }}
+              >
+                Eliminar {total} evidencias
+              </Button>
+              <Button variant="primary" onClick={() => void resolver('conservar')}>
+                Conservarlas
+              </Button>
+            </div>
+          )}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 function Edicion({ id, onListo }: { id: string; onListo: () => void }) {
   const [original, setOriginal] = useState<ProyectoDetalle | null>(null);
   const [valor, setValor] = useState<ProyectoEntrada | null>(null);
   const [dominiosTexto, setDominiosTexto] = useState('');
   const [errores, setErrores] = useState<ErrorValidacion[]>([]);
   const [fallo, setFallo] = useState(false);
+  // f6: al activar el modo datos sensibles, lo que ya existe y no cumple con él.
+  const [noCumplen, setNoCumplen] = useState<{ videos: number; snapshots: number } | null>(null);
 
   useEffect(() => {
     void window.qatlas.proyectos.obtener({ id }).then((res) => {
@@ -391,9 +471,25 @@ function Edicion({ id, onListo }: { id: string; onListo: () => void }) {
     setFallo(false);
     const res = await window.qatlas.proyectos.actualizar({ id, proyecto: limpiar(valor) });
     if (!res.ok) setFallo(true);
-    else if (res.data.resultado === 'actualizado') onListo();
-    else setErrores(res.data.errores);
+    else if (res.data.resultado !== 'actualizado') setErrores(res.data.errores);
+    else if (valor.modoDatosSensibles && !original.modoDatosSensibles) {
+      const existentes = await window.qatlas.evidencias.noCumplenModoSensible({ proyectoId: id });
+      if (existentes.ok && existentes.data.videos + existentes.data.snapshots > 0) {
+        setNoCumplen(existentes.data);
+      } else onListo();
+    } else onListo();
   };
+
+  if (noCumplen) {
+    return (
+      <ModoSensibleExistentes
+        proyectoId={id}
+        nombre={original.nombre}
+        noCumplen={noCumplen}
+        onListo={onListo}
+      />
+    );
+  }
 
   return (
     <>

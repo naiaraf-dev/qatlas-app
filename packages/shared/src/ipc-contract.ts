@@ -83,9 +83,14 @@ export type VaultStatus = z.infer<typeof VaultStatus>;
 export const BLOQUEO_MINUTOS_MIN = 1;
 export const BLOQUEO_MINUTOS_MAX = 240;
 
+/** EVI-06: cuántos días se guardan las evidencias. Por defecto, 90. */
+export const RETENCION_DIAS_MIN = 1;
+export const RETENCION_DIAS_MAX = 3650;
+
 export const VaultSettings = z
   .object({
     bloqueoMinutos: z.number().int().min(BLOQUEO_MINUTOS_MIN).max(BLOQUEO_MINUTOS_MAX),
+    retencionDias: z.number().int().min(RETENCION_DIAS_MIN).max(RETENCION_DIAS_MAX),
   })
   .strict();
 export type VaultSettings = z.infer<typeof VaultSettings>;
@@ -336,6 +341,12 @@ export const ResumenEjecucion = z
     // Por qué no arrancó el navegador o la ventana: las líneas de Chromium, sin rutas y redactadas.
     // Va acá, cifrado, y no al log (ADR 034).
     diagnostico: z.string().max(300).nullable(),
+    // Evidencias (semana 7b): cuántas se guardaron, los fotogramas que se perdieron y los topes que se
+    // alcanzaron (la ejecución lo informa: no es un error).
+    capturas: Cantidad,
+    videos: Cantidad,
+    fotogramasPerdidos: Cantidad,
+    topesAlcanzados: z.array(z.enum(['capturas', 'video'])).max(2),
   })
   .strict();
 export type ResumenEjecucion = z.infer<typeof ResumenEjecucion>;
@@ -387,18 +398,82 @@ export const HallazgoVista = z
     detalle: z.string().max(2000),
     // Cuántos secretos se redactaron en este hallazgo: la interfaz lo avisa, sin el valor (EVI-04).
     secretosRedactados: Cantidad,
+    // La página donde apareció: sus evidencias. Null en lo guardado antes de la semana 7b.
+    paginaId: IdEntidad.nullable(),
   })
   .strict();
 export type HallazgoVista = z.infer<typeof HallazgoVista>;
 
 export const PaginaVista = z
   .object({
+    id: IdEntidad,
     url: z.string().max(2048),
     status: z.number().int().nullable(),
     tiempoCargaMs: z.number().int().nullable(),
     profundidad: Cantidad,
   })
   .strict();
+
+export const TipoEvidencia = z.enum(['captura', 'video', 'traza', 'har', 'snapshot-dom']);
+export type TipoEvidencia = z.infer<typeof TipoEvidencia>;
+
+/** Una evidencia, sin su contenido ni su semilla. Nada de esto es texto del sitio. */
+export const EvidenciaVista = z
+  .object({
+    id: IdEntidad,
+    tipo: TipoEvidencia,
+    paginaId: IdEntidad.nullable(),
+    creadaEn: z.string(),
+    tamano: Cantidad,
+    secretosRedactados: Cantidad,
+    revisionPendiente: z.boolean(),
+    // EXP-02: el video y los snapshots no se pueden redactar del todo.
+    puedeTenerDatosSensibles: z.boolean(),
+    ancho: Cantidad.nullable(),
+    alto: Cantidad.nullable(),
+    duracionMs: Cantidad.nullable(),
+    fotogramas: Cantidad.nullable(),
+    fotogramasPerdidos: Cantidad,
+    enmascarados: Cantidad.nullable(),
+    entradas: Cantidad.nullable(),
+    modoSensible: z.boolean(),
+  })
+  .strict();
+export type EvidenciaVista = z.infer<typeof EvidenciaVista>;
+
+/** Lo que se muestra de una evidencia. Las imágenes van en bytes y la interfaz las dibuja en un canvas. */
+export const MAX_BYTES_IMAGEN = 20 * 1024 * 1024;
+export const MAX_CARACTERES_TEXTO = 8 * 1024 * 1024;
+const Imagen = z
+  .instanceof(Uint8Array)
+  .refine((datos) => datos.byteLength > 0 && datos.byteLength <= MAX_BYTES_IMAGEN);
+const Hueco = z.object({ t: Cantidad, cantidad: Cantidad }).strict();
+
+export const VistaEvidencia = z.discriminatedUnion('tipo', [
+  z
+    .object({
+      tipo: z.literal('imagen'),
+      formato: z.enum(['image/png', 'image/jpeg']),
+      datos: Imagen,
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('video'),
+      tiempos: z.array(Cantidad).max(100_000),
+      huecos: z.array(Hueco).max(100_000),
+      fotogramasPerdidos: Cantidad,
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('texto'),
+      formato: z.enum(['traza', 'har', 'html-texto']),
+      texto: z.string().max(MAX_CARACTERES_TEXTO),
+    })
+    .strict(),
+]);
+export type VistaEvidencia = z.infer<typeof VistaEvidencia>;
 
 /** Lo que el proceso principal manda a la interfaz mientras corre una ejecución. */
 export const ProgresoEjecucion = z
@@ -610,6 +685,32 @@ export const ipcContract = {
   'ejecuciones:listar': {
     request: z.object({ proyectoId: IdEntidad }).strict(),
     response: z.array(EjecucionResumen),
+  },
+  'evidencias:listar': {
+    request: z.object({ ejecucionId: IdEntidad }).strict(),
+    response: z.array(EvidenciaVista).max(10_000),
+  },
+  // Descifra en el proceso principal y devuelve el contenido solo para mostrarlo (3.7): nunca rutas.
+  'evidencias:obtenerVista': {
+    request: z.object({ evidenciaId: IdEntidad }).strict(),
+    response: VistaEvidencia.nullable(),
+  },
+  'evidencias:obtenerFotograma': {
+    request: z
+      .object({ evidenciaId: IdEntidad, indice: z.number().int().min(0).max(99_999) })
+      .strict(),
+    response: z.object({ datos: Imagen, t: Cantidad }).strict().nullable(),
+  },
+  // EVI-05: al activar el modo datos sensibles, lo que ya existe y no cumple (f6).
+  'evidencias:noCumplenModoSensible': {
+    request: z.object({ proyectoId: IdEntidad }).strict(),
+    response: z.object({ videos: Cantidad, snapshots: Cantidad }).strict(),
+  },
+  'evidencias:resolverModoSensible': {
+    request: z
+      .object({ proyectoId: IdEntidad, accion: z.enum(['eliminar', 'conservar']) })
+      .strict(),
+    response: z.object({ cantidad: Cantidad }).strict(),
   },
   'ejecuciones:detalle': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),

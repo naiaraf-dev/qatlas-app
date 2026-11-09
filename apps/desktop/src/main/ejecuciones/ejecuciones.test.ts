@@ -536,10 +536,36 @@ describe('Resultados del escaneo', () => {
     runnerActual?.emitir(terminado(2, 0));
     await pausa();
     expect(progresos.at(-1)?.estado).toBe('finalizada');
-    expect(ejecuciones.detalle(id)?.paginas).toEqual([
-      { url: 'http://localhost:5173/', status: 200, tiempoCargaMs: 120, profundidad: 1 },
-      { url: 'http://localhost:5173/panel', status: 200, tiempoCargaMs: 120, profundidad: 1 },
+    const paginas = ejecuciones.detalle(id)?.paginas ?? [];
+    expect(paginas).toEqual([
+      {
+        id: expect.any(String) as string,
+        url: 'http://localhost:5173/',
+        status: 200,
+        tiempoCargaMs: 120,
+        profundidad: 1,
+      },
+      {
+        id: expect.any(String) as string,
+        url: 'http://localhost:5173/panel',
+        status: 200,
+        tiempoCargaMs: 120,
+        profundidad: 1,
+      },
     ]);
+    expect(paginas[0]?.id).not.toBe(paginas[1]?.id);
+  });
+
+  it('una ocurrencia queda enlazada a la página donde apareció: sus evidencias', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(hallazgo());
+    runnerActual?.emitir(pagina('http://localhost:5173/consola'));
+    runnerActual?.emitir(hallazgo());
+    const detalle = ejecuciones.detalle(id);
+    // La primera llegó antes de cualquier página; la segunda, después de la de /consola.
+    expect(detalle?.hallazgos.map((h) => h.paginaId)).toEqual([null, detalle?.paginas[0]?.id]);
   });
 
   it('una página con query: en claro va sin ella; la completa, cifrada', async () => {
@@ -580,6 +606,7 @@ describe('Resultados del escaneo', () => {
         urlOrigen: null,
         detalle: DETALLE,
         secretosRedactados: 0,
+        paginaId: null,
       },
     ]);
   });

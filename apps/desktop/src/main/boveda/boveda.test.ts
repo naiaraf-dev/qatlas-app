@@ -334,12 +334,14 @@ describe('Copia y restauración', () => {
   });
 
   it('combina las lápidas de la bóveda y de la copia, y recién después purga (ADR 009)', async () => {
-    const boveda = servicio({ tablasDeProyecto: ['evidencia'] });
+    const boveda = servicio({ tablasDeProyecto: ['tabla_de_prueba'] });
     await boveda.crear(CONTRASENA, false);
     // Base con datos de tres proyectos; "viejo" ya estaba eliminado al hacer la copia.
     const base = (boveda as unknown as { base: import('@qatlas/db').BaseCifrada }).base;
-    base.exec('CREATE TABLE evidencia (proyecto_id TEXT, dato TEXT);');
-    base.exec("INSERT INTO evidencia VALUES ('viejo', 'v'), ('reciente', 'r'), ('vivo', 'x');");
+    base.exec('CREATE TABLE tabla_de_prueba (proyecto_id TEXT, dato TEXT);');
+    base.exec(
+      "INSERT INTO tabla_de_prueba VALUES ('viejo', 'v'), ('reciente', 'r'), ('vivo', 'x');",
+    );
     boveda.registrarLapidas([lapida('viejo')]);
     boveda.crearCopia(destino());
 
@@ -349,7 +351,7 @@ describe('Copia y restauración', () => {
     expect(await boveda.restaurar(destino(), CONTRASENA)).toEqual({ resultado: 'restaurada' });
 
     const restaurada = (boveda as unknown as { base: import('@qatlas/db').BaseCifrada }).base;
-    expect(restaurada.prepare('SELECT proyecto_id AS id FROM evidencia').all()).toEqual([
+    expect(restaurada.prepare('SELECT proyecto_id AS id FROM tabla_de_prueba').all()).toEqual([
       { id: 'vivo' },
     ]);
     expect(

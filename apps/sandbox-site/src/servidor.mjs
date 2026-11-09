@@ -4,9 +4,11 @@ import { createServer } from 'node:http';
 import { createServer as crearServidorTls } from 'node:https';
 import { crearZonaAutenticada, HOST_IDP, HOST_PORTAL } from './autenticacion.mjs';
 import { CANARIO_POR_DEFECTO, crearFugas } from './fugas.mjs';
+import { crearPaginasDeEvidencias } from './evidencias.mjs';
 
 export { HOST_IDP, HOST_PORTAL, USUARIO_BASICA, USUARIOS_APP } from './autenticacion.mjs';
 export { CANARIO_POR_DEFECTO, JWT_DE_PRUEBA, PEM_DE_PRUEBA } from './fugas.mjs';
+export { CAMPOS_DEL_FORMULARIO, DATOS_SENSIBLES_DE_PRUEBA, valorDeCampo } from './evidencias.mjs';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
@@ -386,6 +388,7 @@ export function iniciarSandbox({
   canario = undefined,
 } = {}) {
   const fugas = crearFugas({ canario: canario ?? CANARIO_POR_DEFECTO });
+  const evidencias = crearPaginasDeEvidencias({ canario: canario ?? CANARIO_POR_DEFECTO });
   const registro = {
     fugas: [],
     trampas: [],
@@ -447,6 +450,7 @@ export function iniciarSandbox({
     registro.rutas.push(pathname);
     if (await zona.atender(req, res, nombreHost, leerCuerpo)) return;
     if (fugas.atender(req, res, pathname)) return;
+    if (evidencias.atender(req, res, pathname)) return;
     const clave = `${req.method} ${pathname}`;
     switch (clave) {
       case 'GET /':

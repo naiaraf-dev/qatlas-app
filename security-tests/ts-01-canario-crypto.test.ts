@@ -47,7 +47,11 @@ async function cifrarArchivo(clave: Buffer, id: string, datos: Buffer): Promise<
       listo();
     },
   });
-  await pipeline(Readable.from([datos]), crearCifradorArchivo(clave, id), destino);
+  await pipeline(
+    Readable.from([datos]),
+    crearCifradorArchivo(clave, id, Buffer.alloc(32, 3)),
+    destino,
+  );
   return Buffer.concat(salida);
 }
 
