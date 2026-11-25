@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { chromium } from 'playwright-core';
+import { opcionesChromium } from '../packages/runner/src/motor/opciones-chromium';
 import {
   CAMPOS_DEL_FORMULARIO,
   DATOS_SENSIBLES_DE_PRUEBA as DATOS,
@@ -328,11 +329,7 @@ test('punto 6: mientras corre con video y traza, nada de la página queda en cla
 test('control del punto 6: la traza de Playwright sí deja la página en claro, y la búsqueda la encuentra', async () => {
   // Lo que QAtlas no usa: la grabación de Playwright escribe mientras graba (ADR 036 y 037).
   const carpeta = mkdtempSync(path.join(temporalDelSistema, 'qatlas-control-traza-'));
-  const navegador = await chromium.launch({
-    channel: 'chromium',
-    headless: true,
-    tracesDir: carpeta,
-  });
+  const navegador = await chromium.launch({ ...opcionesChromium(), tracesDir: carpeta });
   try {
     const contexto = await navegador.newContext();
     // Con la traza de Playwright Test activa, ya está empezada y escribe en el mismo `tracesDir`.

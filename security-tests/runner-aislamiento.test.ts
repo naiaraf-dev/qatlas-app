@@ -78,6 +78,7 @@ describe('El código del motor no abre red ni procesos por su cuenta', () => {
       'gestor-sesion.ts',
       'grabacion.ts',
       'motor.ts',
+      'opciones-chromium.ts',
       'runner.ts',
       'sesion.ts',
       'urls.ts',
@@ -210,18 +211,21 @@ describe('Contrato con el runner', () => {
 
 describe('Configuración del navegador', () => {
   const motor = readFileSync(path.join(RUNNER, 'motor/motor.ts'), 'utf8');
+  // Cómo se lanza (ADR 041): una sola función, la de la app y la de los tests.
+  const opciones = readFileSync(path.join(RUNNER, 'motor/opciones-chromium.ts'), 'utf8');
 
   it('el sandbox de Chromium está encendido: Playwright lo trae apagado', () => {
-    expect(motor).toContain('chromiumSandbox: true');
-    expect(motor).not.toContain('--no-sandbox');
+    expect(opciones).toContain('chromiumSandbox: control.sinSandbox !== true');
+    expect(motor + opciones).not.toContain('--no-sandbox');
+    expect(motor).toContain('chromium.launch(opcionesChromium({ proxy: configuracion.proxy }))');
   });
 
   it('no se saltea el proxy en loopback, y apaga lo que el proxy no ve', () => {
-    expect(motor).toContain('--proxy-bypass-list=<-loopback>');
-    expect(motor).toContain("'--webrtc-ip-handling-policy=disable_non_proxied_udp'");
+    expect(opciones).toContain('--proxy-bypass-list=<-loopback>');
+    expect(opciones).toContain("'--webrtc-ip-handling-policy=disable_non_proxied_udp'");
     // Esta variante no hace nada, y sin decir nada.
-    expect(motor).not.toContain('--force-webrtc-ip-handling-policy');
-    expect(motor).toContain('--disable-quic');
+    expect(opciones).not.toContain('--force-webrtc-ip-handling-policy');
+    expect(opciones).toContain('--disable-quic');
   });
 
   it('los service workers se bloquean y las descargas también', () => {
@@ -269,9 +273,7 @@ describe('Configuración del navegador', () => {
   it('el navegador con ventana tiene el mismo sandbox y los mismos argumentos', () => {
     const visible =
       /export async function abrirNavegadorVisible[\s\S]*?\n}\n/.exec(motor)?.[0] ?? '';
-    expect(visible).toContain('chromiumSandbox: true');
-    expect(visible).toContain('args: [...ARGUMENTOS_CHROMIUM]');
-    expect(visible).toContain('headless: false');
+    expect(visible).toContain('...opcionesChromium({ proxy, headless: false })');
     // Es un perfil persistente: el contexto lo crea acá, con lo mismo que los demás.
     expect(visible).toContain("serviceWorkers: 'block'");
     expect(visible).toContain('acceptDownloads: false');

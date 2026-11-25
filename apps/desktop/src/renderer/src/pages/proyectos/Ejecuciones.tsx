@@ -3,6 +3,7 @@ import {
   credencialUsable,
   ESTRATEGIAS_PENDIENTES,
   minutosMinimosDeEjecucion,
+  REGLA_SERVICIO_INTERNO,
   type EjecucionResumen,
   type HallazgoVista,
   type ProgresoEjecucion,
@@ -263,7 +264,10 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
   };
 
   const minutos = minutosMinimosDeEjecucion(proyecto);
-  const bloqueadas = detalle?.conexiones.filter((c) => !c.permitida) ?? [];
+  const rechazadas = detalle?.conexiones.filter((c) => !c.permitida) ?? [];
+  // Las del navegador por su cuenta no son del sitio: se cuentan aparte y están en Privacidad y conexiones.
+  const bloqueadas = rechazadas.filter((c) => c.regla !== REGLA_SERVICIO_INTERNO);
+  const delNavegador = rechazadas.length - bloqueadas.length;
 
   return (
     <Card title="Ejecuciones">
@@ -422,6 +426,14 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
                   </li>
                 ))}
               </ul>
+            )}
+            {delNavegador > 0 && (
+              <p className="text-[13.5px] text-muted">
+                Además, el navegador de pruebas intentó {delNavegador}{' '}
+                {delNavegador === 1 ? 'conexión propia' : 'conexiones propias'} (servicios internos
+                de Chromium). El proxy las rechazó sin dejarlas salir. Están en Privacidad y
+                conexiones.
+              </p>
             )}
           </section>
         )}

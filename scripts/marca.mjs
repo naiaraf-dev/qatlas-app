@@ -59,7 +59,9 @@ function armarIco(imagenes) {
 async function generar() {
   const requerir = createRequire(path.join(RAIZ, 'packages/runner/package.json'));
   const { chromium } = requerir('playwright-core');
-  const navegador = await chromium.launch({ channel: 'chromium', headless: true });
+  // La misma forma de lanzarlo que la app (ADR 041). Node 22.18 carga el .ts sin compilar.
+  const { opcionesChromium } = await import('../packages/runner/src/motor/opciones-chromium.ts');
+  const navegador = await chromium.launch(opcionesChromium());
   try {
     const pagina = await navegador.newPage({ deviceScaleFactor: 1 });
     // Sin red: el SVG va en línea como data URL.

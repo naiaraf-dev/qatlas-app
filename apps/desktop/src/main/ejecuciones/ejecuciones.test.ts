@@ -735,6 +735,39 @@ describe('Monitor de conexiones', () => {
     expect(ejecuciones.conexionesRecientes(10)).toHaveLength(3);
   });
 
+  it('lo que el navegador intenta por su cuenta se guarda y se ve, pero no suma al resumen (ADR 041)', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    alRegistrarProxy?.({
+      destino: 'accounts.google.com:443',
+      permitida: false,
+      regla: 'servicio-interno-navegador',
+    });
+    alRegistrarProxy?.({
+      destino: 'evil.example:80',
+      permitida: false,
+      regla: 'fuera-de-dominios',
+    });
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+
+    const detalle = ejecuciones.detalle(id);
+    expect(detalle?.ejecucion.resumen.conexionesBloqueadas).toBe(1);
+    expect(detalle?.conexiones.map((c) => [c.destino, c.regla])).toEqual([
+      ['accounts.google.com:443', 'servicio-interno-navegador'],
+      ['evil.example:80', 'fuera-de-dominios'],
+    ]);
+    // El monitor (Privacidad y conexiones) la muestra, bloqueada.
+    expect(ejecuciones.conexionesRecientes(10)).toContainEqual(
+      expect.objectContaining({
+        destination: 'accounts.google.com:443',
+        allowed: false,
+        rule: 'servicio-interno-navegador',
+      }),
+    );
+  });
+
   it('una conexión que llega después del «terminé» también queda registrada', async () => {
     const proyecto = crearProyecto();
     const id = lanzar(proyecto);

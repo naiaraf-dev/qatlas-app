@@ -25,6 +25,8 @@ export type ReglaBloqueo =
   | 'solicitud-invalida'
   | 'upgrade-directo'
   | 'credencial-invalida'
+  // Un pedido sin la credencial del proxy que nunca volvió con ella: un servicio del navegador (ADR 041).
+  | 'servicio-interno-navegador'
   | 'agente-node'
   | 'solo-lectura';
 

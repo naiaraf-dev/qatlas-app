@@ -6,7 +6,13 @@ import {
   type Server as Tcp,
 } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { iniciarProxy, type ProxyActivo, type RegistroConexion, type Resolvedor } from './proxy';
+import {
+  GRACIA_SIN_CREDENCIAL_MS,
+  iniciarProxy,
+  type ProxyActivo,
+  type RegistroConexion,
+  type Resolvedor,
+} from './proxy';
 import type { PoliticaDeRed } from './reglas';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-un-solo-uso' };
@@ -147,10 +153,56 @@ describe('Credencial de la ejecución', () => {
     expect(consultas).toEqual([]);
   });
 
-  it('el primer intento sin credencial no se registra: Chromium siempre empieza así', async () => {
+  const esperarGracia = () =>
+    new Promise((listo) => setTimeout(listo, GRACIA_SIN_CREDENCIAL_MS + 300));
+
+  it('el primer intento sin credencial no se registra si vuelve con ella: Chromium siempre empieza así', async () => {
     await iniciar();
     await pedir(`http://lexora.test:${puertoDestino}/`, { autorizacion: null });
+    // Enseguida no hay nada: espera el reintento.
     expect(registros).toEqual([]);
+    await pedir(`http://lexora.test:${puertoDestino}/`);
+    await esperarGracia();
+    expect(registros).toEqual([
+      { destino: `lexora.test:${puertoDestino}`, permitida: true, regla: 'loopback-declarado' },
+    ]);
+  });
+
+  it('lo que nunca vuelve con credencial queda en el monitor como servicio interno (ADR 041)', async () => {
+    await iniciar();
+    const { socket } = await conectar('accounts.google.com:443', null);
+    socket.destroy();
+    await pedir('http://update.googleapis.com/service/update2/json', { autorizacion: null });
+    await esperarGracia();
+    expect(registros).toEqual(
+      expect.arrayContaining([
+        {
+          destino: 'accounts.google.com:443',
+          permitida: false,
+          regla: 'servicio-interno-navegador',
+        },
+        {
+          destino: 'update.googleapis.com:80',
+          permitida: false,
+          regla: 'servicio-interno-navegador',
+        },
+      ]),
+    );
+    expect(registros).toHaveLength(2);
+    // Nunca se resolvió ni se conectó: el proxy no decidió ningún destino.
+    expect(consultas).toEqual([]);
+  });
+
+  it('al cerrar, registra lo que todavía esperaba su reintento', async () => {
+    const activo = await iniciar();
+    const { socket } = await conectar('accounts.google.com:443', null);
+    socket.destroy();
+    expect(registros).toEqual([]);
+    await activo.cerrar();
+    proxy = undefined;
+    expect(registros).toEqual([
+      { destino: 'accounts.google.com:443', permitida: false, regla: 'servicio-interno-navegador' },
+    ]);
   });
 
   it('una credencial incorrecta se rechaza y se registra', async () => {
@@ -314,15 +366,18 @@ describe('CONNECT: túnel sin interceptar', () => {
   it('al puerto del propio proxy no se llega, aunque esté declarado', async () => {
     const activo = await iniciar();
     await activo.cerrar();
-    proxy = await iniciarProxy({
+    const propio = await iniciarProxy({
       politica: politica(),
       credencial: CREDENCIAL,
       alRegistrar: (r) => registros.push(r),
     });
-    const { linea, socket } = await conectar(`localhost:${proxy.puerto}`);
+    proxy = propio;
+    const { linea, socket } = await conectar(`localhost:${propio.puerto}`);
     socket.destroy();
     expect(linea).toContain('403');
-    expect(registros.at(-1)?.regla).toBe('puerto-del-proxy');
+    expect(registros.find((r) => r.destino === `localhost:${propio.puerto}`)?.regla).toBe(
+      'puerto-del-proxy',
+    );
   });
 });
 

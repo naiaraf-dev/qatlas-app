@@ -33,7 +33,7 @@ import type {
 } from '../apps/desktop/src/main/ejecuciones/servicio';
 import {
   abrirNavegadorVisible,
-  ARGUMENTOS_CHROMIUM,
+  opcionesChromium,
   type NavegadorVisible,
 } from '../packages/runner/src/motor/motor';
 import { crearRunner } from '../packages/runner/src/motor/runner';
@@ -346,17 +346,10 @@ test('la ventana del asistido no ofrece guardar la contraseña: el gestor de Chr
     // dejara de registrar la decisión, este test fallaría acá.
     const perfilNormal = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts06-normal-'));
     try {
-      const normal = await chromium.launchPersistentContext(perfilNormal, {
-        channel: 'chromium',
-        headless: false,
-        chromiumSandbox: true,
-        args: [...ARGUMENTOS_CHROMIUM],
-        proxy: {
-          server: datosProxy.servidor,
-          username: datosProxy.usuario,
-          password: datosProxy.clave,
-        },
-      });
+      const normal = await chromium.launchPersistentContext(
+        perfilNormal,
+        opcionesChromium({ proxy: datosProxy, headless: false }),
+      );
       try {
         const registro = await decisionDelGestor(normal, origen);
         expect(registro).toContain('Decision: ASK the user');

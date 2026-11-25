@@ -82,7 +82,8 @@ describe('scripts de instalación', () => {
   it('y es la configuración efectiva de npm (ninguna variable ni config global la pisa)', () => {
     const valor = execSync('npm config get ignore-scripts', { cwd: RAIZ, encoding: 'utf8' }).trim();
     expect(valor).toBe('true');
-  });
+    // Lanzar npm tarda: con la máquina cargada, más que los 5 s por defecto.
+  }, 30_000);
 
   it('cada paquete con script de instalación está revisado, y no sobra ninguno', () => {
     const encontrados = [...conScript().keys()].sort();
@@ -133,5 +134,5 @@ describe('versión de npm (ADR 040)', () => {
     const [mayor = 0, menor = 0, parche = 0] = version.split('.').map(Number);
     expect(mayor, version).toBe(10);
     expect(menor > 9 || (menor === 9 && parche >= 3), version).toBe(true);
-  });
+  }, 30_000);
 });

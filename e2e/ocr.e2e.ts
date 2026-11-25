@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { chromium } from 'playwright-core';
+import { opcionesChromium } from '../packages/runner/src/motor/opciones-chromium';
 import {
   ESTILO_FUENTE,
   FAMILIA_CONTROL,
@@ -23,7 +24,7 @@ test('sin los datos locales, el OCR intenta descargar y falla: la red está bloq
 
 test('con los datos locales, lee el texto de una captura de Chromium', async () => {
   // El Chromium verificado por hash (ADR 020), como todos: nunca el headless shell.
-  const navegador = await chromium.launch({ channel: 'chromium', headless: true });
+  const navegador = await chromium.launch(opcionesChromium());
   const ocr = await crearOcr({ trabajadores: 1 });
   try {
     const pagina = await navegador.newPage({ viewport: { width: 1280, height: 720 } });

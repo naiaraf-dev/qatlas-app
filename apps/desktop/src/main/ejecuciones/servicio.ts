@@ -33,6 +33,7 @@ import {
   estrategiaDisponible,
   LIMITE_PRUEBAS_LOGIN,
   LIMITES_SESION,
+  REGLA_SERVICIO_INTERNO,
   type ConnectionEntry,
   type CredencialResumen,
   type EjecucionResumen,
@@ -1199,8 +1200,10 @@ export class ServicioEjecuciones {
   ): void {
     const redactado = this.redactor.texto(destino, { comparador: enCurso.comparador });
     enCurso.resumen.secretosRedactados += contarRedacciones(redactado.registros);
+    // Lo que el navegador intenta por su cuenta se guarda (el monitor lo muestra), pero no es un bloqueo
+    // del sitio: no suma al resumen (ADR 041).
     if (permitida) enCurso.resumen.conexionesPermitidas += 1;
-    else enCurso.resumen.conexionesBloqueadas += 1;
+    else if (regla !== REGLA_SERVICIO_INTERNO) enCurso.resumen.conexionesBloqueadas += 1;
     // El resumen cuenta todo; un sitio que martilla no puede llenar la base.
     const guardable = enCurso.guardadas < MAX_CONEXIONES_GUARDADAS;
     if (guardable) {

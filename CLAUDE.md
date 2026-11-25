@@ -75,6 +75,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
+- Todo navegador de pruebas, de la app, de un test o de un script, se lanza con `opcionesChromium`
+  (`opciones-chromium.ts`): un solo `--disable-features`, porque Chromium se queda con el último (ADR 041). Un
+  test busca su conexión por destino, nunca «la última».
 - Cada tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO` (un test lo verifica), y un canal IPC
   nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
 - La auditoría guarda solo IDs y nombres de campos (ADR 015).

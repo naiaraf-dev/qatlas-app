@@ -94,3 +94,10 @@ export function credencialUsable(credencial: {
   if (credencial.estrategia !== 'asistido' && !credencial.secretoConfigurado) return false;
   return credencial.estrategia === 'basica' || credencial.indicadorExito !== null;
 }
+
+/**
+ * La regla de los pedidos que el navegador de pruebas hace por su cuenta y el proxy rechaza sin
+ * credencial (ADR 041). Se guardan y se ven en Privacidad y conexiones; el resumen de la ejecución no los
+ * cuenta como bloqueos del sitio.
+ */
+export const REGLA_SERVICIO_INTERNO = 'servicio-interno-navegador';
