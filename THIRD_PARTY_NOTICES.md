@@ -56,6 +56,26 @@ SOFTWARE.
 - Qué se usa: los datos de la lista, sin modificar, tal como los incluye el paquete `tldts` (licencia
   MIT), para validar los dominios de los proyectos (ADR 011).
 
+## react-aria-components y React Aria (Adobe)
+
+- Proyecto: https://github.com/adobe/react-spectrum (Adobe)
+- Versión: react-aria-components 1.22.1, fija (ADR 042).
+- Licencia: Apache License 2.0; el texto completo está al final. Copyright 2019 Adobe.
+- Qué se usa: los componentes accesibles sin estilos de la interfaz (Select, Checkbox, Switch,
+  NumberField, Slider, Disclosure, Tooltip, Dialog y Toast), en `apps/desktop/src/renderer/src/ui/`. El
+  bundle solo lleva lo que se importa.
+- Vienen con él, sin modificar:
+  - react-aria 3.53.1, react-stately 3.51.0, @react-types/shared 3.37.0, @internationalized/date 3.12.4,
+    @internationalized/number 3.6.9 e @internationalized/string 3.2.10, de Adobe, Apache-2.0.
+  - @swc/helpers 0.5.24, Apache-2.0 (Copyright the SWC authors).
+  - aria-hidden 1.2.6, MIT, Copyright (c) 2017 Anton Korzunov.
+  - clsx 2.1.1, MIT, Copyright (c) Luke Edwards.
+  - use-sync-external-store 1.7.0, MIT, Copyright (c) Meta Platforms, Inc. and affiliates.
+  - client-only 0.0.1, MIT, de Vercel.
+  - tslib 2.9.1, 0BSD, Copyright (c) Microsoft Corporation.
+- Los textos de las licencias MIT y 0BSD van en el archivo `LICENSE` de cada paquete, que el instalador
+  copia junto a este (semana 10).
+
 ## Solo en desarrollo: OCR de los tests (no va en la app)
 
 Estos paquetes se usan únicamente en los tests de TS-06 y TS-01 (ADR 039). No forman parte de la
@@ -77,7 +97,9 @@ aplicación ni del instalador: un test lo verifica sobre el build. Se listan por
 - Licencia: el `package.json` del paquete dice MIT, pero no trae archivo de licencia; su repositorio es
   Apache-2.0 y los datos de origen también. Se trata como Apache-2.0, con este aviso.
 
-### Apache License 2.0
+## Apache License 2.0
+
+La usan react-aria-components y sus paquetes (en la app) y el OCR de los tests (solo desarrollo).
 
 ```text
                                  Apache License

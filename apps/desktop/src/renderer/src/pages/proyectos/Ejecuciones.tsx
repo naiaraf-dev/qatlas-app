@@ -13,6 +13,7 @@ import {
   type ProyectoDetalle,
 } from '@qatlas/shared';
 import { Button, Card, SeverityBadge } from '../../ui/components';
+import { Desplegable, Selector } from '../../ui/controles';
 import { Aviso } from './comunes';
 import { EvidenciasDeEjecucion } from './Evidencias';
 
@@ -147,12 +148,11 @@ function Hallazgo({ hallazgo }: { hallazgo: HallazgoVista }) {
         <p className="text-[13px] text-muted">Medición orientativa, tomada en este equipo.</p>
       )}
       {hallazgo.detalle && (
-        <details className="text-[13px]">
-          <summary className="cursor-pointer text-muted">Detalle</summary>
-          <pre className="mt-1 font-mono text-[12px] break-all whitespace-pre-wrap">
+        <Desplegable titulo="Detalle" className="text-[13px]">
+          <pre className="font-mono text-[12px] break-all whitespace-pre-wrap">
             {hallazgo.detalle}
           </pre>
-        </details>
+        </Desplegable>
       )}
     </li>
   );
@@ -278,27 +278,28 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
           por el proxy de salida. Con una credencial, entra con su rol y nunca visita el login ni
           los links de cerrar sesión.
         </p>
-        <label className="flex flex-col gap-1.5">
-          <span className="font-medium">Iniciar sesión con</span>
-          <select
-            className="min-h-11 w-auto rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
-            value={credencialId}
-            onChange={(event) => {
-              setCredencialId(event.target.value);
+        <div className="flex flex-col gap-1.5">
+          <Selector
+            etiqueta="Iniciar sesión con"
+            // Una clave vacía no sirve en una lista: el escaneo anónimo es «anonimo» solo acá.
+            valor={credencialId === '' ? 'anonimo' : credencialId}
+            opciones={[
+              { valor: 'anonimo', texto: 'Sin credencial: escaneo anónimo' },
+              ...proyecto.credenciales.map((c) => ({
+                valor: c.id,
+                texto: credencialUsable(c)
+                  ? `${c.rol} · ${c.nombre}`
+                  : `${c.rol} · ${c.nombre} (${porQueNoUsable(c)})`,
+                deshabilitada: !credencialUsable(c),
+              })),
+            ]}
+            alCambiar={(valor) => {
+              setCredencialId(valor === 'anonimo' ? '' : valor);
             }}
-          >
-            <option value="">Sin credencial: escaneo anónimo</option>
-            {proyecto.credenciales.map((c) => (
-              <option key={c.id} value={c.id} disabled={!credencialUsable(c)}>
-                {c.rol} · {c.nombre}
-                {credencialUsable(c) ? '' : ` (${porQueNoUsable(c)})`}
-              </option>
-            ))}
-          </select>
-          <span className="text-[13px] text-muted">
-            Comparar lo que ve cada rol llega en la fase 4.
-          </span>
-        </label>
+            ayuda="Comparar lo que ve cada rol llega en la fase 4."
+            className="w-auto self-start"
+          />
+        </div>
         {elegida?.estrategia === 'asistido' && (
           <Aviso>
             Se va a abrir una ventana del navegador de pruebas para que entres. Lo que hagas ahí no

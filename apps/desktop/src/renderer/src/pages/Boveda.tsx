@@ -7,6 +7,8 @@ import {
 } from '@qatlas/shared';
 import { Button, Card, PageHeader } from '../ui/components';
 import { EntradaSensible, useCampoSensible } from '../ui/EntradaSensible';
+import { useAvisos } from '../ui/avisos';
+import { CampoNumerico } from '../ui/controles';
 
 export function Boveda() {
   const [minutos, setMinutos] = useState<number | null>(null);
@@ -16,8 +18,7 @@ export function Boveda() {
   const [mensajeCopia, setMensajeCopia] = useState<string | null>(null);
   const campoCopia = useCampoSensible();
   const [mensajeRestaurar, setMensajeRestaurar] = useState<string | null>(null);
-  const idMinutos = useId();
-  const idDias = useId();
+  const avisar = useAvisos();
   const idContrasena = useId();
 
   useEffect(() => {
@@ -51,8 +52,9 @@ export function Boveda() {
   const crearCopia = async () => {
     setMensajeCopia(null);
     const res = await window.qatlas.vault.createBackup();
+    // Lo que sale bien es un aviso pasajero; lo que falla queda en la página (role="alert").
     if (!res.ok) setMensajeCopia('No se pudo crear la copia.');
-    else if (res.data.resultado === 'creada') setMensajeCopia('Copia creada.');
+    else if (res.data.resultado === 'creada') avisar('Copia creada.');
   };
 
   const restaurar = async (event: SyntheticEvent) => {
@@ -81,23 +83,15 @@ export function Boveda() {
             void guardar(event);
           }}
         >
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={idMinutos} className="font-medium">
-              Minutos sin actividad
-            </label>
-            <input
-              id={idMinutos}
-              type="number"
-              min={BLOQUEO_MINUTOS_MIN}
-              max={BLOQUEO_MINUTOS_MAX}
-              value={minutos ?? ''}
-              onChange={(event) => {
-                setGuardado(false);
-                setMinutos(Number(event.target.value));
-              }}
-              className="min-h-11 w-28 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
-            />
-          </div>
+          <CampoNumerico
+            etiqueta="Minutos sin actividad"
+            ayuda={`De ${String(BLOQUEO_MINUTOS_MIN)} a ${String(BLOQUEO_MINUTOS_MAX)}.`}
+            valor={minutos ?? Number.NaN}
+            alCambiar={(n) => {
+              setGuardado(false);
+              setMinutos(n);
+            }}
+          />
           <Button type="submit">Guardar</Button>
           {guardado && <p className="self-center text-muted">Guardado.</p>}
         </form>
@@ -114,23 +108,15 @@ export function Boveda() {
             void guardarRetencion(event);
           }}
         >
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={idDias} className="font-medium">
-              Días que se guardan
-            </label>
-            <input
-              id={idDias}
-              type="number"
-              min={RETENCION_DIAS_MIN}
-              max={RETENCION_DIAS_MAX}
-              value={dias ?? ''}
-              onChange={(event) => {
-                setGuardadaRetencion(false);
-                setDias(Number(event.target.value));
-              }}
-              className="min-h-11 w-28 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
-            />
-          </div>
+          <CampoNumerico
+            etiqueta="Días que se guardan"
+            ayuda={`De ${String(RETENCION_DIAS_MIN)} a ${String(RETENCION_DIAS_MAX)}.`}
+            valor={dias ?? Number.NaN}
+            alCambiar={(n) => {
+              setGuardadaRetencion(false);
+              setDias(n);
+            }}
+          />
           <Button type="submit">Guardar retención</Button>
           {guardadaRetencion && <p className="self-center text-muted">Guardado.</p>}
         </form>
@@ -155,7 +141,11 @@ export function Boveda() {
           >
             Crear copia de seguridad
           </Button>
-          {mensajeCopia && <p role="status">{mensajeCopia}</p>}
+          {mensajeCopia && (
+            <p role="alert" className="text-crit-text">
+              {mensajeCopia}
+            </p>
+          )}
         </div>
       </Card>
 

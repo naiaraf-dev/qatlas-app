@@ -134,16 +134,10 @@ test('el tema se puede cambiar a mano y vuelve a seguir al sistema', async () =>
   await themes.getByRole('radio', { name: 'Claro' }).click();
   await expect.poll(background).toBe('rgb(246, 247, 249)');
   await expect.poll(() => coloresDelLogo(page)).toEqual(LOGO_CLARO);
-  await expect(themes.getByRole('radio', { name: 'Claro' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(themes.getByRole('radio', { name: 'Claro' })).toBeChecked();
 
   await themes.getByRole('radio', { name: 'Sistema' }).click();
-  await expect(themes.getByRole('radio', { name: 'Sistema' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(themes.getByRole('radio', { name: 'Sistema' })).toBeChecked();
 });
 
 test('la app no muestra ventanas nuevas aunque la página lo intente', async () => {

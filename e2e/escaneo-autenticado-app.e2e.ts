@@ -25,6 +25,7 @@ import {
 } from '../apps/sandbox-site/src/servidor.mjs';
 import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
+import { elegirOpcion, listaDesplegable, NOMBRE_DE_ESTRATEGIA } from './controles';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -37,7 +38,9 @@ test.describe.configure({ mode: 'serial', timeout: 180_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const ejecucion = () =>
   page.getByRole('list', { name: 'Ejecuciones del proyecto' }).locator(':scope > li').first();
@@ -50,7 +53,7 @@ async function agregarCredencial(
   await boton('Agregar credencial').click();
   await entrada('Nombre de la credencial').fill(datos.nombre);
   await entrada('Rol').fill(datos.rol);
-  await entrada('Forma de login').selectOption(datos.estrategia);
+  await elegirOpcion(page, 'Forma de login', NOMBRE_DE_ESTRATEGIA[datos.estrategia]);
   if (datos.estrategia === 'formulario') {
     await entrada('Usuario').fill(datos.usuario);
     await entrada('Secreto').fill(datos.secreto);
@@ -59,7 +62,7 @@ async function agregarCredencial(
     await expect(entrada('Secreto')).toHaveCount(0);
     await entrada('URL donde se abre la ventana').fill(datos.urlLogin);
   }
-  await entrada('Tipo de indicador').selectOption('aparece');
+  await elegirOpcion(page, 'Tipo de indicador', 'Aparece un elemento');
   await entrada('Valor del indicador').fill('#menu-usuario');
   await boton('Guardar credencial').click();
   await expect(page.getByRole('heading', { name: datos.nombre })).toBeVisible();
@@ -99,8 +102,12 @@ test.afterAll(async () => {
 });
 
 test('sin credenciales, la única opción es el escaneo anónimo', async () => {
-  const opciones = page.getByLabel('Iniciar sesión con').locator('option');
-  await expect(opciones).toHaveText(['Sin credencial: escaneo anónimo']);
+  await listaDesplegable(page, 'Iniciar sesión con').click();
+  await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
+    'Sin credencial: escaneo anónimo',
+  ]);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toBeHidden();
 });
 
 test('formulario: el escaneo entra con el rol elegido y nunca toca «Salir»', async () => {
@@ -112,7 +119,7 @@ test('formulario: el escaneo entra con el rol elegido y nunca toca «Salir»', a
     secreto: USUARIOS_APP.admin.clave,
     urlLogin: `${sitio.url}/app/login`,
   });
-  await page.getByLabel('Iniciar sesión con').selectOption({ label: 'admin · Administración' });
+  await elegirOpcion(page, 'Iniciar sesión con', 'admin · Administración');
   await boton('Lanzar ejecución').click();
   await expect(ejecucion()).toContainText('Ejecución con el rol admin: Finalizada', {
     timeout: 120_000,
@@ -142,9 +149,7 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
     urlLogin: `${sitio.url}/app/login-push`,
   });
   await expect(page.getByText('Secreto: ninguno, entrás a mano en la ventana.')).toBeVisible();
-  await page
-    .getByLabel('Iniciar sesión con')
-    .selectOption({ label: 'admin con segundo factor · Con teléfono' });
+  await elegirOpcion(page, 'Iniciar sesión con', 'admin con segundo factor · Con teléfono');
   await expect(page.getByText(/Se va a abrir una ventana del navegador de pruebas/)).toBeVisible();
   const temporalAntes = new Set(readdirSync(os.tmpdir()));
   const loginsAntes = sitio.autenticacion.registro.logins.length;

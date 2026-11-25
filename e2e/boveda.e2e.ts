@@ -52,7 +52,9 @@ const coloresDelLogo = (pagina: Page) =>
 const LOGO_CLARO = { simbolo: 'rgb(91, 91, 214)', escaneo: 'rgb(156, 156, 242)' };
 const LOGO_OSCURO = { simbolo: 'rgb(109, 109, 227)', escaneo: 'rgb(199, 201, 255)' };
 
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 
 /** Escrita pero sin enviar: ningún atributo la refleja, aunque el campo la tenga. */
 async function verificarSinReflejo(
@@ -153,7 +155,7 @@ test('el tema elegido se guarda en la configuración cifrada', async () => {
   await expect(titulo('Bóveda bloqueada')).toBeVisible();
   await desbloquear();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Oscuro' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('radio', { name: 'Oscuro' })).toBeChecked();
   await expect.poll(fondo).toBe('rgb(11, 13, 18)');
 });
 
@@ -335,7 +337,7 @@ test('una carpeta sincronizada se advierte, y al cancelar no se escribe nada', a
 });
 
 test('los minutos de bloqueo se configuran, y una restauración vuelve a los de la copia', async () => {
-  const minutos = page.getByLabel('Minutos sin actividad');
+  const minutos = entrada('Minutos sin actividad');
   await expect(minutos).toHaveValue('15');
   await minutos.fill('30');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
@@ -353,7 +355,7 @@ test('los minutos de bloqueo se configuran, y una restauración vuelve a los de 
   await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
   await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
   await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
-  await expect(page.getByLabel('Minutos sin actividad')).toHaveValue('15');
+  await expect(entrada('Minutos sin actividad')).toHaveValue('15');
 });
 
 /** Aísla la ventana del mouse y del teclado reales del equipo, solo durante una espera. */
@@ -398,7 +400,7 @@ async function aislarVentana(): Promise<() => Promise<void>> {
 
 test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', async () => {
   test.setTimeout(120_000);
-  const minutos = page.getByLabel('Minutos sin actividad');
+  const minutos = entrada('Minutos sin actividad');
   await minutos.fill('1');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();

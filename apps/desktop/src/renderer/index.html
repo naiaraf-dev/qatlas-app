@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
     <title>QAtlas</title>
+    <!--
+      React Aria agrega un <style id="react-aria-pressable-style"> si no encuentra un elemento con ese id.
+      La CSP (style-src 'self') lo bloquearía: la regla va en styles.css, y este marcador vacío le dice que
+      ya está (ADR 042). El E2E de la CSP falla si una versión nueva lo vuelve a inyectar.
+    -->
+    <template id="react-aria-pressable-style"></template>
   </head>
   <body>
     <div id="root"></div>

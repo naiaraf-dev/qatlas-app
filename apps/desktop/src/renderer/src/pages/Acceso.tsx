@@ -3,6 +3,7 @@ import type { VaultStatus } from '@qatlas/shared';
 import { Icon, Logo } from '../ui/Icon';
 import { Button, Card, cx } from '../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../ui/EntradaSensible';
+import { Casilla, Desplegable } from '../ui/controles';
 
 /** Pantallas previas al desbloqueo. No muestran ningún dato de la bóveda (RN-BOV-03). */
 
@@ -224,26 +225,20 @@ export function PrimerInicio({ onListo }: { onListo: () => void }) {
             Si perdés la contraseña, tus datos son irrecuperables: nadie, tampoco QAtlas, puede
             abrirlos. Después de crear la bóveda, hacé una copia de seguridad.
           </p>
-          <label className="mt-3 flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={entiende}
-              onChange={(event) => {
-                setEntiende(event.target.checked);
-              }}
-              className="mt-1 size-4 accent-[var(--qa-accent)]"
+          <div className="mt-3">
+            <Casilla
+              etiqueta="Entiendo que, si la pierdo, no hay recuperación."
+              marcada={entiende}
+              onChange={setEntiende}
             />
-            <span>Entiendo que, si la pierdo, no hay recuperación.</span>
-          </label>
+          </div>
         </div>
 
-        <label className="flex items-start gap-2.5 text-muted">
-          <input type="checkbox" disabled className="mt-1 size-4" />
-          <span>
-            Buscar actualizaciones.{' '}
-            <span className="text-[13px]">Llega en: semana 10. Hasta entonces, desactivado.</span>
-          </span>
-        </label>
+        <Casilla
+          etiqueta="Buscar actualizaciones."
+          ayuda="Llega en: semana 10. Hasta entonces, desactivado."
+          deshabilitada
+        />
 
         {error && <Aviso tono="error">{error}</Aviso>}
         <Button type="submit" variant="primary" icon="lock" disabled={!puedeCrear}>
@@ -295,12 +290,14 @@ function RestaurarCopia({ onListo }: { onListo: () => void }) {
 
 export function RestaurarEnPrimerInicio({ onListo }: { onListo: () => void }) {
   return (
-    <details className="w-full max-w-lg self-center rounded-[var(--radius-card)] border border-border bg-surface p-4">
-      <summary className="cursor-pointer font-medium">Ya tengo una copia de seguridad</summary>
-      <div className="mt-4">
+    <Desplegable
+      titulo="Ya tengo una copia de seguridad"
+      className="w-full max-w-lg self-center rounded-[var(--radius-card)] border border-border bg-surface p-4"
+    >
+      <div className="mt-2">
         <RestaurarCopia onListo={onListo} />
       </div>
-    </details>
+    </Desplegable>
   );
 }
 

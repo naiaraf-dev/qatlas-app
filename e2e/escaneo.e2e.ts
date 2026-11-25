@@ -31,7 +31,9 @@ test.describe.configure({ mode: 'serial', timeout: 180_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const ejecucion = () =>
   page.getByRole('list', { name: 'Ejecuciones del proyecto' }).locator(':scope > li').first();
