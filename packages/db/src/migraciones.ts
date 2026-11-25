@@ -289,6 +289,13 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX evidencia_creada ON evidencia(created_at);
     `,
   },
+  {
+    version: 9,
+    // La barra lateral, expandida o colapsada: una preferencia de la interfaz, cifrada como el tema.
+    sql: `
+      ALTER TABLE configuracion ADD COLUMN barra_lateral TEXT NOT NULL DEFAULT 'expandida';
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

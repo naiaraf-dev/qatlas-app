@@ -60,10 +60,15 @@ export type ConnectionEntry = z.infer<typeof ConnectionEntry>;
 export const ThemePreference = z.enum(['system', 'light', 'dark']);
 export type ThemePreference = z.infer<typeof ThemePreference>;
 
+/** La barra lateral. Con la bóveda bloqueada no se conoce (va cifrada): vale el valor por defecto. */
+export const BarraLateral = z.enum(['expandida', 'colapsada']);
+export type BarraLateral = z.infer<typeof BarraLateral>;
+
 export const AppearanceState = z
   .object({
     preference: ThemePreference,
     effective: z.enum(['light', 'dark']),
+    barraLateral: BarraLateral,
   })
   .strict();
 export type AppearanceState = z.infer<typeof AppearanceState>;
@@ -521,6 +526,12 @@ export const ipcContract = {
   'appearance:get': { request: Empty, response: AppearanceState },
   'appearance:setTheme': {
     request: z.object({ preference: ThemePreference }).strict(),
+    response: AppearanceState,
+  },
+  // Se guarda en la configuración cifrada: con la bóveda bloqueada, se rechaza (no está en
+  // CANALES_SIN_BOVEDA).
+  'appearance:setBarraLateral': {
+    request: z.object({ estado: BarraLateral }).strict(),
     response: AppearanceState,
   },
   'vault:getStatus': { request: Empty, response: VaultStatus },

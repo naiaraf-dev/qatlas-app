@@ -246,7 +246,11 @@ describe('TS-08 · Canales de la bóveda', () => {
   it('el tema se rechaza con la bóveda bloqueada, porque se guarda cifrado', async () => {
     const handler = createIpcHandler(
       'appearance:setTheme',
-      ({ preference }) => ({ preference, effective: 'dark' as const }),
+      ({ preference }) => ({
+        preference,
+        effective: 'dark' as const,
+        barraLateral: 'expandida' as const,
+      }),
       { isAllowedSender, isVaultLocked: () => true },
     );
     expect(await handler(fromApp, { preference: 'dark' })).toEqual({
@@ -573,7 +577,11 @@ describe('TS-08 · Canales de proyectos y credenciales', () => {
 describe('TS-08 · Canal de apariencia', () => {
   const handler = createIpcHandler(
     'appearance:setTheme',
-    ({ preference }) => ({ preference, effective: 'dark' as const }),
+    ({ preference }) => ({
+      preference,
+      effective: 'dark' as const,
+      barraLateral: 'expandida' as const,
+    }),
     { isAllowedSender },
   );
 
@@ -589,6 +597,49 @@ describe('TS-08 · Canal de apariencia', () => {
     ['tipo incorrecto', { preference: 1 }],
   ])('rechaza: %s', async (_label, payload) => {
     expect(await handler(fromApp, payload)).toEqual({ ok: false, error: 'ENTRADA_INVALIDA' });
+  });
+});
+
+describe('TS-08 · Barra lateral', () => {
+  const responder = ({ estado }: { estado: 'expandida' | 'colapsada' }) => ({
+    preference: 'system' as const,
+    effective: 'light' as const,
+    barraLateral: estado,
+  });
+
+  it.each(['expandida', 'colapsada'])('acepta "%s"', async (estado) => {
+    const handler = createIpcHandler('appearance:setBarraLateral', responder, { isAllowedSender });
+    expect((await handler(fromApp, { estado })).ok).toBe(true);
+  });
+
+  it.each([
+    ['valor fuera de la lista', { estado: 'oculta' }],
+    ['campo extra', { estado: 'colapsada', ancho: 9999 }],
+    ['tipo incorrecto', { estado: true }],
+    ['sin estado', {}],
+  ])('rechaza: %s', async (_label, payload) => {
+    const handler = createIpcHandler('appearance:setBarraLateral', responder, { isAllowedSender });
+    expect(await handler(fromApp, payload)).toEqual({ ok: false, error: 'ENTRADA_INVALIDA' });
+  });
+
+  it('se rechaza con la bóveda bloqueada, porque se guarda cifrada', async () => {
+    const handler = createIpcHandler('appearance:setBarraLateral', responder, {
+      isAllowedSender,
+      isVaultLocked: () => true,
+    });
+    expect(await handler(fromApp, { estado: 'colapsada' })).toEqual({
+      ok: false,
+      error: 'BOVEDA_BLOQUEADA',
+    });
+  });
+
+  it('la respuesta no puede traer otro valor', async () => {
+    const handler = createIpcHandler(
+      'appearance:setBarraLateral',
+      () => ({ preference: 'system', effective: 'light', barraLateral: 'gigante' }) as never,
+      { isAllowedSender },
+    );
+    expect((await handler(fromApp, { estado: 'colapsada' })).ok).toBe(false);
   });
 });
 

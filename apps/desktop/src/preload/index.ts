@@ -22,6 +22,7 @@ const api: QatlasApi = {
   appearance: {
     get: () => invoke('appearance:get'),
     setTheme: (req) => invoke('appearance:setTheme', req),
+    setBarraLateral: (req) => invoke('appearance:setBarraLateral', req),
   },
   privacy: {
     listConnections: (req) => invoke('privacy:listConnections', req),

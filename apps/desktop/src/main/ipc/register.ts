@@ -66,11 +66,16 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     // la media query prefers-color-scheme de la interfaz al mismo tiempo.
     // La preferencia se guarda en la configuración cifrada: con la bóveda
     // bloqueada no se conoce, y las pantallas siguen al sistema.
-    'appearance:get': () => currentAppearance(),
+    'appearance:get': () => currentAppearance(boveda),
     'appearance:setTheme': ({ preference }) => {
       boveda.cambiarConfiguracion({ tema: preference });
       nativeTheme.themeSource = preference;
-      return currentAppearance();
+      return currentAppearance(boveda);
+    },
+    // Como el tema: va en la configuración cifrada, y con la bóveda bloqueada se usa «expandida».
+    'appearance:setBarraLateral': ({ estado }) => {
+      boveda.cambiarConfiguracion({ barraLateral: estado });
+      return currentAppearance(boveda);
     },
 
     'vault:getStatus': () => ({
@@ -172,9 +177,14 @@ function registerChannel<C extends IpcChannel>(
   ipcMain.handle(channel, createIpcHandler(channel, implementation, options));
 }
 
-function currentAppearance() {
+function currentAppearance(boveda: ServicioBoveda) {
   return {
     preference: nativeTheme.themeSource,
     effective: nativeTheme.shouldUseDarkColors ? ('dark' as const) : ('light' as const),
+    // Con la bóveda bloqueada no se conoce (va cifrada): se usa el valor por defecto.
+    barraLateral:
+      boveda.estado() === 'desbloqueada'
+        ? boveda.configuracion().barraLateral
+        : ('expandida' as const),
   };
 }

@@ -202,6 +202,7 @@ describe('Migraciones', () => {
     expect(columnas('configuracion')).toEqual(
       [
         'actualizaciones_activas',
+        'barra_lateral',
         'bloqueo_minutos',
         'created_at',
         'id',
@@ -214,6 +215,17 @@ describe('Migraciones', () => {
   });
 });
 
+/** La fila de configuración como la dejaba la versión 8, sin la barra lateral. */
+function inicializarDatosV8(base: BaseCifrada): void {
+  base
+    .prepare(
+      `INSERT INTO configuracion (id, created_at, updated_at, bloqueo_minutos,
+         actualizaciones_activas, retencion_dias, idioma, tema)
+       VALUES ('config-v8', '2026-11-01', '2026-11-01', 15, 0, 90, 'es', 'system')`,
+    )
+    .run();
+}
+
 describe('Configuración', () => {
   it('guarda y lee los valores, con los valores por defecto de la especificación', () => {
     const base = abrir(path.join(carpeta, 'b.db'));
@@ -223,6 +235,19 @@ describe('Configuración', () => {
     expect(CONFIGURACION_POR_DEFECTO.bloqueoMinutos).toBe(15);
     guardarConfiguracion(base, { bloqueoMinutos: 30, tema: 'dark' });
     expect(leerConfiguracion(base)).toMatchObject({ bloqueoMinutos: 30, tema: 'dark' });
+  });
+
+  it('la barra lateral: una bóveda de la versión 8 queda expandida, y se guarda colapsada', () => {
+    const base = abrir(path.join(carpeta, 'b.db'));
+    migrar(
+      base,
+      MIGRACIONES.filter((m) => m.version <= 8),
+    );
+    inicializarDatosV8(base);
+    migrar(base);
+    expect(leerConfiguracion(base).barraLateral).toBe('expandida');
+    guardarConfiguracion(base, { barraLateral: 'colapsada' });
+    expect(leerConfiguracion(base).barraLateral).toBe('colapsada');
   });
 
   it('sin fila de configuración falla cerrado', () => {
