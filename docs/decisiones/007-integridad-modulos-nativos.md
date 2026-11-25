@@ -10,7 +10,9 @@ de Electron no dice que su validación de integridad cubra esos archivos, así q
 módulo manipulado corre dentro del proceso principal y ve la contraseña y las claves (amenaza A-21).
 
 Los dos paquetes nativos, `argon2` y `better-sqlite3-multiple-ciphers`, traen sus binarios precompilados
-en `prebuilds/`, para varias plataformas, y no tienen script de instalación (ADR 005 y 006).
+en `prebuilds/`, para varias plataformas. Ninguno se compila al instalar: `argon2` declara
+`install: node-gyp-build` y `better-sqlite3-multiple-ciphers` trae `binding.gyp` (con `"gypfile": false`),
+pero `ignore-scripts=true` bloquea los dos y ninguno está en la lista permitida (ADR 005 y 006).
 
 ## Qué garantizaba antes, y el hueco
 
