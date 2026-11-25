@@ -114,3 +114,24 @@ describe('scripts de instalación', () => {
     }
   });
 });
+
+describe('versión de npm (ADR 040)', () => {
+  const paquete = JSON.parse(readFileSync(path.join(RAIZ, 'package.json'), 'utf8')) as {
+    packageManager?: string;
+    engines?: Record<string, string>;
+  };
+
+  it('packageManager y engines.npm fijan la misma versión, y engine-strict la hace cumplir', () => {
+    expect(paquete.packageManager).toBe('npm@10.9.3');
+    expect(paquete.engines?.npm).toBe('>=10.9.3 <11');
+    const npmrc = readFileSync(path.join(RAIZ, '.npmrc'), 'utf8');
+    expect(npmrc).toMatch(/^engine-strict=true$/m);
+  });
+
+  it('el npm que corre los tests cumple el rango', () => {
+    const version = execSync('npm --version', { cwd: RAIZ, encoding: 'utf8' }).trim();
+    const [mayor = 0, menor = 0, parche = 0] = version.split('.').map(Number);
+    expect(mayor, version).toBe(10);
+    expect(menor > 9 || (menor === 9 && parche >= 3), version).toBe(true);
+  });
+});

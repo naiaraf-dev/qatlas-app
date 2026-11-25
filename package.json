@@ -10,8 +10,10 @@
     "packages/*",
     "security-tests"
   ],
+  "packageManager": "npm@10.9.3",
   "engines": {
-    "node": ">=22.15"
+    "node": ">=22.15",
+    "npm": ">=10.9.3 <11"
   },
   "scripts": {
     "setup": "npm ci && npm run setup:native",
