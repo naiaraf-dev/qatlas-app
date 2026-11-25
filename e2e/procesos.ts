@@ -17,7 +17,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, type test as pruebaBase } from '@playwright/test';
-import { descendientes, procesos } from './arbol-procesos';
+import { descendientes, identidad, procesos } from './arbol-procesos';
 
 const RESUMEN = path.resolve(import.meta.dirname, '..', 'test-results', 'procesos-y-memoria.txt');
 const INTERVALO_MS = 5000;
@@ -31,12 +31,14 @@ export function vigilarProcesos(test: typeof pruebaBase, archivo: string): void 
   // Solo en el worker: el proceso principal de Playwright también carga los archivos para listarlos.
   if (process.env.TEST_WORKER_INDEX === undefined) return;
   const nombre = path.basename(archivo);
-  const previos = new Set(descendientes(procesos(), process.pid).map((p) => p.pid));
+  // Por PID y hora de creación: Windows reutiliza los PID (e2e/arbol-procesos.ts).
+  const previos = new Set(descendientes(procesos(), process.pid).map(identidad));
   const libreAlEmpezar = os.freemem();
-  const vistos = new Map<number, string>();
+  const vistos = new Map<string, { pid: number; tipo: string }>();
   const anotar = () => {
     for (const p of descendientes(procesos(), process.pid)) {
-      if (!previos.has(p.pid)) vistos.set(p.pid, tipo(p.nombre));
+      const clave = identidad(p);
+      if (!previos.has(clave)) vistos.set(clave, { pid: p.pid, tipo: tipo(p.nombre) });
     }
   };
   const temporizador = setInterval(() => {
@@ -59,8 +61,8 @@ export function vigilarProcesos(test: typeof pruebaBase, archivo: string): void 
     let vivos: { pid: number; tipo: string }[];
     const limite = Date.now() + ESPERA_MAXIMA_MS;
     do {
-      const activos = new Set(procesos().map((p) => p.pid));
-      vivos = [...vistos].filter(([pid]) => activos.has(pid)).map(([pid, t]) => ({ pid, tipo: t }));
+      const activos = new Set(procesos().map(identidad));
+      vivos = [...vistos].filter(([clave]) => activos.has(clave)).map(([, v]) => v);
       if (vivos.length === 0) break;
       await new Promise((listo) => setTimeout(listo, 500));
     } while (Date.now() < limite);
