@@ -16,6 +16,7 @@ import type { QatlasApi } from '@qatlas/shared';
 import { vigilarEntorno } from './entorno';
 import { listaDesplegable } from './controles';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 const SECRETO = 'CANARIO-clave-de-prueba-inventada-41';
@@ -329,3 +330,6 @@ test('el nombre queda libre y el proyecto no vuelve al desbloquear', async () =>
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

@@ -22,6 +22,7 @@ import {
 import { vigilarEntorno } from './entorno';
 import { capturar, ponerTema, revisarAccesibilidad } from './interfaz';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -247,3 +248,6 @@ test('f6: desactivado y activado otra vez, se eliminan con confirmación, y la c
 test('CSP: ninguna violación en todo el recorrido, con el visor, el deslizador y el diálogo', () => {
   expect(consola.filter((linea) => /Content Security Policy/i.test(linea))).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

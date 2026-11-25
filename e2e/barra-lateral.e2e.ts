@@ -25,6 +25,7 @@ import {
   vigilarCsp,
 } from './interfaz';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 let app: ElectronApplication;
 let page: Page;
@@ -163,3 +164,6 @@ test('axe sin violaciones (roles, nombres, contraste) y capturas, en los dos mod
 test('sin violaciones de la CSP en todo el recorrido', () => {
   expect(csp).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

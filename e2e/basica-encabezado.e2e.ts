@@ -21,6 +21,7 @@ import { opcionesChromium } from '../packages/runner/src/motor/motor';
 import { ponerBasica } from '../packages/runner/src/motor/sesion';
 import { vigilarEntorno } from './entorno';
 import { generarCertificado } from './fixtures/certificado';
+import { vigilarProcesos } from './procesos';
 
 const USUARIO = 'ana';
 const CLAVE = 'clave-basica-de-prueba-41';
@@ -163,3 +164,6 @@ test('fuga conocida (fase 2): una redirección a otro origen se lleva el encabez
     }
   }
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

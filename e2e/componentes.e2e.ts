@@ -30,6 +30,7 @@ import {
   vigilarCsp,
 } from './interfaz';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 let app: ElectronApplication;
 let page: Page;
@@ -229,3 +230,6 @@ test('control positivo: un <style> inyectado a propósito se detecta', async () 
   await expect.poll(() => csp.length).toBeGreaterThan(0);
   expect(csp.join('\n')).toMatch(/style-src/);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

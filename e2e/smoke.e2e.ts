@@ -22,6 +22,7 @@ import {
 } from '@playwright/test';
 import { diferenciasDeEntorno, restaurarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -194,3 +195,6 @@ test('Escaneos y Ejecuciones dicen que hoy se lanzan desde cada proyecto, y llev
   await page.getByRole('button', { name: 'Ir a Proyectos' }).click();
   await expect(page.getByRole('heading', { name: 'Proyectos', level: 1 })).toBeVisible();
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

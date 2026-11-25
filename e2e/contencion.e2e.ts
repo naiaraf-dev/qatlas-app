@@ -44,6 +44,7 @@ import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
 import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
 import { restaurarEntorno, vigilarEntorno } from './entorno';
 import { delSitio } from './ruido';
+import { vigilarProcesos } from './procesos';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 const manifiesto = JSON.parse(
@@ -801,3 +802,6 @@ test.describe('Perfil en memoria (ADR 018)', () => {
     }
   });
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

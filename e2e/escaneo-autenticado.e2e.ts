@@ -33,6 +33,7 @@ import { vigilarEntorno } from './entorno';
 import { compararConOraculo, resumenLegible, type Esperado } from './oraculo';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { vigilarProcesos } from './procesos';
 
 interface Escenario {
   estrategia: DatosAutenticacion['estrategia'];
@@ -325,3 +326,6 @@ test.describe('con la sesión que vence a mitad del escaneo', () => {
     expect(JSON.stringify(resultado.hallazgos)).not.toContain(token);
   });
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

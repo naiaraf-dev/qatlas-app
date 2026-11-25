@@ -47,12 +47,12 @@ algunos no siguen bien su patrón de accesibilidad (el selector de modo era un `
 
 Medido sobre el build, solo con los componentes importados:
 
-- JavaScript de la interfaz: de 414 KB (123 KB con gzip) a 671 KB (201 KB con gzip). Son +257 KB (+78 KB con
-  gzip), con los componentes propios incluidos.
+- JavaScript de la interfaz: de 414 KB (123 KB con gzip) a 655 KB (193 KB con gzip), con los componentes
+  propios incluidos.
+- Las traducciones: **@react-aria/optimize-locales-plugin 2.1.0** (solo desarrollo, Apache-2.0, versión
+  exacta; suma unplugin, picomatch y webpack-virtual-modules, MIT; ninguno con script de instalación) deja
+  solo las de español (es-ES, que usa es-AR). Bajó 15 KB (8 KB con gzip): de 671 KB a 655 KB.
 - CSS: de 19,9 KB a 26,8 KB (+1,3 KB con gzip).
-- Incluye las traducciones de los 34 idiomas de React Aria. El plugin oficial
-  `@react-aria/optimize-locales-plugin` dejaría solo el español; es una dependencia nueva de desarrollo y
-  queda a consulta.
 
 ## Verificación
 

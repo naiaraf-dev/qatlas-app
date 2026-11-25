@@ -34,6 +34,7 @@ import { vigilarEntorno } from './entorno';
 import { DE_GOOGLE, delSitio } from './ruido';
 import { lanzarApp } from './lanzar';
 import { elegirOpcion } from './controles';
+import { vigilarProcesos } from './procesos';
 
 // El service worker no se registra, así que su destino nunca se intenta.
 const HOSTS_DE_FUGA_DEL_RECORRIDO = HOSTS_DE_FUGA.filter((host) => host !== 'sw.fuga.invalid');
@@ -585,3 +586,6 @@ test('eliminar el proyecto purga sus ejecuciones y sus conexiones', async () => 
   await boton('Actualizar').click();
   await expect(page.getByText('fuera-de-dominios')).toHaveCount(0);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

@@ -14,6 +14,7 @@ import {
   RUTA_FUENTE,
 } from '../apps/sandbox-site/src/servidor.mjs';
 import { contiene, crearOcr, normalizar } from './ocr';
+import { vigilarProcesos } from './procesos';
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -85,3 +86,6 @@ test('tesseract.js no entra en la app: ni en sus dependencias ni en el build', (
   recorrer(salida);
   expect(conTesseract).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

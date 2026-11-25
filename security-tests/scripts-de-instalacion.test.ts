@@ -184,3 +184,44 @@ describe('react-aria-components (ADR 042)', () => {
     }
   });
 });
+
+describe('@react-aria/optimize-locales-plugin (ADR 042, solo desarrollo)', () => {
+  const PAQUETES = [
+    '@react-aria/optimize-locales-plugin',
+    'unplugin',
+    'picomatch',
+    'webpack-virtual-modules',
+  ];
+
+  it('versión exacta, solo de desarrollo', () => {
+    const app = JSON.parse(readFileSync(path.join(RAIZ, 'apps/desktop/package.json'), 'utf8')) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    expect(app.devDependencies['@react-aria/optimize-locales-plugin']).toBe('2.1.0');
+    expect(app.dependencies['@react-aria/optimize-locales-plugin']).toBeUndefined();
+  });
+
+  it('sus paquetes no tienen script de instalación, y las licencias son las revisadas', () => {
+    for (const nombre of PAQUETES) {
+      const clave = `node_modules/${nombre}`;
+      const entrada = (lock.packages[clave] ?? {}) as EntradaLock & { license?: string };
+      const paquete = leerPaquete(clave);
+      expect(paquete, nombre).toBeDefined();
+      const scripts = (paquete?.scripts ?? {}) as Record<string, unknown>;
+      expect(entrada.hasInstallScript, nombre).not.toBe(true);
+      expect(
+        ['preinstall', 'install', 'postinstall'].filter((s) => s in scripts),
+        nombre,
+      ).toEqual([]);
+      expect(existsSync(path.join(RAIZ, clave, 'binding.gyp')), nombre).toBe(false);
+      // El plugin no declara la licencia en su package.json: su archivo LICENSE es Apache 2.0.
+      const licencia =
+        entrada.license ??
+        (readFileSync(path.join(RAIZ, clave, 'LICENSE'), 'utf8').includes('Apache License')
+          ? 'Apache-2.0'
+          : 'desconocida');
+      expect(['MIT', 'Apache-2.0'], `${nombre}: ${licencia}`).toContain(licencia);
+    }
+  });
+});

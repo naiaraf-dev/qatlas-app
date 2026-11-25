@@ -23,6 +23,7 @@ import { iniciarProxy, type ProxyActivo } from '../packages/runner/src/red/proxy
 import { vigilarEntorno } from './entorno';
 import { generarCertificado } from './fixtures/certificado';
 import { compararConOraculo, manifiesto, resumenLegible } from './oraculo';
+import { vigilarProcesos } from './procesos';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 
@@ -143,3 +144,6 @@ test('el detalle de un hallazgo lleva lo que puede ser sensible; el título y la
     expect(h.url).not.toContain('?');
   }
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

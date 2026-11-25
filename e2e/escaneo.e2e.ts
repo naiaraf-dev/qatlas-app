@@ -19,6 +19,7 @@ import { iniciarSandbox, type SandboxActivo } from '../apps/sandbox-site/src/ser
 import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 import { compararConOraculo, manifiesto, resumenLegible } from './oraculo';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -147,3 +148,6 @@ test('lo encontrado coincide con el oráculo, sin inesperados', async () => {
   expect(sitio.registro.fugas).toEqual([]);
   expect(sitio.registro.trampas).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

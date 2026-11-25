@@ -17,6 +17,7 @@ import {
 } from '@playwright/test';
 import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 const OTRA = 'cometa-verde-sobre-el-rio-58';
@@ -463,3 +464,6 @@ test('freno ante intentos repetidos: a los 5 fallos hay que esperar', async () =
   await entrada('Contraseña maestra').fill(CONTRASENA);
   await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeDisabled();
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

@@ -26,6 +26,7 @@ import {
 import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 import { elegirOpcion, listaDesplegable, NOMBRE_DE_ESTRATEGIA } from './controles';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -184,3 +185,6 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
   // Al terminar, la carpeta de la ejecución se borra, con el perfil de la ventana adentro.
   await expect.poll(() => readdirSync(perfiles)).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);
