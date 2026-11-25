@@ -21,8 +21,9 @@ import {
 import {
   abrirContexto,
   abrirNavegador,
-  ARGUMENTOS_CHROMIUM,
+  opcionesChromium,
 } from '../packages/runner/src/motor/motor';
+import type { OpcionesChromium } from '../packages/runner/src/motor/opciones-chromium';
 import {
   iniciarProxy,
   type ProxyActivo,
@@ -30,6 +31,7 @@ import {
 } from '../packages/runner/src/red/proxy';
 import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
 import { vigilarEntorno } from './entorno';
+import { delSitio } from './ruido';
 import { generarCertificado, type CertificadoDePrueba } from './fixtures/certificado';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
@@ -51,7 +53,10 @@ const resolver = (host: string) => {
   return ip ? Promise.resolve([ip]) : Promise.reject(new Error('ENOTFOUND'));
 };
 
-async function conMotor(politica: PoliticaDeRed, argumentos: string[] = []): Promise<Browser> {
+async function conMotor(
+  politica: PoliticaDeRed,
+  extra: Pick<OpcionesChromium, 'argumentos' | 'funcionesApagadas'> = {},
+): Promise<Browser> {
   conexiones = [];
   proxy = await iniciarProxy({
     politica,
@@ -60,7 +65,7 @@ async function conMotor(politica: PoliticaDeRed, argumentos: string[] = []): Pro
     resolver,
   });
   const servidor = `http://127.0.0.1:${proxy.puerto}`;
-  if (argumentos.length === 0) {
+  if (!extra.argumentos && !extra.funcionesApagadas) {
     return abrirNavegador({
       politica: {
         ...politica,
@@ -71,13 +76,8 @@ async function conMotor(politica: PoliticaDeRed, argumentos: string[] = []): Pro
       timeoutPaginaMs: 5000,
     });
   }
-  return chromium.launch({
-    channel: 'chromium',
-    headless: true,
-    chromiumSandbox: true,
-    args: [...ARGUMENTOS_CHROMIUM, ...argumentos],
-    proxy: { server: servidor, username: CREDENCIAL.usuario, password: CREDENCIAL.clave },
-  });
+  // Las opciones de la app, con algo de más: los mismos frenos, más lo que el test agrega.
+  return chromium.launch(opcionesChromium({ proxy: { servidor, ...CREDENCIAL }, ...extra }));
 }
 
 async function cerrar(): Promise<void> {
@@ -137,11 +137,12 @@ test.describe('WebRTC', () => {
   });
 
   test('control: sin los argumentos, llega al receptor UDP y expone una dirección del equipo', async () => {
-    const directo = await chromium.launch({
-      channel: 'chromium',
-      headless: true,
-      args: [`--disable-features=${FLAGS_SIN_MDNS}`],
-    });
+    const directo = await chromium.launch(
+      opcionesChromium({
+        funcionesApagadas: [FLAGS_SIN_MDNS],
+        control: { sinArgumentosDeRed: true },
+      }),
+    );
     const resultado = await resultadoWebrtc(directo);
     await directo.close();
     expect(sitio.registro.udp.length).toBeGreaterThan(0);
@@ -159,9 +160,7 @@ test.describe('WebRTC', () => {
   });
 
   test('tampoco expone nada sin la ocultación por mDNS: el freno no depende de ella', async () => {
-    navegador = await conMotor(POLITICA(), [
-      `--disable-features=PreconnectToSearch,AutofillServerCommunication,${FLAGS_SIN_MDNS}`,
-    ]);
+    navegador = await conMotor(POLITICA(), { funcionesApagadas: [FLAGS_SIN_MDNS] });
     const resultado = await resultadoWebrtc(navegador);
     await cerrar();
     expect(sitio.registro.udp).toEqual([]);
@@ -190,11 +189,12 @@ test.describe('QUIC / HTTP3', () => {
   const urlQuic = () => `https://${HOST_QUIC}:${sitio.puertoUdp}/`;
 
   test('control: sin los argumentos, llega al receptor UDP', async () => {
-    const directo = await chromium.launch({
-      channel: 'chromium',
-      headless: true,
-      args: ['--enable-quic', forzar(), `--host-resolver-rules=MAP ${HOST_QUIC} 127.0.0.1`],
-    });
+    const directo = await chromium.launch(
+      opcionesChromium({
+        argumentos: ['--enable-quic', forzar(), `--host-resolver-rules=MAP ${HOST_QUIC} 127.0.0.1`],
+        control: { sinArgumentosDeRed: true },
+      }),
+    );
     const pagina = await (await directo.newContext({ ignoreHTTPSErrors: true })).newPage();
     await pagina.goto(urlQuic(), { timeout: 4000 }).catch(() => undefined);
     await directo.close();
@@ -209,7 +209,7 @@ test.describe('QUIC / HTTP3', () => {
         sistemaInterno: false,
         puertosLocales: [],
       },
-      [forzar()],
+      { argumentos: [forzar()] },
     );
     const pagina = await (await navegador.newContext({ ignoreHTTPSErrors: true })).newPage();
     await pagina.goto(urlQuic(), { timeout: 4000 }).catch(() => undefined);
@@ -283,8 +283,8 @@ test.describe('HTTPS: sesión TLS completa por el túnel', () => {
     expect(sitio.registro.https).toContain(`/${CANARIO_RUTA}`);
     expect(sitio.registro.https).toContain('POST /login');
     // Del lado del proxy, solo host y puerto.
-    expect(conexiones.length).toBeGreaterThan(0);
-    for (const conexion of conexiones) {
+    expect(delSitio(conexiones).length).toBeGreaterThan(0);
+    for (const conexion of delSitio(conexiones)) {
       expect(conexion.destino).toBe(`${HOST_SITIO}:${sitio.puertoHttps}`);
     }
     const visto = JSON.stringify(conexiones);
@@ -345,12 +345,13 @@ test.describe('HTTPS: sesión TLS completa por el túnel', () => {
     await expect(pagina.goto(`https://pixel.fuga.example:${sitio.puertoHttps}/`)).rejects.toThrow();
     await cerrar();
     expect(sitio.registro.fugas).toEqual([]);
-    expect(conexiones).toEqual([
-      {
-        destino: `pixel.fuga.example:${sitio.puertoHttps}`,
-        permitida: false,
-        regla: 'fuera-de-dominios',
-      },
-    ]);
+    // Por su destino: lo que el navegador intente aparte no es de este test (el ruido se prueba en
+    // navegador-ruido.e2e.ts). Y nada salió permitido.
+    expect(conexiones).toContainEqual({
+      destino: `pixel.fuga.example:${sitio.puertoHttps}`,
+      permitida: false,
+      regla: 'fuera-de-dominios',
+    });
+    expect(conexiones.filter((c) => c.permitida)).toEqual([]);
   });
 });

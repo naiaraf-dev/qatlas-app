@@ -23,4 +23,10 @@ export {
   type ClaveProyectoNueva,
 } from './claves';
 export { cifrarCampo, descifrarCampo } from './campos';
-export { crearCifradorArchivo, crearDescifradorArchivo, TAMANO_BLOQUE } from './archivos';
+export {
+  crearCifradorArchivo,
+  crearDescifradorArchivo,
+  crearSemillaEvidencia,
+  LONGITUD_SEMILLA,
+  TAMANO_BLOQUE,
+} from './archivos';

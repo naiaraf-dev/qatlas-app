@@ -17,7 +17,7 @@ import { createServer as crearHttps } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { chromium, type Browser } from 'playwright-core';
-import { ARGUMENTOS_CHROMIUM } from '../packages/runner/src/motor/motor';
+import { opcionesChromium } from '../packages/runner/src/motor/motor';
 import { ponerBasica } from '../packages/runner/src/motor/sesion';
 import { vigilarEntorno } from './entorno';
 import { generarCertificado } from './fixtures/certificado';
@@ -87,12 +87,7 @@ test.beforeAll(async () => {
   S_OTRO = `https://127.0.0.1:${puertoHttps}`;
   H = `http://localhost:${puertoHttp}`;
   H_OTRO = `http://127.0.0.1:${puertoHttp}`;
-  navegador = await chromium.launch({
-    channel: 'chromium',
-    headless: true,
-    chromiumSandbox: true,
-    args: [...ARGUMENTOS_CHROMIUM],
-  });
+  navegador = await chromium.launch(opcionesChromium());
 });
 
 test.afterAll(async () => {

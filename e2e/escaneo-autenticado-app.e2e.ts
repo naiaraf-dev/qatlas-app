@@ -147,6 +147,7 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
     .selectOption({ label: 'admin con segundo factor · Con teléfono' });
   await expect(page.getByText(/Se va a abrir una ventana del navegador de pruebas/)).toBeVisible();
   const temporalAntes = new Set(readdirSync(os.tmpdir()));
+  const loginsAntes = sitio.autenticacion.registro.logins.length;
   await boton('Lanzar ejecución').click();
 
   // Señal: la ventana llegó a la pantalla del segundo factor. Mientras tanto, la app lo dice.
@@ -170,7 +171,11 @@ test('asistido: avisa que se abre una ventana, espera el segundo factor y entra'
     'Ejecución con el rol admin con segundo factor: Finalizada',
     { timeout: 120_000 },
   );
-  expect(sitio.autenticacion.registro.logins.at(-1)).toEqual({ via: 'mfa', rol: 'admin' });
+  // Los logins de esta ejecución, no «el último» de todo el archivo.
+  expect(sitio.autenticacion.registro.logins.slice(loginsAntes)).toContainEqual({
+    via: 'mfa',
+    rol: 'admin',
+  });
   // Al terminar, la carpeta de la ejecución se borra, con el perfil de la ventana adentro.
   await expect.poll(() => readdirSync(perfiles)).toEqual([]);
 });

@@ -15,6 +15,7 @@ import {
 import { ErrorCripto } from './errores';
 
 const CLAVE = Buffer.alloc(32, 6);
+const SEMILLA = Buffer.alloc(32, 9);
 const ID = 'evidencia-1';
 const CABECERA = 44;
 const TAG = 16;
@@ -43,10 +44,10 @@ async function pasar(
   return { salida: Buffer.concat(recibido), recibido };
 }
 
-const cifrar = async (datos: Buffer, id = ID, clave = CLAVE) =>
-  (await pasar(crearCifradorArchivo(clave, id), datos)).salida;
-const descifrar = async (datos: Buffer, id = ID, clave = CLAVE) =>
-  (await pasar(crearDescifradorArchivo(clave, id), datos)).salida;
+const cifrar = async (datos: Buffer, id = ID, clave = CLAVE, semilla = SEMILLA) =>
+  (await pasar(crearCifradorArchivo(clave, id, semilla), datos)).salida;
+const descifrar = async (datos: Buffer, id = ID, clave = CLAVE, semilla = SEMILLA) =>
+  (await pasar(crearDescifradorArchivo(clave, id, semilla), datos)).salida;
 
 /** Separa un archivo cifrado en cabecera y bloques. */
 function partes(archivo: Buffer) {
@@ -81,7 +82,7 @@ describe('Archivos · ida y vuelta', () => {
   it('no depende de cómo llegan los trozos', async () => {
     const archivo = await cifrar(TRES_BLOQUES);
     for (const tamano of [1024, TAMANO_BLOQUE, BLOQUE_CIFRADO + 1, archivo.length]) {
-      const { salida } = await pasar(crearDescifradorArchivo(CLAVE, ID), archivo, tamano);
+      const { salida } = await pasar(crearDescifradorArchivo(CLAVE, ID, SEMILLA), archivo, tamano);
       expect(salida.equals(TRES_BLOQUES)).toBe(true);
     }
   });
@@ -96,14 +97,16 @@ describe('Archivos · ida y vuelta', () => {
   it('tiene el tamaño esperado del formato', async () => {
     const archivo = await cifrar(TRES_BLOQUES);
     expect(archivo.length).toBe(CABECERA + TRES_BLOQUES.length + 3 * TAG);
-    expect(archivo.subarray(0, 5).toString('latin1')).toBe('QATF\u0001');
+    expect(archivo.subarray(0, 5).toString('latin1')).toBe('QATF\u0002');
   });
 
   it('la clave de proyecto se puede borrar después de crear el stream', async () => {
     const clave = Buffer.alloc(32, 8);
     const archivo = await cifrar(TRES_BLOQUES, ID, clave);
-    const descifrador = crearDescifradorArchivo(clave, ID);
+    const semilla = Buffer.from(SEMILLA);
+    const descifrador = crearDescifradorArchivo(clave, ID, semilla);
     clave.fill(0);
+    semilla.fill(0);
     const { salida } = await pasar(descifrador, archivo);
     expect(salida.equals(TRES_BLOQUES)).toBe(true);
   });
@@ -199,7 +202,7 @@ describe('Archivos · manipulación', () => {
       },
     });
     await expect(
-      pipeline(Readable.from([archivo]), crearDescifradorArchivo(CLAVE, ID), destino),
+      pipeline(Readable.from([archivo]), crearDescifradorArchivo(CLAVE, ID, SEMILLA), destino),
     ).rejects.toThrow(ErrorCripto);
     const entregado = Buffer.concat(recibido);
     expect(entregado.length).toBeLessThanOrEqual(TAMANO_BLOQUE);
@@ -207,9 +210,24 @@ describe('Archivos · manipulación', () => {
   });
 
   it('rechaza un ID vacío y claves inválidas', () => {
-    expect(() => crearCifradorArchivo(CLAVE, '')).toThrow(ErrorCripto);
-    expect(() => crearDescifradorArchivo(CLAVE, '')).toThrow(ErrorCripto);
-    expect(() => crearCifradorArchivo(Buffer.alloc(16), ID)).toThrow(ErrorCripto);
+    expect(() => crearCifradorArchivo(CLAVE, '', SEMILLA)).toThrow(ErrorCripto);
+    expect(() => crearDescifradorArchivo(CLAVE, '', SEMILLA)).toThrow(ErrorCripto);
+    expect(() => crearCifradorArchivo(Buffer.alloc(16), ID, SEMILLA)).toThrow(ErrorCripto);
+    expect(() => crearCifradorArchivo(CLAVE, ID, Buffer.alloc(16))).toThrow(ErrorCripto);
+    expect(() => crearDescifradorArchivo(CLAVE, ID, Buffer.alloc(0))).toThrow(ErrorCripto);
+  });
+
+  it('con otra semilla no se descifra, aunque la clave del proyecto sea la misma', async () => {
+    const archivo = await cifrar(TRES_BLOQUES);
+    await expect(descifrar(archivo, ID, CLAVE, Buffer.alloc(32, 10))).rejects.toMatchObject({
+      codigo: 'AUTENTICACION',
+    });
+  });
+
+  it('un archivo de la versión 1 (sin semilla) se rechaza por su versión', async () => {
+    const archivo = Buffer.from(await cifrar(TRES_BLOQUES));
+    archivo[4] = 1;
+    await esperaError(archivo, 'VERSION');
   });
 
   it('falla cerrado si el contador llega al límite del formato', () => {
@@ -280,8 +298,8 @@ describe('Archivos · streaming', () => {
 
     await pipeline(
       origen,
-      crearCifradorArchivo(CLAVE, ID),
-      crearDescifradorArchivo(CLAVE, ID),
+      crearCifradorArchivo(CLAVE, ID, SEMILLA),
+      crearDescifradorArchivo(CLAVE, ID, SEMILLA),
       destino,
     );
 

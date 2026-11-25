@@ -338,7 +338,7 @@ test('los minutos de bloqueo se configuran, y una restauración vuelve a los de 
   const minutos = page.getByLabel('Minutos sin actividad');
   await expect(minutos).toHaveValue('15');
   await minutos.fill('30');
-  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();
 
   await page.getByLabel('Contraseña de la copia').fill(OTRA);
@@ -400,7 +400,7 @@ test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', as
   test.setTimeout(120_000);
   const minutos = page.getByLabel('Minutos sin actividad');
   await minutos.fill('1');
-  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
   await expect(page.getByText('Guardado.')).toBeVisible();
   const restaurar = await aislarVentana();
   try {

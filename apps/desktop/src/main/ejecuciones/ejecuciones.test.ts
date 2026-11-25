@@ -536,10 +536,36 @@ describe('Resultados del escaneo', () => {
     runnerActual?.emitir(terminado(2, 0));
     await pausa();
     expect(progresos.at(-1)?.estado).toBe('finalizada');
-    expect(ejecuciones.detalle(id)?.paginas).toEqual([
-      { url: 'http://localhost:5173/', status: 200, tiempoCargaMs: 120, profundidad: 1 },
-      { url: 'http://localhost:5173/panel', status: 200, tiempoCargaMs: 120, profundidad: 1 },
+    const paginas = ejecuciones.detalle(id)?.paginas ?? [];
+    expect(paginas).toEqual([
+      {
+        id: expect.any(String) as string,
+        url: 'http://localhost:5173/',
+        status: 200,
+        tiempoCargaMs: 120,
+        profundidad: 1,
+      },
+      {
+        id: expect.any(String) as string,
+        url: 'http://localhost:5173/panel',
+        status: 200,
+        tiempoCargaMs: 120,
+        profundidad: 1,
+      },
     ]);
+    expect(paginas[0]?.id).not.toBe(paginas[1]?.id);
+  });
+
+  it('una ocurrencia queda enlazada a la página donde apareció: sus evidencias', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    runnerActual?.emitir(hallazgo());
+    runnerActual?.emitir(pagina('http://localhost:5173/consola'));
+    runnerActual?.emitir(hallazgo());
+    const detalle = ejecuciones.detalle(id);
+    // La primera llegó antes de cualquier página; la segunda, después de la de /consola.
+    expect(detalle?.hallazgos.map((h) => h.paginaId)).toEqual([null, detalle?.paginas[0]?.id]);
   });
 
   it('una página con query: en claro va sin ella; la completa, cifrada', async () => {
@@ -580,6 +606,7 @@ describe('Resultados del escaneo', () => {
         urlOrigen: null,
         detalle: DETALLE,
         secretosRedactados: 0,
+        paginaId: null,
       },
     ]);
   });
@@ -706,6 +733,39 @@ describe('Monitor de conexiones', () => {
       ['otro.example:443', 'navegador', false, 'fuera-de-dominios'],
     ]);
     expect(ejecuciones.conexionesRecientes(10)).toHaveLength(3);
+  });
+
+  it('lo que el navegador intenta por su cuenta se guarda y se ve, pero no suma al resumen (ADR 041)', async () => {
+    const proyecto = crearProyecto();
+    const id = lanzar(proyecto);
+    await pausa();
+    alRegistrarProxy?.({
+      destino: 'accounts.google.com:443',
+      permitida: false,
+      regla: 'servicio-interno-navegador',
+    });
+    alRegistrarProxy?.({
+      destino: 'evil.example:80',
+      permitida: false,
+      regla: 'fuera-de-dominios',
+    });
+    runnerActual?.emitir(terminado(1, 0));
+    await pausa();
+
+    const detalle = ejecuciones.detalle(id);
+    expect(detalle?.ejecucion.resumen.conexionesBloqueadas).toBe(1);
+    expect(detalle?.conexiones.map((c) => [c.destino, c.regla])).toEqual([
+      ['accounts.google.com:443', 'servicio-interno-navegador'],
+      ['evil.example:80', 'fuera-de-dominios'],
+    ]);
+    // El monitor (Privacidad y conexiones) la muestra, bloqueada.
+    expect(ejecuciones.conexionesRecientes(10)).toContainEqual(
+      expect.objectContaining({
+        destination: 'accounts.google.com:443',
+        allowed: false,
+        rule: 'servicio-interno-navegador',
+      }),
+    );
   });
 
   it('una conexión que llega después del «terminé» también queda registrada', async () => {

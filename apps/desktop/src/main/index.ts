@@ -5,6 +5,7 @@ import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, protocol }
 import { conectarActividad, DetectorInactividad } from './boveda/inactividad';
 import type { ServicioBoveda } from './boveda/servicio';
 import type { ServicioEjecuciones } from './ejecuciones/servicio';
+import type { ServicioEvidencias } from './evidencias/servicio';
 import { limpiarPerfilesHuerfanos } from './ejecuciones/perfiles';
 import { crearLanzador } from './ejecuciones/procesos';
 import type { ServicioProyectos } from './proyectos/servicio';
@@ -185,6 +186,7 @@ async function cargarServicios(): Promise<{
   boveda: ServicioBoveda;
   proyectos: ServicioProyectos;
   ejecuciones: ServicioEjecuciones;
+  evidencias: ServicioEvidencias;
 } | null> {
   const carpetaDelPaquete = (paquete: string): string =>
     path.dirname(requerir.resolve(`${paquete}/package.json`));
@@ -194,18 +196,22 @@ async function cargarServicios(): Promise<{
   const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
   const { ServicioEjecuciones: Ejecuciones } = await import('./ejecuciones/servicio');
   const { redactarLoGuardado } = await import('./ejecuciones/redaccion-guardada');
+  const { ServicioEvidencias: Evidencias } = await import('./evidencias/servicio');
   // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
-  const dependientes: { ejecuciones?: ServicioEjecuciones } = {};
+  const dependientes: { ejecuciones?: ServicioEjecuciones; evidencias?: ServicioEvidencias } = {};
   const boveda = new Servicio({
     carpeta: dataDirectory,
     // Lo guardado antes de la redacción (semana 7) se redacta al abrir la base (ADR 033).
     alAbrir: (base, maestra) => {
       redactarLoGuardado(base, maestra);
+      // EVI-06: la retención, y los restos ilegibles de una ejecución cortada (ADR 038).
+      dependientes.evidencias?.alAbrir(base);
     },
     antesDeBloquear: (base) => {
       dependientes.ejecuciones?.alBloquearse(base);
     },
     alBloquear: () => {
+      dependientes.evidencias?.alBloquear();
       // Las pantallas previas al desbloqueo siguen al sistema: la preferencia está cifrada.
       nativeTheme.themeSource = 'system';
       // Recargar descarta todo el estado de la interfaz: vuelve al desbloqueo sin datos.
@@ -222,6 +228,8 @@ async function cargarServicios(): Promise<{
   const proyectos = new Proyectos(boveda, (proyectoId) => {
     dependientes.ejecuciones?.descartarSesiones(proyectoId);
   });
+  const evidencias = new Evidencias(boveda, proyectos, dataDirectory);
+  dependientes.evidencias = evidencias;
   const ejecuciones = new Ejecuciones(
     boveda,
     proyectos,
@@ -239,9 +247,11 @@ async function cargarServicios(): Promise<{
       const valido = ipcEventos['ejecuciones:progreso'].safeParse(progreso);
       if (valido.success) mainWindow?.webContents.send('ejecuciones:progreso', valido.data);
     },
+    undefined,
+    evidencias,
   );
   dependientes.ejecuciones = ejecuciones;
-  return { boveda, proyectos, ejecuciones };
+  return { boveda, proyectos, ejecuciones, evidencias };
 }
 
 function vigilarBloqueo(boveda: ServicioBoveda): void {
@@ -276,7 +286,7 @@ void app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  const { boveda, proyectos, ejecuciones } = servicios;
+  const { boveda, proyectos, ejecuciones, evidencias } = servicios;
   vigilarBloqueo(boveda);
   limpiarPerfilesHuerfanos(dataDirectory);
 
@@ -296,6 +306,7 @@ void app.whenReady().then(async () => {
       boveda,
       proyectos,
       ejecuciones,
+      evidencias,
       alCambiarBloqueoMinutos: (minutos) => {
         inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
       },

@@ -87,3 +87,16 @@ export {
   type FilaRedaccion,
   type NuevaRedaccion,
 } from './proyectos';
+export {
+  agregarEvidencia,
+  archivosDeEvidencias,
+  borrarEvidencias,
+  evidenciasQueNoCumplenModoSensible,
+  evidenciasVencidas,
+  leerEvidenciaParaDescifrar,
+  leerEvidenciasDeEjecucion,
+  type FilaEvidencia,
+  type NuevaEvidencia,
+  type ResumenEvidencia,
+} from './evidencias';
+export { TIPOS_EVIDENCIA, type MetadatosEvidencia, type TipoEvidencia } from './esquema';

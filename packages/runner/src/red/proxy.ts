@@ -44,6 +44,12 @@ const resolverDelSistema: Resolvedor = async (host) =>
   (await lookup(host, { all: true, order: 'verbatim' })).map(({ address }) => address);
 
 const LOCALHOST = 'localhost';
+/**
+ * Cuánto se espera, después de un 407 sin credencial, a que llegue el mismo destino con ella (ADR 041).
+ * Chromium manda el primer pedido de cada contexto sin credencial y reintenta enseguida con ella: eso no
+ * es un bloqueo. Lo que nunca vuelve con credencial es un servicio interno del navegador.
+ */
+export const GRACIA_SIN_CREDENCIAL_MS = 1500;
 const TIEMPO_CONEXION_MS = 15_000;
 const ENCABEZADOS_DE_SALTO = new Set([
   'connection',
@@ -81,6 +87,17 @@ function destinoDeConnect(objetivo: string): { host: string; puerto: number } | 
   return { host: normalizarHost(coincidencia[1] ?? ''), puerto };
 }
 
+/** Host y puerto de la URL de un pedido HTTP al proxy, como los decide `decidir`. */
+function destinoDeUrl(texto: string): string {
+  try {
+    const url = new URL(texto);
+    if (url.protocol !== 'http:') return 'desconocido';
+    return `${normalizarHost(url.hostname)}:${String(Number(url.port) || 80)}`;
+  } catch {
+    return 'desconocido';
+  }
+}
+
 function cerrarConEstado(socket: Duplex, estado: number, texto: string, extra = ''): void {
   socket.end(
     `HTTP/1.1 ${estado} ${texto}\r\n${extra}Content-Length: 0\r\nConnection: close\r\n\r\n`,
@@ -110,9 +127,35 @@ export function iniciarProxy(opciones: OpcionesProxy): Promise<ProxyActivo> {
   };
   const bloqueo = (regla: ReglaBloqueo): Decision => ({ permitida: false, regla });
 
+  /**
+   * Los 407 sin credencial, por destino, esperando el reintento (ADR 041). Si no llega con credencial,
+   * se registra como bloqueado con `servicio-interno-navegador`: el monitor muestra todo lo que se
+   * intenta, también lo que el proxy rechazó antes de decidir.
+   */
+  const sinCredencial = new Map<string, ReturnType<typeof setTimeout>>();
+  const registrarSinCredencial = (destino: string): void => {
+    sinCredencial.delete(destino);
+    registrar(destino, bloqueo('servicio-interno-navegador'));
+  };
+  const anotarSinCredencial = (destino: string): void => {
+    if (sinCredencial.has(destino)) return;
+    const espera = setTimeout(() => {
+      registrarSinCredencial(destino);
+    }, GRACIA_SIN_CREDENCIAL_MS);
+    espera.unref();
+    sinCredencial.set(destino, espera);
+  };
+  const llegoConCredencial = (destino: string): void => {
+    const espera = sinCredencial.get(destino);
+    if (espera === undefined) return;
+    clearTimeout(espera);
+    sinCredencial.delete(destino);
+  };
+
   /** Decide y devuelve a qué IP conectarse. Registra el resultado, permitido o bloqueado. */
   async function decidir(host: string, puerto: number): Promise<string | null> {
     const destino = `${host}:${puerto}`;
+    llegoConCredencial(destino);
     const nombre = decidirNombre(host, politica);
     if (!nombre.permitida) {
       registrar(destino, nombre);
@@ -150,6 +193,8 @@ export function iniciarProxy(opciones: OpcionesProxy): Promise<ProxyActivo> {
     if (autenticacion !== 'valida') {
       if (autenticacion === 'invalida') {
         registrar('proxy', bloqueo('credencial-invalida'));
+      } else {
+        anotarSinCredencial(destinoDeUrl(req.url ?? ''));
       }
       res.writeHead(407, {
         'proxy-authenticate': 'Basic realm="qatlas"',
@@ -221,6 +266,9 @@ export function iniciarProxy(opciones: OpcionesProxy): Promise<ProxyActivo> {
     if (autenticacion !== 'valida') {
       if (autenticacion === 'invalida') {
         registrar('proxy', bloqueo('credencial-invalida'));
+      } else {
+        const objetivo = destinoDeConnect(req.url ?? '');
+        anotarSinCredencial(objetivo ? `${objetivo.host}:${objetivo.puerto}` : 'desconocido');
       }
       cerrarConEstado(cliente, 407, 'Proxy Authentication Required', PEDIR_CREDENCIAL);
       return;
@@ -280,6 +328,11 @@ export function iniciarProxy(opciones: OpcionesProxy): Promise<ProxyActivo> {
         puerto: puertoPropio,
         cerrar: () =>
           new Promise((listo) => {
+            // Lo que todavía esperaba su reintento, se registra antes de cerrar.
+            for (const [destino, espera] of sinCredencial) {
+              clearTimeout(espera);
+              registrarSinCredencial(destino);
+            }
             servidor.close(() => {
               listo();
             });

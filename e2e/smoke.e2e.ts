@@ -85,6 +85,7 @@ test('la interfaz no tiene acceso a Node ni a ipcRenderer', async () => {
       'appearance',
       'credenciales',
       'ejecuciones',
+      'evidencias',
       'privacy',
       'proyectos',
       'security',

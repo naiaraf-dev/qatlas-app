@@ -64,6 +64,9 @@ export interface DatosDeEjecucion {
   timeoutPaginaSegundos: number;
   soloLectura: boolean;
   exclusiones: string[];
+  /** EVI-05: sin video ni snapshots, y todos los campos tapados en las capturas. */
+  modoDatosSensibles: boolean;
+  selectoresSensibles: string[];
 }
 
 export interface Aceptacion {
@@ -733,7 +736,25 @@ export class ServicioProyectos {
         timeoutPaginaSegundos: fila.timeoutPaginaSegundos,
         soloLectura: fila.soloLectura,
         exclusiones: fila.exclusiones,
+        modoDatosSensibles: fila.modoDatosSensibles,
+        selectoresSensibles: fila.selectoresSensibles,
       };
+    });
+  }
+
+  /**
+   * La clave del proyecto, solo durante `uso` y de forma síncrona: después se borra. Para crear el
+   * cifrador o el descifrador de una evidencia, que derivan lo suyo al crearse (ADR 035).
+   */
+  conClaveProyecto<T>(proyectoId: string, uso: (clave: Buffer) => T): T {
+    return this.boveda.conAcceso((base, maestra) => {
+      const proyecto = this.proyectoExistente(base, proyectoId);
+      const clave = abrirClaveProyecto(maestra, proyectoId, proyecto.claveProyectoCifrada);
+      try {
+        return uso(clave);
+      } finally {
+        borrar(clave);
+      }
     });
   }
 

@@ -68,6 +68,13 @@ const api: QatlasApi = {
       };
     },
   },
+  evidencias: {
+    listar: (req) => invoke('evidencias:listar', req),
+    obtenerVista: (req) => invoke('evidencias:obtenerVista', req),
+    obtenerFotograma: (req) => invoke('evidencias:obtenerFotograma', req),
+    noCumplenModoSensible: (req) => invoke('evidencias:noCumplenModoSensible', req),
+    resolverModoSensible: (req) => invoke('evidencias:resolverModoSensible', req),
+  },
 };
 
 contextBridge.exposeInMainWorld('qatlas', Object.freeze(api));

@@ -401,6 +401,12 @@ verifica automáticamente en CI (sección 3.15).
 - El contenido del sitio probado **nunca se renderiza en la ventana de
   QAtlas**. Las evidencias se muestran como imágenes, y el visor de
   trazas corre en una ventana aislada sin red.
+  **Desde la semana 7 (ADR 036 y 037):** las capturas y los fotogramas
+  llegan en bytes validados (PNG o JPEG por su firma, con tamaño máximo)
+  y se dibujan en un canvas; la CSP no admite `data:` ni `blob:` y
+  `media-src` está en `'none'`. La traza es propia y se muestra como
+  texto en la ventana de QAtlas: no hay visor de Playwright ni nada que
+  renderice el sitio.
 
 - Chromium viaja dentro del instalador firmado; los demás navegadores se
   descargan solo por una acción explícita, verificando su integridad, y
@@ -434,6 +440,28 @@ detalle de los hallazgos (consola, excepciones, selectores), destinos del monito
 diagnósticos. Lo guardado antes se redacta al desbloquear. Un hallazgo con secretos redactados avisa «se
 redactaron N secretos» y queda marcado para la revisión de la exportación (RN-REP-03). Encabezados,
 cuerpos, HAR y trazas, con las evidencias de la semana 7b: las funciones ya existen.
+
+**Evidencias, semana 7b** (ADR 035 a 039).
+
+- Ningún archivo en claro, tampoco temporales: el runner manda los
+  fotogramas del screencast, las capturas y los eventos de la traza en
+  memoria. El principal los redacta y los cifra en streaming con la
+  clave del proyecto y una semilla por evidencia (formato v2).
+- **EVI-02:** las capturas tapan los campos de contraseña, los
+  selectores sensibles y los elementos donde el detector encontró un
+  secreto a la vista. No tapan texto suelto sin formato reconocible.
+- **EVI-05:** el modo datos sensibles graba sin video ni snapshots del
+  DOM, y con todos los campos tapados. Al activarlo, ofrece eliminar
+  o conservar lo que ya existe y no cumple.
+- **EVI-06:** la retención es de la bóveda (90 días por defecto), corre
+  al desbloquear y queda en la auditoría. La excepción de los reportes
+  está preparada para la semana 9.
+- **EVI-07:** «falla» en un escaneo: una página con un hallazgo de
+  severidad media o mayor, o con un error de navegación o del
+  navegador. Se conserva el video de esas páginas. Los fotogramas que
+  se pierden quedan registrados y el visor los marca.
+- Topes por ejecución: 200 capturas y 200 MB de video, informados en
+  el resumen.
 
 ## 3.9 Exportación y compartición
 
@@ -474,7 +502,7 @@ se limpia automáticamente a los 30 segundos.
 | EXP-02 | Video y GIF     | No se pueden redactar: si un dato sensible estuvo en pantalla, queda grabado. En modo datos sensibles no se graba video; en la vista previa de exportación el video se marca como "puede contener datos sensibles" y no se incluye por defecto.                       |
 | EXP-03 | PDF, Excel, MP4 | Se generan sin metadatos de autor, rutas locales, nombre del equipo ni software de origen.                                                                                                                                                                            |
 | EXP-04 | HTML            | Un solo archivo autocontenido, con CSP restrictiva y sin recursos externos: se abre sin conexión y no hace requests al abrirse.                                                                                                                                       |
-| EXP-05 | Traza y HAR     | Pasan por la redacción de EVI-03 y EVI-04; la traza no incluye el login (EVI-01). Se marcan como "para desarrollo" en la vista previa.                                                                                                                                |
+| EXP-05 | Traza y HAR     | Pasan por la redacción de EVI-03 y EVI-04; la traza no incluye el login (EVI-01). Se marcan como "para desarrollo" en la vista previa. **Cambio de la semana 7 (ADR 037):** la traza es propia de QAtlas, no la de Playwright (que escribe en claro en disco mientras graba); qué se exporta y en qué formato se decide en la semana 9. |
 | EXP-06 | ZIP             | Opción de cifrado con contraseña (AES-256). Los nombres de archivo internos no revelan datos (se usan IDs).                                                                                                                                                           |
 
 ## 3.10 Almacenamiento local
@@ -781,7 +809,7 @@ campo. Los campos JSON se guardan como texto.
 | pagina_visitada       | proyecto_id, ejecucion_id, url (sin query), url_completa_cifrada (C, con la clave del proyecto), status_http, tiempo_carga_ms, profundidad                                                                                                                                                                                       | 1        |
 | hallazgo              | ejecucion_id, proyecto_id, tipo, severidad, titulo, descripcion, url, huella, estado, primera_vez_en, ultima_vez_en, caso_id, paso_indice, clave (ADR 023)                                                                                                          | 1        |
 | hallazgo_ocurrencia   | proyecto_id, hallazgo_id, ejecucion_id, url, url_origen, detalle_cifrado (C, con la clave del proyecto). Cada aparición de un hallazgo en una ejecución (ADR 023) | 1        |
-| evidencia             | hallazgo_id, ejecucion_id o resultado_paso_id, tipo (screenshot, captura_anotada, video, gif, traza, consola, har, log), ruta_archivo_cifrado, nonce, tamaño, redacciones (JSON), alertas_secretos (JSON)                                          | 1        |
+| evidencia             | hallazgo_id, ejecucion_id o resultado_paso_id, tipo (screenshot, captura_anotada, video, gif, traza, consola, har, log), ruta_archivo_cifrado, nonce, tamaño, redacciones (JSON), alertas_secretos (JSON). **Implementado en la semana 7 (ADR 035):** proyecto_id, ejecucion_id, pagina_visitada_id (la ocurrencia lleva la suya), tipo (captura, video, traza, har, snapshot-dom), archivo (nombre aleatorio), semilla (su borrado es el borrado criptográfico), tamaño, secretos_redactados, revision_pendiente, puede_tener_datos_sensibles y metadatos sin texto del sitio; el nonce está en la cabecera del archivo | 1        |
 | reporte_bug           | proyecto_id, titulo, pasos, esperado, obtenido, severidad, entorno (JSON), estado                                                                                                                                                                  | 1        |
 | reporte_hallazgo      | reporte_id, hallazgo_id                                                                                                                                                                                                                            | 1        |
 | exportacion           | reporte_id, formato, nivel, evidencias_incluidas (JSON), fecha, destino_sincronizado                                                                                                                                                               | 1        |
@@ -2259,8 +2287,10 @@ puedan compartir sin exponer información.
 7.  Semana 7: redacción, detector de secretos, evidencias cifradas;
     TS-01 (canario). En dos partes: 7a, redacción y detector, logs
     técnicos y TS-01 sobre lo que existe (hecha); 7b, evidencias
-    (capturas, traza, HAR, video, visor). TS-01 suma las exportaciones y
-    el diagnóstico en la semana 9.
+    (capturas, traza, HAR, video, visor), modo datos sensibles,
+    retención, TS-06 completo con OCR, TS-01 sobre las evidencias y
+    TS-10 parcial (hecha). TS-01 suma las exportaciones y el diagnóstico
+    en la semana 9.
 
 8.  Semana 8: hallazgos, huella y regresiones; filtros del monitor de
     conexiones, que se adelantó a la semana 5 sin ellos.

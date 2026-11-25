@@ -31,6 +31,7 @@ import {
   type SandboxActivo,
 } from '../apps/sandbox-site/src/servidor.mjs';
 import { vigilarEntorno } from './entorno';
+import { DE_GOOGLE, delSitio } from './ruido';
 import { lanzarApp } from './lanzar';
 
 // El service worker no se registra, así que su destino nunca se intenta.
@@ -265,8 +266,30 @@ test('el monitor no tiene ruido: ningún destino que el sitio no haya pedido', a
     const res = await qatlas.ejecuciones.detalle({ ejecucionId: lista.data[0].id });
     return res.ok ? res.data : null;
   }, proyectoId);
-  const hosts = new Set(detalle?.conexiones.map((c) => c.destino.split(':')[0]));
+  // Las del sitio. Lo que el navegador intenta por su cuenta también está, aparte (ADR 041).
+  const hosts = new Set(delSitio(detalle?.conexiones ?? []).map((c) => c.destino.split(':')[0]));
   expect([...hosts].sort()).toEqual([...HOSTS_DE_FUGA_DEL_RECORRIDO, '127.0.0.1'].sort());
+  // Y el monitor entero, no solo esta ejecución: con el Chromium completo de la app, nada de Google ni
+  // de nadie que el sitio no haya pedido (ADR 041). El ruido del navegador en sí se prueba con su
+  // net-log en navegador-ruido.e2e.ts.
+  const monitor = await page.evaluate(async () => {
+    const { qatlas } = window as unknown as {
+      qatlas: { privacy: { listConnections(r: { limit: number }): Promise<unknown> } };
+    };
+    return qatlas.privacy.listConnections({ limit: 500 });
+  });
+  const filas = (
+    monitor as { ok: boolean; data: { destination: string; allowed: boolean; rule: string }[] }
+  ).data.map((c) => ({ ...c, host: c.destination.replace(/:\d+$/, '') }));
+  expect(filas.length).toBeGreaterThan(0);
+  // Google solo puede aparecer como intento interno del navegador, bloqueado, nunca con otra regla.
+  expect(
+    filas.filter((c) => DE_GOOGLE.test(c.host) && c.rule !== 'servicio-interno-navegador'),
+  ).toEqual([]);
+  expect(filas.filter((c) => c.rule === 'servicio-interno-navegador' && c.allowed)).toEqual([]);
+  expect(
+    filas.filter((c) => c.rule !== 'servicio-interno-navegador' && !hosts.has(c.host)),
+  ).toEqual([]);
 });
 
 test('Privacidad y conexiones muestra lo mismo, y sin rutas', async () => {

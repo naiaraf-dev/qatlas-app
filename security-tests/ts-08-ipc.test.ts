@@ -177,7 +177,7 @@ describe('TS-08 · Canales de la bóveda', () => {
     ['crear', 'vault:create', { ...CREAR, entiendeSinRecuperacion: true }],
     ['desbloquear', 'vault:unlock', { contrasena: 'x' }],
     ['bloquear', 'vault:lock', undefined],
-    ['configurar', 'vault:setSettings', { bloqueoMinutos: 15 }],
+    ['configurar', 'vault:setSettings', { bloqueoMinutos: 15, retencionDias: 90 }],
     ['copia', 'vault:createBackup', undefined],
     ['restaurar', 'vault:restoreBackup', { contrasena: 'x' }],
   ])('acepta: %s', (_nombre, canal, datos) => {
@@ -690,6 +690,10 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         renovaciones: 0,
         secretosRedactados: 0,
         diagnostico: null,
+        capturas: 0,
+        videos: 0,
+        fotogramasPerdidos: 0,
+        topesAlcanzados: [],
       },
       rol: null,
     };
@@ -775,6 +779,7 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
     urlOrigen: null,
     detalle: 'img.logo',
     secretosRedactados: 0,
+    paginaId: null,
   };
 
   it('un hallazgo tiene una forma cerrada: tipo y severidad de una lista', () => {
@@ -831,6 +836,93 @@ describe('TS-08 · Escaneo: hallazgos y progreso', () => {
     expect(validar.safeParse({ proyecto: { ...proyecto, maxMinutos: 30 } }).success).toBe(true);
     for (const maxMinutos of [0, 241, 1.5]) {
       expect(validar.safeParse({ proyecto: { ...proyecto, maxMinutos } }).success).toBe(false);
+    }
+  });
+});
+
+describe('TS-08 · Evidencias (semana 7b)', () => {
+  const entrada = (canal: IpcChannel) => ipcContract[canal].request;
+  const salida = (canal: IpcChannel) => ipcContract[canal].response;
+  const ID = '00000000-0000-4000-8000-000000000009';
+  const EVIDENCIA = {
+    id: ID,
+    tipo: 'captura',
+    paginaId: null,
+    creadaEn: '2026-11-08T00:00:00.000Z',
+    tamano: 10,
+    secretosRedactados: 0,
+    revisionPendiente: false,
+    puedeTenerDatosSensibles: false,
+    ancho: 1280,
+    alto: 720,
+    duracionMs: null,
+    fotogramas: null,
+    fotogramasPerdidos: 0,
+    enmascarados: 2,
+    entradas: null,
+    modoSensible: false,
+  };
+
+  it('ningún canal acepta una ruta de archivo ni un nombre de archivo', () => {
+    expect(entrada('evidencias:obtenerVista').safeParse({ evidenciaId: ID }).success).toBe(true);
+    for (const pedido of [
+      { evidenciaId: ID, ruta: 'C:\\Users\\ana\\x.qev' },
+      { evidenciaId: ID, archivo: '0123456789abcdef0123456789abcdef.qev' },
+      { evidenciaId: '../../boveda.db' },
+    ]) {
+      expect(entrada('evidencias:obtenerVista').safeParse(pedido).success).toBe(false);
+    }
+  });
+
+  it('un fotograma se pide por índice acotado', () => {
+    const canal = entrada('evidencias:obtenerFotograma');
+    expect(canal.safeParse({ evidenciaId: ID, indice: 0 }).success).toBe(true);
+    expect(canal.safeParse({ evidenciaId: ID, indice: -1 }).success).toBe(false);
+    expect(canal.safeParse({ evidenciaId: ID, indice: 1.5 }).success).toBe(false);
+    expect(canal.safeParse({ evidenciaId: ID, indice: 100_000 }).success).toBe(false);
+  });
+
+  it('la lista nunca devuelve la semilla ni el nombre del archivo', () => {
+    const canal = salida('evidencias:listar');
+    expect(canal.safeParse([EVIDENCIA]).success).toBe(true);
+    expect(canal.safeParse([{ ...EVIDENCIA, semilla: 'AAAA' }]).success).toBe(false);
+    expect(canal.safeParse([{ ...EVIDENCIA, archivo: 'x.qev' }]).success).toBe(false);
+  });
+
+  it('una imagen viaja en bytes, nunca como URL ni como ruta', () => {
+    const canal = salida('evidencias:obtenerVista');
+    const imagen = { tipo: 'imagen', formato: 'image/png', datos: new Uint8Array([1, 2, 3]) };
+    expect(canal.safeParse(imagen).success).toBe(true);
+    expect(canal.safeParse({ ...imagen, datos: 'data:image/png;base64,AAAA' }).success).toBe(false);
+    expect(canal.safeParse({ ...imagen, formato: 'image/svg+xml' }).success).toBe(false);
+    expect(canal.safeParse({ ...imagen, datos: new Uint8Array(0) }).success).toBe(false);
+    expect(canal.safeParse({ ...imagen, ruta: 'C:\\x.png' }).success).toBe(false);
+  });
+
+  it('el modo datos sensibles solo admite eliminar o conservar', () => {
+    const canal = entrada('evidencias:resolverModoSensible');
+    expect(canal.safeParse({ proyectoId: ID, accion: 'eliminar' }).success).toBe(true);
+    expect(canal.safeParse({ proyectoId: ID, accion: 'conservar' }).success).toBe(true);
+    expect(canal.safeParse({ proyectoId: ID, accion: 'mover' }).success).toBe(false);
+    expect(canal.safeParse({ proyectoId: ID, accion: 'eliminar', ids: [ID] }).success).toBe(false);
+  });
+
+  it('la retención tiene un mínimo y un máximo', () => {
+    const canal = entrada('vault:setSettings');
+    expect(canal.safeParse({ bloqueoMinutos: 15, retencionDias: 0 }).success).toBe(false);
+    expect(canal.safeParse({ bloqueoMinutos: 15, retencionDias: 3651 }).success).toBe(false);
+    expect(canal.safeParse({ bloqueoMinutos: 15, retencionDias: 1 }).success).toBe(true);
+  });
+
+  it('con la bóveda bloqueada, los canales de evidencias se rechazan', () => {
+    for (const canal of [
+      'evidencias:listar',
+      'evidencias:obtenerVista',
+      'evidencias:obtenerFotograma',
+      'evidencias:noCumplenModoSensible',
+      'evidencias:resolverModoSensible',
+    ]) {
+      expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
     }
   });
 });

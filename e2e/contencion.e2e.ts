@@ -25,7 +25,7 @@ import {
 import {
   abrirContexto,
   abrirNavegador,
-  ARGUMENTOS_CHROMIUM,
+  opcionesChromium,
   presupuestoProbarLogin,
   probarLogin,
   type RegistroNavegador,
@@ -43,6 +43,7 @@ import {
 import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
 import type { IndicadorExito, PasoLogin } from '@qatlas/shared';
 import { restaurarEntorno, vigilarEntorno } from './entorno';
+import { delSitio } from './ruido';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 const manifiesto = JSON.parse(
@@ -133,7 +134,8 @@ const asentar = () =>
     setTimeout(listo, 500);
   });
 
-const bloqueadas = () => conexiones.filter((c) => !c.permitida);
+// Las del sitio: lo que Chromium intenta por su cuenta no es de estos tests (ADR 041).
+const bloqueadas = () => delSitio(conexiones).filter((c) => !c.permitida);
 const destinoBloqueado = (host: string) =>
   bloqueadas().some((c) => c.destino.startsWith(`${host}:`));
 
@@ -161,11 +163,13 @@ test.beforeEach(() => {
 test.describe('Control: sin proxy, cada fuga llega al sandbox', () => {
   let directo: Browser;
   test.beforeAll(async () => {
-    directo = await chromium.launch({
-      channel: 'chromium',
-      headless: true,
-      args: [`--host-resolver-rules=${REGLAS_RESOLVER}`],
-    });
+    // Sin proxy y sin los frenos de red: el control de que cada fuga llegaría.
+    directo = await chromium.launch(
+      opcionesChromium({
+        argumentos: [`--host-resolver-rules=${REGLAS_RESOLVER}`],
+        control: { sinArgumentosDeRed: true },
+      }),
+    );
   });
   test.afterAll(async () => {
     await directo.close();
@@ -217,7 +221,7 @@ test.describe('TS-04 · Contención, solo con el proxy', () => {
     const pagina = await (await contextoSoloProxy()).newPage();
     const respuesta = await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
     expect(respuesta?.status()).toBe(200);
-    expect(conexiones[0]).toEqual({
+    expect(conexiones).toContainEqual({
       destino: `${HOST_SITIO}:${sitio.puerto}`,
       permitida: true,
       regla: 'loopback-declarado',
@@ -294,11 +298,7 @@ test.describe('TS-04 · Contención, solo con el proxy', () => {
   });
 
   test('control: si se apagara, el test lo vería', async () => {
-    const sinSandbox = await chromium.launch({
-      channel: 'chromium',
-      headless: true,
-      chromiumSandbox: false,
-    });
+    const sinSandbox = await chromium.launch(opcionesChromium({ control: { sinSandbox: true } }));
     await (await sinSandbox.newContext()).newPage();
     expect(await lineaDeComandoDelRenderer(sinSandbox)).toContain('--no-sandbox');
     await sinSandbox.close();
@@ -432,7 +432,10 @@ test.describe('TS-03 · Puertos locales', () => {
     await conProxy(p);
     const pagina = await (await contextoSoloProxy()).newPage();
     await expect(pagina.goto(`http://127.0.0.1:${proxy.puerto}/`)).rejects.toThrow();
-    expect(bloqueadas().at(-1)?.regla).toBe('puerto-del-proxy');
+    // Por su destino, nunca «la última»: el navegador puede intentar otras conexiones en el medio.
+    expect(bloqueadas().find((c) => c.destino === `127.0.0.1:${proxy.puerto}`)?.regla).toBe(
+      'puerto-del-proxy',
+    );
   });
 });
 
@@ -445,10 +448,10 @@ test.describe('DNS rebinding en un navegador real', () => {
     await conProxy(p, () => Promise.resolve(['10.0.0.1']));
     const pagina = await (await contextoSoloProxy()).newPage();
     await expect(pagina.goto('http://publico.example.com/')).rejects.toThrow();
-    // Chromium prueba también https: cada intento se bloquea por lo mismo.
-    expect(bloqueadas().length).toBeGreaterThan(0);
-    expect(bloqueadas().map((c) => c.destino)).toContain('publico.example.com:80');
-    expect(bloqueadas().every((c) => c.regla === 'dns-ip-privada')).toBe(true);
+    // Cada intento a ese nombre se bloquea por lo mismo. Solo los suyos: el resto no es de este test.
+    const intentos = bloqueadas().filter((c) => c.destino.startsWith('publico.example.com:'));
+    expect(intentos.map((c) => c.destino)).toContain('publico.example.com:80');
+    expect(intentos.every((c) => c.regla === 'dns-ip-privada')).toBe(true);
   });
 
   test('un nombre público que resuelve a loopback no llega al sandbox', async () => {
@@ -461,7 +464,9 @@ test.describe('DNS rebinding en un navegador real', () => {
     const pagina = await (await contextoSoloProxy()).newPage();
     await expect(pagina.goto(`http://publico.example.com:${sitio.puerto}/`)).rejects.toThrow();
     expect(sitio.registro.hosts.slice(antes)).toEqual([]);
-    expect(bloqueadas()[0]?.regla).toBe('dns-loopback-no-local');
+    expect(
+      bloqueadas().find((c) => c.destino === `publico.example.com:${sitio.puerto}`)?.regla,
+    ).toBe('dns-loopback-no-local');
   });
 });
 
@@ -482,12 +487,11 @@ test.describe('Fallar cerrado', () => {
   test('con la credencial equivocada, tampoco', async () => {
     const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
     await conProxy(p);
-    const otro = await chromium.launch({
-      channel: 'chromium',
-      headless: true,
-      args: [...ARGUMENTOS_CHROMIUM],
-      proxy: { server: `http://127.0.0.1:${proxy.puerto}`, username: 'otro', password: 'otra' },
-    });
+    const otro = await chromium.launch(
+      opcionesChromium({
+        proxy: { servidor: `http://127.0.0.1:${proxy.puerto}`, usuario: 'otro', clave: 'otra' },
+      }),
+    );
     const antes = sitio.registro.hosts.length;
     const pagina = await (await otro.newContext()).newPage();
     const respuesta = await pagina.goto(`${sitio.url}/`).catch(() => null);

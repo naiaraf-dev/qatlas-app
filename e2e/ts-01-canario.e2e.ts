@@ -16,122 +16,35 @@
  * la ventana del asistido. La app no tiene ningún comportamiento especial para tests.
  */
 import { randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { registerHooks } from 'node:module';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { EXCLUSIONES_POR_DEFECTO, PROYECTO_POR_DEFECTO } from '@qatlas/shared';
-import type { MensajeAlRunner, MensajeDelRunner } from '@qatlas/runner';
 import type { TextoRedactado } from '@qatlas/redaction';
 import {
   HOST_IDP,
-  HOST_SITIO,
   iniciarSandbox,
   JWT_DE_PRUEBA,
-  MAPA_DE_HOSTS,
   USUARIOS_APP,
   type SandboxActivo,
 } from '../apps/sandbox-site/src/servidor.mjs';
-import type {
-  LanzadorDeProcesos,
-  ProcesoRunner,
-  ServicioEjecuciones,
-} from '../apps/desktop/src/main/ejecuciones/servicio';
 import type { Redactor } from '../apps/desktop/src/main/ejecuciones/redaccion';
-import { abrirNavegadorVisible, type NavegadorVisible } from '../packages/runner/src/motor/motor';
-import { crearRunner } from '../packages/runner/src/motor/runner';
-import { iniciarProxy } from '../packages/runner/src/red/proxy';
-import { restaurarEntorno, vigilarEntorno } from './entorno';
+import {
+  archivosCon,
+  armar,
+  conConsolaCapturada,
+  conTemporal,
+  CONTRASENA_BOVEDA,
+  enTexto as enTextoDe,
+  type AppEnProceso,
+} from './app-en-proceso';
+import { vigilarEntorno } from './entorno';
+import { contiene, crearOcr, leerTodas } from './ocr';
 
-const CONTRASENA_BOVEDA = 'tigre-morado-bajo-la-lluvia-73';
 /** Único en cada corrida: si aparece, vino de acá. */
 const CANARIO = `CANARIO-ts01-${randomUUID().slice(0, 8)}`;
-
-/** El canario en las formas en que suele quedar escrito. */
-function codificaciones(valor: string): { nombre: string; bytes: Buffer }[] {
-  const utf8 = Buffer.from(valor, 'utf8');
-  const textos: [string, string][] = [
-    ['tal cual', valor],
-    ['base64', utf8.toString('base64')],
-    ['base64 sin relleno', utf8.toString('base64').replace(/=+$/, '')],
-    ['base64url', utf8.toString('base64url')],
-    ['codificado para URL', encodeURIComponent(valor)],
-    ['hex', utf8.toString('hex')],
-    ['HEX', utf8.toString('hex').toUpperCase()],
-  ];
-  return [
-    ...textos.map(([nombre, texto]) => ({ nombre, bytes: Buffer.from(texto, 'utf8') })),
-    { nombre: 'UTF-16', bytes: Buffer.from(valor, 'utf16le') },
-  ];
-}
-
-/** Dónde aparece el canario en un texto: el nombre de cada codificación encontrada. */
-const enTexto = (texto: string, valor = CANARIO) =>
-  codificaciones(valor)
-    .filter(({ bytes }) => Buffer.from(texto, 'utf8').includes(bytes))
-    .map(({ nombre }) => nombre);
-
-/** Cada archivo debajo de una carpeta con el canario en alguna codificación: «ruta (codificación)». */
-function archivosConCanario(carpeta: string): string[] {
-  const agujas = codificaciones(CANARIO);
-  const encontrados: string[] = [];
-  const recorrer = (actual: string) => {
-    let nombres: string[];
-    try {
-      nombres = readdirSync(actual);
-    } catch {
-      return;
-    }
-    for (const nombre of nombres) {
-      const ruta = path.join(actual, nombre);
-      try {
-        if (statSync(ruta).isDirectory()) {
-          recorrer(ruta);
-          continue;
-        }
-        const datos = readFileSync(ruta);
-        for (const { nombre: codificacion, bytes } of agujas) {
-          if (datos.includes(bytes))
-            encontrados.push(`${path.relative(carpeta, ruta)} (${codificacion})`);
-        }
-      } catch {
-        // Un archivo que se borró mientras se leía.
-      }
-    }
-  };
-  recorrer(carpeta);
-  return encontrados;
-}
-
-// Como en TS-06: el driver de Drizzle importa 'better-sqlite3' y QAtlas usa la variante con SQLCipher.
-registerHooks({
-  resolve: (especificador, contexto, siguiente) =>
-    siguiente(
-      especificador === 'better-sqlite3' ? 'better-sqlite3-multiple-ciphers' : especificador,
-      contexto,
-    ),
-});
-const servicios = async () => ({
-  ...(await import('../apps/desktop/src/main/boveda/servicio')),
-  ...(await import('../apps/desktop/src/main/proyectos/servicio')),
-  ...(await import('../apps/desktop/src/main/ejecuciones/servicio')),
-  ...(await import('../apps/desktop/src/main/ejecuciones/redaccion-guardada')),
-  ...(await import('../apps/desktop/src/main/registro')),
-});
-
-const resolver = (host: string) => {
-  const ip = MAPA_DE_HOSTS[host];
-  return ip ? Promise.resolve([ip]) : Promise.reject(new Error('ENOTFOUND'));
-};
-
-const PASOS = [
-  { accion: 'rellenar' as const, selector: '#usuario', origen: 'usuario' as const },
-  { accion: 'rellenar' as const, selector: '#clave', origen: 'secreto' as const },
-  { accion: 'click' as const, selector: 'button[type=submit]' },
-];
-const INDICADOR = { tipo: 'aparece' as const, selector: '#menu-usuario' };
+const enTexto = (texto: string, valor = CANARIO) => enTextoDe(texto, valor);
+const archivosConCanario = (carpeta: string) => archivosCon(carpeta, CANARIO);
 
 test.describe.configure({ mode: 'serial', timeout: 600_000 });
 vigilarEntorno(test);
@@ -146,163 +59,30 @@ test.afterAll(async () => {
   await sitio.cerrar();
 });
 
-/**
- * Todo lo necesario para correr la app sin Electron en una carpeta del test. `redactor` solo lo cambia el
- * control positivo.
- */
-async function armar(raiz: string, redactor?: Redactor) {
-  const s = await servicios();
-  const datos = path.join(raiz, 'datos');
-  const temporal = path.join(raiz, 'tmp');
-  mkdirSync(temporal, { recursive: true });
-  s.iniciarRegistro({ carpeta: path.join(datos, 'logs') });
+/** Las evidencias de varias ejecuciones, como las recibiría la interfaz. */
+async function evidenciasDeTodas(app: AppEnProceso, ejecuciones: readonly string[]) {
+  const textos: { tipo: string; texto: string }[] = [];
+  const capturas: Buffer[] = [];
+  for (const id of ejecuciones) {
+    const evidencias = await app.evidenciasDe(id);
+    textos.push(...evidencias.textos);
+    capturas.push(...evidencias.capturas);
+  }
+  return { textos, capturas };
+}
 
-  let visible: NavegadorVisible | undefined;
-  const runnersVivos = new Set<{ terminado: boolean }>();
-  const boveda = new s.ServicioBoveda({
-    carpeta: datos,
-    alAbrir: (base, maestra) => {
-      s.redactarLoGuardado(base, maestra);
-    },
-    antesDeBloquear: (base) => {
-      // Se crea más abajo; este callback corre recién al bloquear.
-      ejecuciones.alBloquearse(base);
-    },
-  });
-  await boveda.crear(CONTRASENA_BOVEDA, false);
-  const proyectos = new s.ServicioProyectos(boveda, (id) => {
-    ejecuciones.descartarSesiones(id);
-  });
-  const lanzador: LanzadorDeProcesos = {
-    iniciarProxy: async (datosProxy, alRegistrar) => {
-      const proxy = await iniciarProxy({ ...datosProxy, alRegistrar, resolver });
-      return {
-        puerto: proxy.puerto,
-        alCaer: () => undefined,
-        detener: () => {
-          void proxy.cerrar();
-        },
-      };
-    },
-    iniciarRunner: () => {
-      const eventos = new EventEmitter();
-      const estado = { terminado: false };
-      runnersVivos.add(estado);
-      const runner = crearRunner({
-        enviar: (mensaje: MensajeDelRunner) => {
-          eventos.emit('mensaje', structuredClone(mensaje));
-        },
-        alTerminar: () => {
-          estado.terminado = true;
-          eventos.emit('salir');
-        },
-        carpetaPerfil: temporal,
-        abrirVisible: async (proxy) => {
-          visible = await abrirNavegadorVisible(proxy, temporal);
-          return visible;
-        },
-      });
-      const proceso: ProcesoRunner = {
-        enviar: (mensaje: MensajeAlRunner) => {
-          runner.recibir(structuredClone(mensaje));
-        },
-        alMensaje: (oyente) => eventos.on('mensaje', oyente),
-        alSalir: (oyente) => {
-          if (estado.terminado) oyente();
-          else eventos.on('salir', oyente);
-        },
-        detener: () => {
-          eventos.emit('salir');
-        },
-      };
-      return proceso;
-    },
-    limpiarPerfil: () => undefined,
-  };
-  const ejecuciones: ServicioEjecuciones = new s.ServicioEjecuciones(
-    boveda,
-    proyectos,
-    lanzador,
-    undefined,
-    undefined,
-    redactor,
-  );
-
-  const origen = `http://${HOST_SITIO}:${sitio.puerto}`;
-  const crearProyecto = (nombre: string, inicio: string, dominiosAutenticacion: string[]) => {
-    const entrada = {
-      ...PROYECTO_POR_DEFECTO,
-      nombre,
-      descripcion: '',
-      urlBase: `${origen}${inicio}`,
-      dominios: [HOST_SITIO],
-      puertosLocales: [],
-      exclusiones: [...EXCLUSIONES_POR_DEFECTO],
-      selectoresSensibles: [],
-      dominiosAutenticacion,
-      permitirLoginHttp: true,
-      maxRps: 20,
-      maxPaginas: 30,
-      maxProfundidad: 3,
-    };
-    const { declaracion } = proyectos.validar(entrada);
-    if (!declaracion) throw new Error(`El proyecto ${nombre} no es válido`);
-    const creado = proyectos.crear(entrada, { aceptada: true, ...declaracion });
-    if (creado.resultado !== 'creado') throw new Error(JSON.stringify(creado));
-    return creado.id;
-  };
-  const credencial = (
-    proyectoId: string,
-    rol: string,
-    estrategia: 'formulario' | 'sso' | 'token-url' | 'asistido',
-    urlLogin: string,
-    secreto?: string,
-  ) => {
-    const res = proyectos.guardarCredencial({
-      proyectoId,
-      nombre: rol,
-      rol,
-      estrategia,
-      usuario:
-        estrategia === 'formulario' || estrategia === 'sso' ? USUARIOS_APP.admin.usuario : '',
-      urlLogin,
-      pasosLogin: estrategia === 'formulario' || estrategia === 'sso' ? PASOS : [],
-      indicadorExito: INDICADOR,
-      ...(secreto === undefined ? {} : { secreto }),
-    });
-    if (res.resultado !== 'guardada') throw new Error(JSON.stringify(res));
-    return res.credencialId;
-  };
-  /** Lanza y espera a que la ejecución figure terminada (con su perfil ya borrado). */
-  const escanear = async (proyectoId: string, credencialId: string | null) => {
-    const lanzada = ejecuciones.lanzarEscaneo(proyectoId, credencialId);
-    if (lanzada.resultado !== 'encolada') throw new Error(JSON.stringify(lanzada));
-    const id = lanzada.ejecucionId;
-    await expect
-      .poll(() => ejecuciones.listar(proyectoId).find((e) => e.id === id)?.estado, {
-        timeout: 240_000,
-      })
-      .toBe('finalizada');
-    return id;
-  };
-  return {
-    s,
-    boveda,
-    proyectos,
-    ejecuciones,
-    origen,
-    datos,
-    temporal,
-    crearProyecto,
-    credencial,
-    escanear,
-    ventana: () => visible,
-    runnersTerminados: () => [...runnersVivos].every((r) => r.terminado),
-  };
+/** Si el canario se ve en alguna captura, leída con OCR (ADR 039). */
+async function capturasConCanario(capturas: readonly Buffer[]): Promise<boolean> {
+  const ocr = await crearOcr();
+  try {
+    return (await leerTodas(ocr, capturas)).some((leido) => contiene(leido, CANARIO));
+  } finally {
+    await ocr.cerrar();
+  }
 }
 
 /** La base descifrada: cada tabla, y cada campo cifrado con la clave del proyecto, salvo el secreto. */
-function baseDescifrada(app: Awaited<ReturnType<typeof armar>>): string {
+function baseDescifrada(app: AppEnProceso): string {
   const { boveda, proyectos, s } = app;
   return boveda.conAcceso((base) => {
     const partes: string[] = [];
@@ -351,54 +131,22 @@ function baseDescifrada(app: Awaited<ReturnType<typeof armar>>): string {
   });
 }
 
-/** Captura la consola mientras corre `cuerpo`: los logs del proceso también se revisan. */
-async function conConsolaCapturada<T>(cuerpo: (logs: string[]) => Promise<T>): Promise<T> {
-  const logs: string[] = [];
-  const originales = {
-    log: console.log,
-    warn: console.warn,
-    error: console.error,
-    info: console.info,
-  };
-  for (const nivel of ['log', 'warn', 'error', 'info'] as const) {
-    console[nivel] = (...partes: unknown[]) => {
-      logs.push(partes.map(String).join(' '));
-    };
-  }
-  try {
-    return await cuerpo(logs);
-  } finally {
-    Object.assign(console, originales);
-  }
-}
-
-/** El TEMP del proceso va a la carpeta del test, como en la app va a la de la ejecución. */
-async function conTemporal<T>(temporal: string, cuerpo: () => Promise<T>): Promise<T> {
-  const antes = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };
-  mkdirSync(temporal, { recursive: true });
-  process.env.TEMP = temporal;
-  process.env.TMP = temporal;
-  process.env.TMPDIR = temporal;
-  try {
-    return await cuerpo();
-  } finally {
-    restaurarEntorno(antes);
-  }
-}
-
 test('TS-01: el canario no aparece en claro en ningún archivo, ni en la base, ni en la interfaz, ni en los logs', async () => {
   const raiz = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts01-'));
-  let abierta: Awaited<ReturnType<typeof armar>> | undefined;
+  let abierta: AppEnProceso | undefined;
   try {
     await conConsolaCapturada(async (logs) => {
       await conTemporal(path.join(raiz, 'tmp'), async () => {
-        const app = await armar(raiz);
+        const app = await armar(raiz, sitio);
         abierta = app;
         const { origen, ejecuciones, credencial, crearProyecto, escanear } = app;
 
         // Las fugas, sin login. El proyecto tiene una credencial con el canario: la redacción lo conoce.
         const fugas = crearProyecto('Fugas', '/fugas', []);
         credencial(fugas, 'admin', 'formulario', `${origen}/app/login`, CANARIO);
+        // El canario a la vista en una página con una falla: su captura lo tiene que tapar (EVI-04).
+        const visible = crearProyecto('Visible', '/evidencias/visible', [], { maxPaginas: 1 });
+        credencial(visible, 'admin', 'formulario', `${origen}/app/login`, CANARIO);
         // La app con login, con las cuatro estrategias. Todas entran con el canario.
         const appSandbox = crearProyecto('App', '/app/inicio', [HOST_IDP]);
         const formulario = credencial(
@@ -430,6 +178,7 @@ test('TS-01: el canario no aparece en claro en ningún archivo, ni en la base, n
 
         // 2. Escaneo sin login de las páginas que filtran el canario.
         const sinLogin = await escanear(fugas, null);
+        const aLaVista = await escanear(visible, null);
         const detalleFugas = ejecuciones.detalle(sinLogin);
         // Se capturó y se redactó: el test no pasa porque no se guardó nada.
         const textos = JSON.stringify(detalleFugas);
@@ -507,7 +256,27 @@ test('TS-01: el canario no aparece en claro en ningún archivo, ni en la base, n
           ),
           logs: enTexto(logs.join('\n')),
         };
-        expect(lugares).toEqual({ archivos: [], 'base descifrada': [], interfaz: [], logs: [] });
+        // Las evidencias (semana 7b), descifradas como las recibe la interfaz: HAR, traza y snapshots
+        // como texto, y las capturas leídas con OCR.
+        const { textos: deEvidencias, capturas } = await evidenciasDeTodas(app, [
+          sinLogin,
+          aLaVista,
+          ...conLogin,
+        ]);
+        // Se guardaron y se redactaron: el test no pasa porque no hubo evidencias.
+        expect(deEvidencias.map((t) => t.tipo)).toEqual(expect.arrayContaining(['traza', 'har']));
+        expect(deEvidencias.some((t) => t.texto.includes('[REDACTADO:'))).toBe(true);
+        expect(capturas.length).toBeGreaterThan(0);
+        lugares['evidencias descifradas'] = enTexto(deEvidencias.map((t) => t.texto).join('\n'));
+        lugares['capturas (OCR)'] = (await capturasConCanario(capturas)) ? ['visible'] : [];
+        expect(lugares).toEqual({
+          archivos: [],
+          'base descifrada': [],
+          interfaz: [],
+          logs: [],
+          'evidencias descifradas': [],
+          'capturas (OCR)': [],
+        });
         // Y el JWT del log del backend (TS-13), tampoco.
         expect(enTexto(baseDescifrada(app), JWT_DE_PRUEBA)).toEqual([]);
         // Los logs técnicos existen y se revisaron: no es que estuvieran vacíos.
@@ -524,22 +293,38 @@ test('TS-01: el canario no aparece en claro en ningún archivo, ni en la base, n
 
 test('control positivo: con la redacción apagada, el mismo escaneo deja el canario en la base', async () => {
   const raiz = mkdtempSync(path.join(os.tmpdir(), 'qatlas-ts01-control-'));
-  let abierta: Awaited<ReturnType<typeof armar>> | undefined;
+  let abierta: AppEnProceso | undefined;
   /** No redacta nada: solo para este control. La app usa siempre el de verdad. */
   const sinRedactar: Redactor = {
     texto: (texto) => ({ texto: texto as TextoRedactado, registros: [] }),
     url: (url) => ({ texto: url as TextoRedactado, registros: [] }),
     secuencia: (textos) =>
       textos.map((texto) => ({ texto: texto as TextoRedactado, registros: [] })),
+    encabezados: (encabezados) => ({
+      encabezados: encabezados.map(({ nombre, valor }) => ({
+        nombre,
+        valor: valor as TextoRedactado,
+      })),
+      registros: [],
+    }),
+    cuerpo: (cuerpo) => ({ texto: cuerpo as TextoRedactado, registros: [] }),
   };
   try {
     await conTemporal(path.join(raiz, 'tmp'), async () => {
-      const app = await armar(raiz, sinRedactar);
+      const app = await armar(raiz, sitio, sinRedactar);
       abierta = app;
       const fugas = app.crearProyecto('Fugas', '/fugas', []);
       app.credencial(fugas, 'admin', 'formulario', `${app.origen}/app/login`, CANARIO);
-      await app.escanear(fugas, null);
+      const id = await app.escanear(fugas, null);
       expect(enTexto(baseDescifrada(app))).toContain('tal cual');
+      const visible = app.crearProyecto('Visible', '/evidencias/visible', [], { maxPaginas: 1 });
+      app.credencial(visible, 'admin', 'formulario', `${app.origen}/app/login`, CANARIO);
+      const aLaVista = await app.escanear(visible, null);
+      // Sin redacción, el canario queda en las evidencias descifradas y a la vista en una captura: el
+      // OCR lo lee. Así, en el test principal, no encontrarlo dice algo.
+      const { textos, capturas } = await evidenciasDeTodas(app, [id, aLaVista]);
+      expect(enTexto(textos.map((t) => t.texto).join('\n'))).toContain('tal cual');
+      expect(await capturasConCanario(capturas)).toBe(true);
       app.boveda.bloquear();
     });
   } finally {

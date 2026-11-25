@@ -258,16 +258,16 @@ describe('Lápidas y purga', () => {
   it('purga los datos de los proyectos con lápida y deja los demás', () => {
     const base = abrir(path.join(carpeta, 'b.db'));
     migrar(base);
-    base.exec('CREATE TABLE evidencia (proyecto_id TEXT, dato TEXT); ');
-    base.exec("INSERT INTO evidencia VALUES ('a', 'de-a'), ('b', 'de-b');");
+    base.exec('CREATE TABLE tabla_de_prueba (proyecto_id TEXT, dato TEXT); ');
+    base.exec("INSERT INTO tabla_de_prueba VALUES ('a', 'de-a'), ('b', 'de-b');");
 
-    purgarConLapida(base, ['evidencia']); // sin lápidas no borra nada
-    expect(base.prepare('SELECT count(*) AS c FROM evidencia').get()).toEqual({ c: 2 });
+    purgarConLapida(base, ['tabla_de_prueba']); // sin lápidas no borra nada
+    expect(base.prepare('SELECT count(*) AS c FROM tabla_de_prueba').get()).toEqual({ c: 2 });
 
     registrarLapidas(base, [lapida('a')]);
-    purgarConLapida(base); // sin tablas registradas no hace nada
-    purgarConLapida(base, ['evidencia']);
-    expect(base.prepare('SELECT dato FROM evidencia').all()).toEqual([{ dato: 'de-b' }]);
+    purgarConLapida(base); // las tablas registradas no tienen esa
+    purgarConLapida(base, ['tabla_de_prueba']);
+    expect(base.prepare('SELECT dato FROM tabla_de_prueba').all()).toEqual([{ dato: 'de-b' }]);
   });
 });
 

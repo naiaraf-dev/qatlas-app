@@ -1,28 +1,51 @@
 import { useEffect, useId, useState, type SyntheticEvent } from 'react';
-import { BLOQUEO_MINUTOS_MAX, BLOQUEO_MINUTOS_MIN } from '@qatlas/shared';
+import {
+  BLOQUEO_MINUTOS_MAX,
+  BLOQUEO_MINUTOS_MIN,
+  RETENCION_DIAS_MAX,
+  RETENCION_DIAS_MIN,
+} from '@qatlas/shared';
 import { Button, Card, PageHeader } from '../ui/components';
 import { EntradaSensible, useCampoSensible } from '../ui/EntradaSensible';
 
 export function Boveda() {
   const [minutos, setMinutos] = useState<number | null>(null);
+  const [dias, setDias] = useState<number | null>(null);
   const [guardado, setGuardado] = useState(false);
+  const [guardadaRetencion, setGuardadaRetencion] = useState(false);
   const [mensajeCopia, setMensajeCopia] = useState<string | null>(null);
   const campoCopia = useCampoSensible();
   const [mensajeRestaurar, setMensajeRestaurar] = useState<string | null>(null);
   const idMinutos = useId();
+  const idDias = useId();
   const idContrasena = useId();
 
   useEffect(() => {
     void window.qatlas.vault.getSettings().then((res) => {
-      if (res.ok) setMinutos(res.data.bloqueoMinutos);
+      if (res.ok) {
+        setMinutos(res.data.bloqueoMinutos);
+        setDias(res.data.retencionDias);
+      }
     });
   }, []);
 
+  const guardarAjustes = async () => {
+    if (minutos === null || dias === null) return false;
+    const res = await window.qatlas.vault.setSettings({
+      bloqueoMinutos: minutos,
+      retencionDias: dias,
+    });
+    return res.ok;
+  };
+
   const guardar = async (event: SyntheticEvent) => {
     event.preventDefault();
-    if (minutos === null) return;
-    const res = await window.qatlas.vault.setSettings({ bloqueoMinutos: minutos });
-    setGuardado(res.ok);
+    setGuardado(await guardarAjustes());
+  };
+
+  const guardarRetencion = async (event: SyntheticEvent) => {
+    event.preventDefault();
+    setGuardadaRetencion(await guardarAjustes());
   };
 
   const crearCopia = async () => {
@@ -81,6 +104,41 @@ export function Boveda() {
         <p className="mt-3 text-[13.5px] text-muted">
           También se bloquea al suspender o bloquear el sistema y al cerrar QAtlas. Atajo para
           bloquear: Ctrl + Mayús + L.
+        </p>
+      </Card>
+
+      <Card title="Retención de las evidencias">
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(event) => {
+            void guardarRetencion(event);
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={idDias} className="font-medium">
+              Días que se guardan
+            </label>
+            <input
+              id={idDias}
+              type="number"
+              min={RETENCION_DIAS_MIN}
+              max={RETENCION_DIAS_MAX}
+              value={dias ?? ''}
+              onChange={(event) => {
+                setGuardadaRetencion(false);
+                setDias(Number(event.target.value));
+              }}
+              className="min-h-11 w-28 rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text"
+            />
+          </div>
+          <Button type="submit">Guardar retención</Button>
+          {guardadaRetencion && <p className="self-center text-muted">Guardado.</p>}
+        </form>
+        <p className="mt-3 text-[13.5px] text-muted">
+          Capturas, videos, trazas y HAR de más días se eliminan con borrado criptográfico al
+          desbloquear: sin su clave, ningún resto en el disco se puede leer. Las evidencias de los
+          reportes se conservan (los reportes llegan en: semana 9). Cada eliminación queda en la
+          auditoría.
         </p>
       </Card>
 

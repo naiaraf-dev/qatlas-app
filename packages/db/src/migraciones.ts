@@ -263,6 +263,32 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX redaccion_proyecto ON redaccion(proyecto_id);
     `,
   },
+  {
+    version: 8,
+    // Evidencias (semana 7b, ADR 035 a 038). La semilla de cada archivo vive solo en esta fila.
+    sql: `
+      ALTER TABLE hallazgo_ocurrencia ADD COLUMN pagina_visitada_id TEXT;
+      CREATE TABLE evidencia (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        ejecucion_id TEXT NOT NULL REFERENCES ejecucion(id),
+        pagina_visitada_id TEXT REFERENCES pagina_visitada(id),
+        tipo TEXT NOT NULL,
+        archivo TEXT NOT NULL UNIQUE,
+        semilla BLOB NOT NULL,
+        tamano INTEGER NOT NULL,
+        secretos_redactados INTEGER NOT NULL DEFAULT 0,
+        revision_pendiente INTEGER NOT NULL DEFAULT 0,
+        puede_tener_datos_sensibles INTEGER NOT NULL DEFAULT 0,
+        metadatos TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX evidencia_ejecucion ON evidencia(ejecucion_id);
+      CREATE INDEX evidencia_proyecto ON evidencia(proyecto_id);
+      CREATE INDEX evidencia_creada ON evidencia(created_at);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

@@ -99,6 +99,23 @@ export const EstadoSesion = z
   })
   .strict();
 
+/**
+ * Qué evidencias graba un escaneo (semana 7b). Con el modo datos sensibles (EVI-05): sin video, sin
+ * snapshots del DOM y con todos los campos de formulario tapados en las capturas.
+ */
+export const OpcionesEvidencias = z
+  .object({
+    video: z.boolean(),
+    snapshots: z.boolean(),
+    capturas: z.boolean(),
+    traza: z.boolean(),
+    selectoresSensibles: z.array(z.string().min(1).max(500)).max(200),
+    enmascararFormularios: z.boolean(),
+    maxCapturas: z.number().int().nonnegative(),
+  })
+  .strict();
+export type OpcionesEvidencias = z.infer<typeof OpcionesEvidencias>;
+
 export const MensajeAlRunner = z.discriminatedUnion('tipo', [
   z
     .object({
@@ -121,6 +138,7 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
         })
         .strict()
         .nullable(),
+      evidencias: OpcionesEvidencias,
     })
     .strict(),
   // Probar login: la configuración trae el proxy de login. El secreto llega solo en un login.
@@ -145,10 +163,97 @@ export const MensajeAlRunner = z.discriminatedUnion('tipo', [
   // No hay login: límite, login fallido o pausa cancelada. El proceso principal sabe por qué.
   z.object({ tipo: z.literal('login-denegado') }).strict(),
   z.object({ tipo: z.literal('cancelar') }).strict(),
+  // Qué textos de la página tienen un secreto: esos elementos se tapan en la captura (EVI-04).
+  z
+    .object({
+      tipo: z.literal('tapar-en-captura'),
+      indices: z.array(z.number().int().nonnegative()).max(2000),
+    })
+    .strict(),
+  // El proceso principal ya escribió estos fotogramas: el runner puede mandar más (f5).
+  z
+    .object({ tipo: z.literal('evidencia-procesada'), fotogramas: z.number().int().positive() })
+    .strict(),
 ]);
 export type MensajeAlRunner = z.infer<typeof MensajeAlRunner>;
 
 const Cantidad = z.number().int().nonnegative();
+const Momento = z.number().nonnegative();
+const Tramo = z.number().int().positive();
+const Bytes = (maximo: number) =>
+  z.instanceof(Uint8Array).refine((datos) => datos.byteLength > 0 && datos.byteLength <= maximo);
+const Encabezados = z
+  .array(z.object({ nombre: z.string().max(200), valor: z.string().max(8192) }).strict())
+  .max(150);
+
+/** Lo que el runner ve de la página para la traza. Texto del sitio: el principal lo redacta todo. */
+export const EventoTraza = z.discriminatedUnion('clase', [
+  z
+    .object({
+      clase: z.literal('navegacion'),
+      t: Momento,
+      tramo: Tramo.nullable(),
+      url: z.string().max(2048),
+    })
+    .strict(),
+  z
+    .object({
+      clase: z.literal('accion'),
+      t: Momento,
+      tramo: Tramo.nullable(),
+      accion: z.enum(['click']),
+      objetivo: z.string().max(300),
+    })
+    .strict(),
+  z
+    .object({
+      clase: z.literal('red'),
+      t: Momento,
+      tramo: Tramo.nullable(),
+      metodo: z.string().max(16),
+      url: z.string().max(4096),
+      tipoRecurso: z.string().max(30),
+      estado: z.number().int().nullable(),
+      encabezadosSolicitud: Encabezados,
+      encabezadosRespuesta: Encabezados,
+      cuerpoSolicitud: z.string().max(65_536).nullable(),
+      tipoContenidoSolicitud: z.string().max(200).nullable(),
+      error: z.string().max(200).nullable(),
+      duracionMs: z.number().int().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      clase: z.literal('consola'),
+      t: Momento,
+      tramo: Tramo.nullable(),
+      nivel: z.string().max(20),
+      texto: z.string().max(2000),
+    })
+    .strict(),
+  z
+    .object({
+      clase: z.literal('excepcion'),
+      t: Momento,
+      tramo: Tramo.nullable(),
+      texto: z.string().max(2000),
+    })
+    .strict(),
+  z
+    .object({
+      clase: z.literal('snapshot'),
+      t: Momento,
+      tramo: Tramo,
+      html: z.string().max(1_000_100),
+      enmascarados: Cantidad,
+    })
+    .strict(),
+]);
+export type EventoTraza = z.infer<typeof EventoTraza>;
+
+/** Tamaños máximos de lo que llega en bytes. Lo que pasa de esto se rechaza. */
+export const MAX_BYTES_FOTOGRAMA = 2 * 1024 * 1024;
+export const MAX_BYTES_CAPTURA = 15 * 1024 * 1024;
 
 export const MensajeDelRunner = z.discriminatedUnion('tipo', [
   z
@@ -252,5 +357,43 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
     })
     .strict(),
   z.object({ tipo: z.literal('rechazado') }).strict(),
+  // Evidencias (semana 7b). Un tramo es una página del crawler: su video se conserva o se descarta.
+  z.object({ tipo: z.literal('tramo-inicio'), tramo: Tramo }).strict(),
+  z
+    .object({
+      tipo: z.literal('tramo-fin'),
+      tramo: Tramo,
+      errorNavegacion: z.boolean(),
+      perdidos: Cantidad,
+      // Los descartados después del último fotograma enviado: el hueco va al final del tramo.
+      perdidosAlFinal: Cantidad,
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('fotograma'),
+      tramo: Tramo,
+      t: Momento,
+      perdidosAntes: Cantidad,
+      datos: Bytes(MAX_BYTES_FOTOGRAMA),
+    })
+    .strict(),
+  z
+    .object({
+      tipo: z.literal('captura'),
+      tramo: Tramo,
+      enmascarados: Cantidad,
+      datos: Bytes(MAX_BYTES_CAPTURA),
+    })
+    .strict(),
+  z.object({ tipo: z.literal('traza'), evento: EventoTraza }).strict(),
+  // Antes de una captura: el texto visible de cada elemento, para que el principal diga qué tapar.
+  z
+    .object({
+      tipo: z.literal('textos-de-captura'),
+      tramo: Tramo,
+      textos: z.array(z.string().max(5000)).max(2000),
+    })
+    .strict(),
 ]);
 export type MensajeDelRunner = z.infer<typeof MensajeDelRunner>;

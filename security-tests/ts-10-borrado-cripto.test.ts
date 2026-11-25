@@ -21,6 +21,9 @@ import {
 } from '@qatlas/crypto';
 
 const CONTRASENA = () => contrasenaABuffer('contraseña larga para el test');
+// Las semillas siguen vivas: lo que se prueba acá es la clave del proyecto. La semilla, en ts-10-evidencias.
+const SEMILLA_A = Buffer.alloc(32, 1);
+const SEMILLA_B = Buffer.alloc(32, 2);
 const EVIDENCIA = Buffer.from('captura con datos sensibles '.repeat(10000));
 
 async function pasar(transformador: NodeJS.ReadWriteStream, datos: Buffer): Promise<Buffer> {
@@ -40,8 +43,8 @@ async function escenario() {
   const { sellada, maestra } = await crearBoveda(CONTRASENA());
   const a = crearClaveProyecto(maestra, 'proyecto-a');
   const b = crearClaveProyecto(maestra, 'proyecto-b');
-  const archivoA = await pasar(crearCifradorArchivo(a.clave, 'ev-a'), EVIDENCIA);
-  const archivoB = await pasar(crearCifradorArchivo(b.clave, 'ev-b'), EVIDENCIA);
+  const archivoA = await pasar(crearCifradorArchivo(a.clave, 'ev-a', SEMILLA_A), EVIDENCIA);
+  const archivoB = await pasar(crearCifradorArchivo(b.clave, 'ev-b', SEMILLA_B), EVIDENCIA);
   const campoA = cifrarCampo(a.clave, 'cred-a', Buffer.from('secreto-a'));
   return { sellada, a, b, archivoA, archivoB, campoA };
 }
@@ -50,7 +53,9 @@ describe('TS-10 · Borrado criptográfico', () => {
   it('con la clave todavía disponible, los datos se leen (control del propio test)', async () => {
     const { a, archivoA, campoA } = await escenario();
     expect(
-      (await pasar(crearDescifradorArchivo(a.clave, 'ev-a'), archivoA)).equals(EVIDENCIA),
+      (await pasar(crearDescifradorArchivo(a.clave, 'ev-a', SEMILLA_A), archivoA)).equals(
+        EVIDENCIA,
+      ),
     ).toBe(true);
     expect(descifrarCampo(a.clave, 'cred-a', campoA).toString()).toBe('secreto-a');
   });
@@ -64,7 +69,9 @@ describe('TS-10 · Borrado criptográfico', () => {
     expect(() => abrirClaveProyecto(maestra, 'proyecto-a', a.envuelta)).toThrow(ErrorCripto);
 
     // La clave era aleatoria: no se deriva de la maestra. Tampoco sirve la maestra en su lugar.
-    await expect(pasar(crearDescifradorArchivo(maestra, 'ev-a'), archivoA)).rejects.toMatchObject({
+    await expect(
+      pasar(crearDescifradorArchivo(maestra, 'ev-a', SEMILLA_A), archivoA),
+    ).rejects.toMatchObject({
       codigo: 'AUTENTICACION',
     });
     expect(() => descifrarCampo(maestra, 'cred-a', campoA)).toThrow(ErrorCripto);
@@ -76,7 +83,7 @@ describe('TS-10 · Borrado criptográfico', () => {
     const maestra = await abrirBoveda(CONTRASENA(), sellada);
     const nuevo = crearClaveProyecto(maestra, 'proyecto-a');
     await expect(
-      pasar(crearDescifradorArchivo(nuevo.clave, 'ev-a'), archivoA),
+      pasar(crearDescifradorArchivo(nuevo.clave, 'ev-a', SEMILLA_A), archivoA),
     ).rejects.toMatchObject({ codigo: 'AUTENTICACION' });
   });
 
@@ -85,9 +92,9 @@ describe('TS-10 · Borrado criptográfico', () => {
     borrar(a.clave, a.envuelta);
     const maestra = await abrirBoveda(CONTRASENA(), sellada);
     const claveB = abrirClaveProyecto(maestra, 'proyecto-b', b.envuelta);
-    expect((await pasar(crearDescifradorArchivo(claveB, 'ev-b'), archivoB)).equals(EVIDENCIA)).toBe(
-      true,
-    );
+    expect(
+      (await pasar(crearDescifradorArchivo(claveB, 'ev-b', SEMILLA_B), archivoB)).equals(EVIDENCIA),
+    ).toBe(true);
   });
 
   it('LÍMITE documentado: una copia de la envoltura todavía abre la clave', async () => {

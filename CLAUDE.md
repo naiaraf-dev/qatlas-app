@@ -47,7 +47,21 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   proceso principal de todo lo que se guarda o se muestra, credenciales por HMAC, clave de los hallazgos con HMAC
   del proyecto, redacción de lo guardado al desbloquear, logs técnicos, TS-01 (canario) y TS-13 parcial. Ver las
   ADR 030 a 034.
-- Próximo: semana 7b, evidencias (capturas, traza, HAR, video, visor).
+- Fase 1, semana 7b terminada: evidencias (capturas enmascaradas, video por tramos, traza propia, HAR y
+  snapshot del DOM como texto), formato de archivo v2 con semilla por evidencia, visor con canvas y CSP sin
+  `data:` ni `blob:`, modo datos sensibles, retención, TS-06 completo con OCR, TS-01 sobre las evidencias y
+  TS-10 parcial. Ver las ADR 035 a 039.
+- Próximo: semana 8, hallazgos, huella y regresiones.
+- Nunca usar la grabación de Playwright (`recordVideo`, `tracing`, `recordHar`): escribe en claro en disco.
+  El runner manda fotogramas, capturas y eventos en memoria (`grabacion.ts`); el principal los redacta y los
+  cifra (`main/evidencias/`). Solo `grabacion.ts` captura la pantalla, y el login nunca la conoce: un test
+  lo verifica.
+- Cada evidencia se cifra con la clave del proyecto y su semilla, que vive solo en su fila: borrar la fila es
+  su borrado criptográfico (ADR 035). Un archivo sin fila es un resto ilegible y se borra.
+- Una imagen nueva en la interfaz llega en bytes validados por su firma y se dibuja en un canvas. La CSP no
+  admite `data:` ni `blob:`, y el build no incrusta nada (`assetsInlineLimit: 0`).
+- Un test que dice «no aparece» en una imagen usa el OCR de `e2e/ocr.ts` (solo desarrollo, sin red) y tiene
+  su control positivo, que sí lo encuentra.
 - Todo texto del sitio pasa por la redacción en el proceso principal antes de guardarse, mostrarse o registrarse
   (`ejecuciones/redaccion.ts`). Una columna nueva con texto del sitio es `TextoRedactado`; nunca un cast.
 - Logs: solo `registrar()` (`main/registro.ts`), con eventos, códigos de `CODIGOS_PERMITIDOS`, IDs y tiempos. Nunca
@@ -61,12 +75,16 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
+- Todo navegador de pruebas, de la app, de un test o de un script, se lanza con `opcionesChromium`
+  (`opciones-chromium.ts`): un solo `--disable-features`, porque Chromium se queda con el último (ADR 041). Un
+  test busca su conexión por destino, nunca «la última».
 - Cada tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO` (un test lo verifica), y un canal IPC
   nuevo queda bloqueado con la bóveda bloqueada salvo que se agregue a `CANALES_SIN_BOVEDA`.
 - La auditoría guarda solo IDs y nombres de campos (ADR 015).
 - Pendientes de la semana 10: compilar SQLCipher desde fuente para los instaladores (ADR 006),
   `asarUnpack` con verificación sobre el binario final (ADR 007), avisos de terceros del instalador, a partir
-  de `THIRD_PARTY_NOTICES.md` (gitleaks, axe-core y la Public Suffix List) más el resto de las dependencias, y empaquetar Chromium en `resources/navegadores`, firmado
+  de `THIRD_PARTY_NOTICES.md` (gitleaks, axe-core y la Public Suffix List; el OCR es solo de desarrollo y no
+  va) más el resto de las dependencias, y empaquetar Chromium en `resources/navegadores`, firmado
   (ADR 020). En Linux, el sandbox de Chromium necesita configuración (en CI se usa `sysctl`): si algún día
   se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a

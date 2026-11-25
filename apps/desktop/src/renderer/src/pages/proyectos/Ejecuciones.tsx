@@ -3,6 +3,7 @@ import {
   credencialUsable,
   ESTRATEGIAS_PENDIENTES,
   minutosMinimosDeEjecucion,
+  REGLA_SERVICIO_INTERNO,
   type EjecucionResumen,
   type HallazgoVista,
   type ProgresoEjecucion,
@@ -13,6 +14,7 @@ import {
 } from '@qatlas/shared';
 import { Button, Card, SeverityBadge } from '../../ui/components';
 import { Aviso } from './comunes';
+import { EvidenciasDeEjecucion } from './Evidencias';
 
 const INTERVALO_MS = 1000;
 
@@ -92,6 +94,14 @@ function Cobertura({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
       'Se detuvo porque no se pudo volver a entrar: quedaron páginas sin recorrer.',
     resumen.logins > 0 &&
       `Logins: ${resumen.logins} (${resumen.loginsInesperados} por sesión vencida, ${resumen.renovaciones} renovaciones planificadas).`,
+    (resumen.capturas > 0 || resumen.videos > 0) &&
+      `Evidencias: ${resumen.capturas} capturas y ${resumen.videos} videos de páginas con fallas.`,
+    resumen.topesAlcanzados.includes('capturas') &&
+      'Se alcanzó el tope de capturas de una ejecución (200): las páginas siguientes no tienen captura.',
+    resumen.topesAlcanzados.includes('video') &&
+      'Se alcanzó el tope de video de una ejecución (200 MB): se dejó de grabar.',
+    resumen.fotogramasPerdidos > 0 &&
+      `Se perdieron ${resumen.fotogramasPerdidos} fotogramas de video: el visor marca dónde.`,
   ].filter((linea): linea is string => typeof linea === 'string');
   if (lineas.length === 0) return null;
   return (
@@ -188,6 +198,7 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
   const [bloqueoMinutos, setBloqueoMinutos] = useState<number | null>(null);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<Detalle | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const [progreso, setProgreso] = useState<ProgresoEjecucion | null>(null);
   const usables = proyecto.credenciales.filter(credencialUsable);
   // Vacío: sin credencial, un escaneo anónimo.
@@ -246,11 +257,17 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
 
   const verDetalle = async (ejecucionId: string) => {
     const res = await window.qatlas.ejecuciones.detalle({ ejecucionId });
-    if (res.ok) setDetalle(res.data);
+    if (res.ok) {
+      setDetalle(res.data);
+      setDetalleId(ejecucionId);
+    }
   };
 
   const minutos = minutosMinimosDeEjecucion(proyecto);
-  const bloqueadas = detalle?.conexiones.filter((c) => !c.permitida) ?? [];
+  const rechazadas = detalle?.conexiones.filter((c) => !c.permitida) ?? [];
+  // Las del navegador por su cuenta no son del sitio: se cuentan aparte y están en Privacidad y conexiones.
+  const bloqueadas = rechazadas.filter((c) => c.regla !== REGLA_SERVICIO_INTERNO);
+  const delNavegador = rechazadas.length - bloqueadas.length;
 
   return (
     <Card title="Ejecuciones">
@@ -383,6 +400,16 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
             <Hallazgos hallazgos={detalle.hallazgos} />
           </section>
         )}
+        {detalle && detalleId && (
+          <section aria-label="Evidencias de la ejecución" className="flex flex-col gap-3">
+            <h3 className="font-semibold">Evidencias</h3>
+            <EvidenciasDeEjecucion
+              key={detalleId}
+              ejecucionId={detalleId}
+              paginas={detalle.paginas}
+            />
+          </section>
+        )}
         {detalle && (
           <section
             aria-label="Conexiones bloqueadas de la ejecución"
@@ -399,6 +426,14 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
                   </li>
                 ))}
               </ul>
+            )}
+            {delNavegador > 0 && (
+              <p className="text-[13.5px] text-muted">
+                Además, el navegador de pruebas intentó {delNavegador}{' '}
+                {delNavegador === 1 ? 'conexión propia' : 'conexiones propias'} (servicios internos
+                de Chromium). El proxy las rechazó sin dejarlas salir. Están en Privacidad y
+                conexiones.
+              </p>
             )}
           </section>
         )}

@@ -166,6 +166,60 @@ export const hallazgoOcurrencia = sqliteTable('hallazgo_ocurrencia', {
   secretosRedactados: integer('secretos_redactados').notNull().default(0),
   /** Con secretos redactados: la exportación (semana 9) pide revisarla (RN-REP-03). */
   revisionPendiente: integer('revision_pendiente', { mode: 'boolean' }).notNull().default(false),
+  /** La página donde apareció: sus capturas, su tramo de video y su snapshot (semana 7b). */
+  paginaVisitadaId: text('pagina_visitada_id'),
+});
+
+export const TIPOS_EVIDENCIA = ['captura', 'video', 'traza', 'har', 'snapshot-dom'] as const;
+export type TipoEvidencia = (typeof TIPOS_EVIDENCIA)[number];
+
+/**
+ * Lo que no es texto del sitio: medidas, cantidades y los huecos del video. Nunca URLs ni contenido.
+ */
+export interface MetadatosEvidencia {
+  formato?: 'image/png' | 'image/jpeg' | 'qatlas-video' | 'qatlas-traza' | 'har' | 'html-texto';
+  ancho?: number;
+  alto?: number;
+  duracionMs?: number;
+  fotogramas?: number;
+  /** Fotogramas que se descartaron porque el proceso principal se atrasó (f5). */
+  fotogramasPerdidos?: number;
+  /** Dónde se perdieron: milisegundos desde el comienzo del tramo y cuántos. */
+  huecos?: { t: number; cantidad: number }[];
+  /** Cuántos elementos se taparon en la captura o se vaciaron en el snapshot. */
+  enmascarados?: number;
+  /** Con el modo datos sensibles activo al grabarla. */
+  modoSensible?: boolean;
+  /** Eventos de la traza o entradas del HAR. */
+  entradas?: number;
+}
+
+/**
+ * Capturas, video, traza, HAR y snapshots del DOM (EVI, ADR 035 a 038). El archivo está cifrado con la
+ * clave del proyecto y la `semilla` de esta fila (formato v2): borrar la fila es su borrado
+ * criptográfico. El nombre del archivo es aleatorio, en una carpeta plana.
+ */
+export const evidencia = sqliteTable('evidencia', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  ejecucionId: text('ejecucion_id')
+    .notNull()
+    .references(() => ejecucion.id),
+  paginaVisitadaId: text('pagina_visitada_id').references(() => paginaVisitada.id),
+  tipo: text('tipo', { enum: TIPOS_EVIDENCIA }).notNull(),
+  archivo: text('archivo').notNull().unique(),
+  semilla: blob('semilla', { mode: 'buffer' }).notNull(),
+  /** Bytes del contenido, antes de cifrar. */
+  tamano: integer('tamano').notNull(),
+  secretosRedactados: integer('secretos_redactados').notNull().default(0),
+  revisionPendiente: integer('revision_pendiente', { mode: 'boolean' }).notNull().default(false),
+  /** Video y snapshots: no se pueden redactar del todo (EXP-02). La exportación lo dice. */
+  puedeTenerDatosSensibles: integer('puede_tener_datos_sensibles', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  metadatos: text('metadatos', { mode: 'json' }).$type<MetadatosEvidencia>().notNull(),
 });
 
 /**
@@ -247,4 +301,6 @@ export const auditoria = sqliteTable('auditoria', {
 export interface DetalleAuditoria {
   proyectoId?: string;
   campos?: string[];
+  /** Solo cantidades: cuántas evidencias se eliminaron o se conservaron. */
+  cantidad?: number;
 }

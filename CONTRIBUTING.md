@@ -98,5 +98,8 @@ Al cerrarlo, si no está ya, hay que agregar la regla en `ignore` de
 a proponerse. Si llegó dentro de un grupo, hay que cerrar el grupo: Dependabot lo vuelve a crear sin ese
 paquete una vez agregada la regla.
 
+La versión de npm está fijada en `packageManager` y `engines.npm` ([ADR 040](docs/decisiones/040-version-de-npm.md)):
+subirla de mayor es una decisión aparte, con su revisión del lockfile.
+
 Para subir la versión mínima de Node, hay que cambiar juntos `engines` en `package.json`, la versión
 del CI y `@types/node`.

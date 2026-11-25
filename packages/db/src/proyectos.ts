@@ -54,7 +54,11 @@ export type AccionAuditoria =
   | 'opcion.desactivar'
   | 'credencial.guardar'
   | 'credencial.reemplazar_secreto'
-  | 'credencial.eliminar';
+  | 'credencial.eliminar'
+  | 'evidencias.retencion'
+  | 'evidencias.modo-sensible-eliminar'
+  | 'evidencias.modo-sensible-conservar'
+  | 'configuracion.editar';
 
 const orm = (base: BaseCifrada) => drizzle(base);
 
@@ -197,7 +201,7 @@ export function registrarAuditoria(
   base: BaseCifrada,
   entrada: {
     accion: AccionAuditoria;
-    entidad: 'proyecto' | 'autorizacion' | 'credencial';
+    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion';
     entidadId: string;
     detalle?: DetalleAuditoria;
   },
@@ -295,14 +299,17 @@ export function leerUltimasConexiones(base: BaseCifrada, limite: number): FilaCo
     .all();
 }
 
+/** Devuelve el ID: las evidencias y las ocurrencias de esa página lo usan. */
 export function agregarPaginaVisitada(
   base: BaseCifrada,
   fila: Omit<FilaPaginaVisitada, Comunes | 'id'>,
-): void {
+): string {
+  const id = randomUUID();
   orm(base)
     .insert(paginaVisitada)
-    .values({ ...fila, id: randomUUID(), ...marcas(new Date().toISOString()) })
+    .values({ ...fila, id, ...marcas(new Date().toISOString()) })
     .run();
+  return id;
 }
 
 export function leerPaginasVisitadas(base: BaseCifrada, ejecucionId: string): FilaPaginaVisitada[] {
@@ -324,6 +331,7 @@ export function agregarHallazgo(
   >,
   ocurrencia: Pick<FilaOcurrencia, 'urlOrigen' | 'detalleCifrado' | 'secretosRedactados'> & {
     id: string;
+    paginaVisitadaId?: string | null;
   },
 ): void {
   const ahora = new Date().toISOString();
@@ -354,6 +362,7 @@ export function agregarHallazgo(
         urlOrigen: ocurrencia.urlOrigen,
         detalleCifrado: ocurrencia.detalleCifrado,
         secretosRedactados: ocurrencia.secretosRedactados,
+        paginaVisitadaId: ocurrencia.paginaVisitadaId ?? null,
         // Con secretos redactados, la exportación pide revisarla (RN-REP-03).
         revisionPendiente: ocurrencia.secretosRedactados > 0,
         ...marcas(ahora),
@@ -370,6 +379,7 @@ export function leerHallazgosDeEjecucion(
   urlOrigen: FilaOcurrencia['urlOrigen'];
   detalleCifrado: Buffer | null;
   secretosRedactados: number;
+  paginaVisitadaId: string | null;
 })[] {
   return orm(base)
     .select({
@@ -378,6 +388,7 @@ export function leerHallazgosDeEjecucion(
       urlOrigen: hallazgoOcurrencia.urlOrigen,
       detalleCifrado: hallazgoOcurrencia.detalleCifrado,
       secretosRedactados: hallazgoOcurrencia.secretosRedactados,
+      paginaVisitadaId: hallazgoOcurrencia.paginaVisitadaId,
     })
     .from(hallazgo)
     .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))

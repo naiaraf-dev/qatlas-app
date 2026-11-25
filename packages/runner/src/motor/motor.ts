@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { decidirUrlSinResolver, type PoliticaDeRed } from '../red/reglas';
+import { opcionesChromium } from './opciones-chromium';
 import type { Configuracion } from '../protocolo';
 
 /**
@@ -18,38 +19,10 @@ export interface RegistroNavegador {
 
 export type AlRegistrar = (registro: RegistroNavegador) => void;
 
-/**
- * - `chromiumSandbox`: Playwright lo trae apagado, y el sitio probado es hostil por defecto.
- * - `<-loopback>`: sin esto, Chromium se saltea el proxy para localhost.
- * - WebRTC y QUIC usan UDP, que el proxy no ve: se apagan. El nombre importa: la variante `--force-` de
- *   este flag no hace nada en esta versión, y sin decir nada. Por eso hay un control positivo en los E2E.
- * - `PreconnectToSearch` y `AutofillServerCommunication`: Chromium se conecta solo a su buscador por
- *   defecto y al servicio de autocompletar, al ver un formulario. El proxy los bloquea igual, pero
- *   llenarían el monitor con destinos que el sitio nunca pidió.
- * - No se pasa `--host-resolver-rules`: con proxy, Chromium le manda el nombre sin resolverlo.
- */
-export const ARGUMENTOS_CHROMIUM = [
-  '--proxy-bypass-list=<-loopback>',
-  '--webrtc-ip-handling-policy=disable_non_proxied_udp',
-  '--disable-quic',
-  '--disable-background-networking',
-  '--disable-sync',
-  '--no-first-run',
-  '--disable-features=PreconnectToSearch,AutofillServerCommunication',
-] as const;
+export { ARGUMENTOS_CHROMIUM, opcionesChromium } from './opciones-chromium';
 
 export function abrirNavegador(configuracion: Configuracion): Promise<Browser> {
-  return chromium.launch({
-    channel: 'chromium',
-    headless: true,
-    chromiumSandbox: true,
-    args: [...ARGUMENTOS_CHROMIUM],
-    proxy: {
-      server: configuracion.proxy.servidor,
-      username: configuracion.proxy.usuario,
-      password: configuracion.proxy.clave,
-    },
-  });
+  return chromium.launch(opcionesChromium({ proxy: configuracion.proxy }));
 }
 
 /**
@@ -93,11 +66,7 @@ export async function abrirNavegadorVisible(
       JSON.stringify(PREFERENCIAS_VENTANA),
     );
     const contexto = await chromium.launchPersistentContext(perfil, {
-      channel: 'chromium',
-      headless: false,
-      chromiumSandbox: true,
-      args: [...ARGUMENTOS_CHROMIUM],
-      proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave },
+      ...opcionesChromium({ proxy, headless: false }),
       serviceWorkers: 'block',
       acceptDownloads: false,
       permissions: [],

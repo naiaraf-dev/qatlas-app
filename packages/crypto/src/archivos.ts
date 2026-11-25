@@ -6,16 +6,24 @@ import { ErrorCripto } from './errores';
 import { borrar } from './memoria';
 
 /*
- * Formato v1: construcción STREAM (Hoang, Reyhanitabar, Rogaway y Vizár, 2015), con la
+ * Formato v2: construcción STREAM (Hoang, Reyhanitabar, Rogaway y Vizár, 2015), con la
  * misma disposición que AES-GCM-HKDF streaming de Tink. Detalle en el README.
  *
  *   cabecera: "QATF" (4) | versión (1) | salt (32) | prefijo de nonce (7)
  *   bloques:  texto cifrado (hasta 64 KiB) | tag (16)
  *   nonce:    prefijo (7) | contador big-endian (4) | ¿es el último? (1)
  *   AAD:      cabecera completa
+ *   clave:    HKDF(HKDF(subclave de archivos, semilla, "qatlas/v2/evidencia/<id>"),
+ *                  salt, "qatlas/v2/archivo/<id>")
+ *
+ * La semilla (32 bytes aleatorios por evidencia) no va en el archivo: se guarda en la base. Borrarla
+ * es el borrado criptográfico de esa evidencia (EVI-06), aunque la clave del proyecto siga viva; y
+ * borrar la clave del proyecto lo es de todas (TS-10). Hacen falta las dos para descifrar (ADR 035).
+ * La v1 (sin semilla) nunca guardó evidencias y se rechaza.
  */
 const MAGIC = Buffer.from('QATF', 'ascii');
-const VERSION_ARCHIVO = 1;
+const VERSION_ARCHIVO = 2;
+export const LONGITUD_SEMILLA = 32;
 const LONGITUD_SALT_ARCHIVO = 32;
 const LONGITUD_PREFIJO = 7;
 const POS_SALT = MAGIC.length + 1;
@@ -25,9 +33,24 @@ const LONGITUD_CABECERA = POS_PREFIJO + LONGITUD_PREFIJO;
 export const TAMANO_BLOQUE = 64 * 1024;
 const MAX_BLOQUES = 2 ** 32;
 
-/** La clave depende del salt y del ID: cada archivo tiene la suya. */
-function derivarClaveArchivo(subclaveArchivos: Buffer, salt: Buffer, idArchivo: string): Buffer {
-  return hkdf(subclaveArchivos, salt, `qatlas/v1/archivo/${idArchivo}`);
+/** La clave depende de la semilla, del salt y del ID: cada archivo tiene la suya. */
+function derivarClaveArchivo(
+  subclaveArchivos: Buffer,
+  semilla: Buffer,
+  salt: Buffer,
+  idArchivo: string,
+): Buffer {
+  const deLaEvidencia = hkdf(subclaveArchivos, semilla, `qatlas/v2/evidencia/${idArchivo}`);
+  try {
+    return hkdf(deLaEvidencia, salt, `qatlas/v2/archivo/${idArchivo}`);
+  } finally {
+    borrar(deLaEvidencia);
+  }
+}
+
+/** Una semilla nueva para una evidencia. Se guarda en la base, nunca junto al archivo. */
+export function crearSemillaEvidencia(): Buffer {
+  return randomBytes(LONGITUD_SEMILLA);
 }
 
 /** Exportada para probar el límite del contador, que no se alcanza en un test real. */
@@ -43,16 +66,25 @@ export function construirNonce(prefijo: Buffer, contador: number, ultimo: boolea
 /** Junta la entrada en bloques fijos y procesa uno recién cuando sabe si es el último. */
 abstract class TransformadorPorBloques extends Transform {
   protected subclave: Buffer;
+  protected semilla: Buffer;
   protected clave: Buffer | null = null;
   protected cabecera: Buffer | null = null;
   protected contador = 0;
   private readonly pendiente: Buffer;
   private usado = 0;
 
-  protected constructor(claveProyecto: Buffer, idArchivo: string, tamanoBloque: number) {
+  protected constructor(
+    claveProyecto: Buffer,
+    idArchivo: string,
+    semilla: Buffer,
+    tamanoBloque: number,
+  ) {
     super();
     if (idArchivo.length === 0) throw new ErrorCripto('PARAMETROS');
+    if (semilla.length !== LONGITUD_SEMILLA) throw new ErrorCripto('PARAMETROS');
     this.subclave = derivarSubclaveArchivos(claveProyecto);
+    // Copia propia: quien llama puede borrar la suya enseguida.
+    this.semilla = Buffer.from(semilla);
     this.pendiente = Buffer.alloc(tamanoBloque);
   }
 
@@ -102,7 +134,7 @@ abstract class TransformadorPorBloques extends Transform {
   }
 
   override _destroy(error: Error | null, listo: (error?: Error | null) => void): void {
-    borrar(this.subclave, this.clave, this.pendiente);
+    borrar(this.subclave, this.semilla, this.clave, this.pendiente);
     listo(error);
   }
 }
@@ -110,10 +142,10 @@ abstract class TransformadorPorBloques extends Transform {
 class CifradorArchivo extends TransformadorPorBloques {
   private cabeceraEmitida = false;
 
-  constructor(claveProyecto: Buffer, idArchivo: string) {
-    super(claveProyecto, idArchivo, TAMANO_BLOQUE);
+  constructor(claveProyecto: Buffer, idArchivo: string, semilla: Buffer) {
+    super(claveProyecto, idArchivo, semilla, TAMANO_BLOQUE);
     const salt = randomBytes(LONGITUD_SALT_ARCHIVO);
-    this.clave = derivarClaveArchivo(this.subclave, salt, idArchivo);
+    this.clave = derivarClaveArchivo(this.subclave, this.semilla, salt, idArchivo);
     this.cabecera = Buffer.concat([
       MAGIC,
       Buffer.from([VERSION_ARCHIVO]),
@@ -139,8 +171,9 @@ class DescifradorArchivo extends TransformadorPorBloques {
   constructor(
     claveProyecto: Buffer,
     private readonly idArchivo: string,
+    semilla: Buffer,
   ) {
-    super(claveProyecto, idArchivo, TAMANO_BLOQUE + LONGITUD_TAG);
+    super(claveProyecto, idArchivo, semilla, TAMANO_BLOQUE + LONGITUD_TAG);
   }
 
   // La versión se valida apenas se puede leer, antes de usar ningún otro campo.
@@ -153,7 +186,7 @@ class DescifradorArchivo extends TransformadorPorBloques {
     if (this.leida[MAGIC.length] !== VERSION_ARCHIVO) throw new ErrorCripto('VERSION');
     this.cabecera = this.leida;
     const salt = this.leida.subarray(POS_SALT, POS_PREFIJO);
-    this.clave = derivarClaveArchivo(this.subclave, salt, this.idArchivo);
+    this.clave = derivarClaveArchivo(this.subclave, this.semilla, salt, this.idArchivo);
     return entrada.subarray(copiados);
   }
 
@@ -178,10 +211,15 @@ class DescifradorArchivo extends TransformadorPorBloques {
 
 /**
  * Stream que recibe texto plano y entrega el archivo cifrado. `idArchivo` es el ID de
- * la evidencia. Deriva lo que necesita al crearse: `claveProyecto` se puede borrar después.
+ * la evidencia y `semilla`, la suya (`crearSemillaEvidencia`). Deriva lo que necesita al
+ * crearse: `claveProyecto` y `semilla` se pueden borrar después.
  */
-export function crearCifradorArchivo(claveProyecto: Buffer, idArchivo: string): Transform {
-  return new CifradorArchivo(claveProyecto, idArchivo);
+export function crearCifradorArchivo(
+  claveProyecto: Buffer,
+  idArchivo: string,
+  semilla: Buffer,
+): Transform {
+  return new CifradorArchivo(claveProyecto, idArchivo, semilla);
 }
 
 /**
@@ -190,6 +228,10 @@ export function crearCifradorArchivo(claveProyecto: Buffer, idArchivo: string): 
  * Una alteración o un truncamiento pueden detectarse recién al final: **hasta que el
  * stream termine sin error, lo recibido no es válido** y hay que descartarlo.
  */
-export function crearDescifradorArchivo(claveProyecto: Buffer, idArchivo: string): Transform {
-  return new DescifradorArchivo(claveProyecto, idArchivo);
+export function crearDescifradorArchivo(
+  claveProyecto: Buffer,
+  idArchivo: string,
+  semilla: Buffer,
+): Transform {
+  return new DescifradorArchivo(claveProyecto, idArchivo, semilla);
 }

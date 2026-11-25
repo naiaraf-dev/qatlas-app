@@ -13,7 +13,9 @@ si suma scripts de instalación a la lista permitida y cómo corre en CI.
 
 Con la versión 13.0.3, en una carpeta temporal y con Electron 45.1.0:
 
-- El tarball trae binarios en `prebuilds/` para 8 plataformas, y no declara script de instalación.
+- El tarball trae binarios en `prebuilds/` para 8 plataformas. No declara `preinstall`, `install` ni
+  `postinstall`, pero trae `binding.gyp`, que npm suele tomar como un `node-gyp rebuild` implícito. Lo
+  desactiva con `"gypfile": false` en su `package.json`. Ver «Script de instalación» más abajo.
 - Usa la API estable de Node (`node-addon-api`), así que no depende del ABI de Electron: el binario
   cargó en Node 22 y en Electron sin compilar.
 - Con el cifrador `sqlcipher` (`legacy=4`), el archivo no tiene cabecera de SQLite ni texto plano, y no
@@ -24,7 +26,8 @@ Con la versión 13.0.3, en una carpeta temporal y con Electron 45.1.0:
 Usar el binario precompilado del paquete, con la versión exacta fija.
 
 - **Sin compilación:** no hace falta `@electron/rebuild`.
-- **Sin scripts:** no se agrega nada a `scripts/allowed-install-scripts.mjs`.
+- **Sin scripts:** no se agrega nada a `scripts/allowed-install-scripts.mjs`. Lo que traiga para
+  compilar no se ejecuta (`ignore-scripts=true`).
 - **CI:** usa el mismo binario de Linux x64. `npm run test:crypto:electron` corre los tests de la base
   y TS-02 dentro del runtime real de Electron.
 
@@ -34,11 +37,11 @@ también abra con la forma estándar `PRAGMA key`.
 
 ## Dependencias
 
-| Paquete                                  | Para qué                   | Alternativas                             | Script de instalación | Mantenimiento                                     |
-| ---------------------------------------- | -------------------------- | ---------------------------------------- | --------------------- | ------------------------------------------------- |
-| `better-sqlite3-multiple-ciphers` 13.0.3 | SQLite con SQLCipher       | `@journeyapps/sqlcipher` (API asíncrona) | No                    | Un mantenedor principal; publica procedencia SLSA |
-| `drizzle-orm` 0.45.4                     | Esquema y consultas        | SQL a mano; Kysely                       | No                    | Publicación frecuente                             |
-| `node-addon-api` (ya estaba)             | Dependencia de la anterior | —                                        | No                    | Proyecto de Node.js                               |
+| Paquete                                  | Para qué                   | Alternativas                             | Script de instalación    | Mantenimiento                                     |
+| ---------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------ | ------------------------------------------------- |
+| `better-sqlite3-multiple-ciphers` 13.0.3 | SQLite con SQLCipher       | `@journeyapps/sqlcipher` (API asíncrona) | `binding.gyp`, ver abajo | Un mantenedor principal; publica procedencia SLSA |
+| `drizzle-orm` 0.45.4                     | Esquema y consultas        | SQL a mano; Kysely                       | No                       | Publicación frecuente                             |
+| `node-addon-api` (ya estaba)             | Dependencia de la anterior | —                                        | No                       | Proyecto de Node.js                               |
 
 `drizzle-kit` queda afuera: suma `esbuild`, con su script de instalación, y `tsx`. Las migraciones son
 SQL escrito a mano, en `packages/db/src/migraciones.ts`, y un test compara sus columnas con el esquema.
@@ -47,13 +50,29 @@ El driver de Drizzle importa `better-sqlite3`, que no está instalado: se resuel
 paquete cifrado en `electron.vite.config.ts` y `vitest.config.ts`. Así nunca puede cargarse por error
 una variante sin cifrado.
 
+## Script de instalación (corregido el 2026-11-25)
+
+Esta ADR decía que el paquete «no declara script de instalación». Es cierto solo a medias:
+
+- El tarball del lockfile (integridad `sha512-UYabM82r…`, verificada) no tiene `preinstall`, `install` ni
+  `postinstall`, pero sí `binding.gyp` y el código fuente para compilarse.
+- Su `package.json` dice `"gypfile": false`, y npm 10.9 respeta eso: no agrega el `node-gyp rebuild`
+  implícito ni marca `hasInstallScript`. El registro de npm tampoco lo marca.
+- Otra versión de npm puede marcarlo igual (`"hasInstallScript": true` en el lockfile): pasó en una copia de
+  trabajo, sin que se pudiera saber con qué versión. Esa línea no cambia nada:
+  **con `ignore-scripts=true` no se ejecuta nada**, el paquete no está en la lista permitida, y se usa el
+  binario de `prebuilds/`, verificado por su SHA-256 (ADR 007).
+
+`security-tests/scripts-de-instalacion.test.ts` lo verifica: `ignore-scripts` es la configuración efectiva,
+cada paquete con script o `binding.gyp` está revisado, la lista permitida es la consultada, y ningún
+paquete con `binding.gyp` tiene salida de node-gyp (`build/`).
+
 ## Consecuencias
 
 - **Tradeoff aceptado:** se confía en un binario publicado por un solo mantenedor. La procedencia indica
   cómo se generó, pero no reemplaza una revisión del código.
 - **Pendiente para la semana 10:** compilar SQLCipher desde fuente, en CI, para los instaladores.
-- **No se compila en ningún equipo:** con `ignore-scripts=true` no corre nada al instalar, y el paquete no
-  declara script de instalación. El `.node` de cada plataforma es el del tarball, y su SHA-256 está en
+- **No se compila en ningún equipo:** con `ignore-scripts=true` no corre nada al instalar. El `.node` de cada plataforma es el del tarball, y su SHA-256 está en
   `scripts/nativos-hashes.json`, revisado: el CI, el build y la app lo comparan ([ADR 007](007-integridad-modulos-nativos.md)).
   Un comentario viejo en `scripts/allowed-install-scripts.mjs` hablaba de «compilación para Electron»; se
   corrigió el 2026-11-07.
