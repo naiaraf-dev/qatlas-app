@@ -1,7 +1,8 @@
 # App de prueba (sandbox-site)
 
 Sitio con problemas plantados para que el escáner de las semanas 5 a 8 tenga qué encontrar, sin depender
-de sitios reales. Node puro, sin dependencias. Decisión: [ADR 012](../../docs/decisiones/012-sandbox-site.md).
+de sitios reales. Node puro; su única dependencia es la fuente del texto que leen los tests con OCR
+(JetBrains Mono, la misma de la interfaz de la app, ver `src/fuente.mjs`). Decisión: [ADR 012](../../docs/decisiones/012-sandbox-site.md).
 
 ```bash
 npm run dev -w @qatlas/sandbox-site   # http://127.0.0.1:43180

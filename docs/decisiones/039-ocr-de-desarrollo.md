@@ -24,6 +24,16 @@ aparezca en las capturas. Un valor dibujado en píxeles no se encuentra buscando
     canario está escrito.
   - TS-01: con la redacción apagada, una captura lo muestra.
   - EVI-02: sin selectores sensibles, el documento se lee.
+- **Lo que se lee no depende del sistema** (2026-11-25). El CI de Linux no leyó la nota de la ficha que
+  Windows sí leía: un `<input>` no hereda la fuente de la página y usaba la del sistema, y el OCR dejaba
+  de leerla con otras fuentes (Courier New, Times) o a 16 px. Además, el texto pegado al borde oscuro de un
+  campo no se leía con ninguna. Ahora el sandbox sirve su propia fuente (JetBrains Mono, la de la interfaz,
+  `apps/sandbox-site/src/fuente.mjs`) en las páginas que leen los tests, también en los campos, a 28 px,
+  con relleno y borde claro, y cada dato en su línea. Se probó con el render de Windows y con uno sin hinting
+  ni texto LCD, como el de Linux. EVI-02 suma el control de EVI-05: sin el modo datos sensibles, el valor de
+  un campo del formulario se lee.
+- **Siempre el Chromium verificado** (ADR 020), también para el OCR: `channel: 'chromium'`.
+  `security-tests/navegador-verificado.test.ts` lo exige en todo `launch`.
 - **La comparación** normaliza las confusiones típicas (O y 0, I, L y 1, S y 5, B y 8) y tolera dos
   caracteres. Eso hace que encuentre más, nunca menos: un falso positivo hace fallar el test.
 - **Para que TS-06 pruebe algo,** el sandbox muestra la contraseña como texto en el login («mostrar

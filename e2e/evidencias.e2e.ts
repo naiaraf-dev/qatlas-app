@@ -170,6 +170,13 @@ test('EVI-02 y EVI-07: se tapan las contraseñas y los selectores sensibles; una
     for (const dato of [DATOS.documento, DATOS.email, DATOS.telefono]) {
       expect(contiene(leido, dato), dato).toBe(false);
     }
+    // Control de EVI-05: sin el modo datos sensibles, el valor de un campo se lee en la captura.
+    const formulario = await app.evidencias.vista(
+      dePagina(app, id, '/evidencias/formulario').find((e) => e.tipo === 'captura')?.id ?? '',
+    );
+    if (formulario?.tipo !== 'imagen') throw new Error('sin captura del formulario');
+    const [leidoFormulario = ''] = await leidos([Buffer.from(formulario.datos)]);
+    expect(contiene(leidoFormulario, valorDeCampo(1))).toBe(true);
 
     // El snapshot: texto, con lo sensible vaciado.
     const snapshot = await app.evidencias.vista(
@@ -321,7 +328,11 @@ test('punto 6: mientras corre con video y traza, nada de la página queda en cla
 test('control del punto 6: la traza de Playwright sí deja la página en claro, y la búsqueda la encuentra', async () => {
   // Lo que QAtlas no usa: la grabación de Playwright escribe mientras graba (ADR 036 y 037).
   const carpeta = mkdtempSync(path.join(temporalDelSistema, 'qatlas-control-traza-'));
-  const navegador = await chromium.launch({ tracesDir: carpeta });
+  const navegador = await chromium.launch({
+    channel: 'chromium',
+    headless: true,
+    tracesDir: carpeta,
+  });
   try {
     const contexto = await navegador.newContext();
     // Con la traza de Playwright Test activa, ya está empezada y escribe en el mismo `tracesDir`.

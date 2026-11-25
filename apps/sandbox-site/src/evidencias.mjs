@@ -6,7 +6,13 @@
  * Están fuera del recorrido de la raíz (no hay link desde «/»): el oráculo de los hallazgos no cambia.
  * Cada página con una falla plantada (una excepción de JavaScript) conserva su video; `/limpia` no tiene
  * fallas y su video se descarta (EVI-07).
+ *
+ * Todo el texto usa la fuente empaquetada del sandbox (`fuente.mjs`), también en los campos, que no
+ * heredan la fuente de la página: el OCR lee lo mismo en Windows y en Linux. Cada dato va en su propia
+ * línea, lejos de lo que se tapa, y los campos tienen relleno y un borde claro: con el texto pegado a un
+ * borde oscuro, el OCR no leía el valor aunque se viera bien.
  */
+import { ESTILO_FUENTE, FAMILIA_CONTROL } from './fuente.mjs';
 
 /** Lo que se ve en las páginas, para buscarlo en las evidencias. Inventado y armado por partes. */
 export const DATOS_SENSIBLES_DE_PRUEBA = {
@@ -26,7 +32,8 @@ export const CAMPOS_DEL_FORMULARIO = 30;
 const pagina = (titulo, cuerpo, { falla = true } = {}) => `<!doctype html>
 <html lang="es">
 <head><meta charset="utf-8"><title>${titulo} · Evidencias del sandbox</title>
-<style>body{font-family:sans-serif;font-size:22px;margin:24px}input{font-size:20px}.grande{font-size:40px;font-family:monospace}</style>
+${ESTILO_FUENTE}
+<style>body{font-family:${FAMILIA_CONTROL};font-size:28px;margin:24px}input,textarea,button{font:inherit}input,textarea{padding:10px 16px;border:1px solid #ccc}.grande{font-size:40px}</style>
 </head>
 <body>
 <main>
@@ -74,9 +81,9 @@ export function crearPaginasDeEvidencias({ canario }) {
 <p class="dato-sensible" data-sensible="email">Email: ${d.email}</p>
 <p class="dato-sensible" data-sensible="telefono">Teléfono: ${d.telefono}</p>
 <form>
-  <label>Contraseña <input id="clave" type="password" value="${d.clave}"></label>
+  <p><label>Contraseña <input id="clave" type="password" value="${d.clave}"></label></p>
   <input type="hidden" name="csrf" value="${d.oculto}">
-  <label>Nota <input id="nota" type="text" value="${d.nota}" size="24"></label>
+  <p><label>Nota <input id="nota" type="text" value="${d.nota}" size="24"></label></p>
 </form>`,
             ),
           );

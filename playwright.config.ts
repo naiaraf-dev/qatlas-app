@@ -12,6 +12,9 @@ export default defineConfig({
   failOnFlakyTests: Boolean(process.env.CI),
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'e2e-report' }]],
   use: {
+    // Si algún test usara los fixtures de navegador, que sea el Chromium verificado (ADR 020), nunca el
+    // headless shell, que no se instala ni se verifica.
+    channel: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

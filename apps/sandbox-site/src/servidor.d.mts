@@ -67,6 +67,12 @@ export interface SandboxActivo {
 export const CANARIO_POR_DEFECTO: string;
 /** Un JWT y una clave PEM de prueba: inventados, armados por partes. */
 export const JWT_DE_PRUEBA: string;
+/** La fuente empaquetada del texto que leen los tests con OCR (`fuente.mjs`). */
+export const RUTA_FUENTE: string;
+export const FAMILIA_CONTROL: string;
+export const ESTILO_FUENTE: string;
+export function leerFuenteDeControl(): Buffer;
+
 /** Lo que se ve en las páginas de /evidencias (semana 7b). Inventado. */
 export const DATOS_SENSIBLES_DE_PRUEBA: Readonly<{
   nombre: string;

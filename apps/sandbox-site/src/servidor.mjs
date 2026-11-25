@@ -5,14 +5,17 @@ import { createServer as crearServidorTls } from 'node:https';
 import { crearZonaAutenticada, HOST_IDP, HOST_PORTAL } from './autenticacion.mjs';
 import { CANARIO_POR_DEFECTO, crearFugas } from './fugas.mjs';
 import { crearPaginasDeEvidencias } from './evidencias.mjs';
+import { atenderFuente } from './fuente.mjs';
 
 export { HOST_IDP, HOST_PORTAL, USUARIO_BASICA, USUARIOS_APP } from './autenticacion.mjs';
 export { CANARIO_POR_DEFECTO, JWT_DE_PRUEBA, PEM_DE_PRUEBA } from './fugas.mjs';
 export { CAMPOS_DEL_FORMULARIO, DATOS_SENSIBLES_DE_PRUEBA, valorDeCampo } from './evidencias.mjs';
+export { ESTILO_FUENTE, FAMILIA_CONTROL, leerFuenteDeControl, RUTA_FUENTE } from './fuente.mjs';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
- * encontrar. El oráculo es `hallazgos-esperados.json`. Node puro y sin dependencias.
+ * encontrar. El oráculo es `hallazgos-esperados.json`. Node puro; solo depende de
+ * la fuente del texto que leen los tests con OCR (`fuente.mjs`).
  *
  * Escucha solo en 127.0.0.1. Nunca se empaqueta con la app (ADR 012).
  */
@@ -448,6 +451,8 @@ export function iniciarSandbox({
 
     const { pathname } = new URL(req.url ?? '/', `http://${HOST_ESCUCHA}`);
     registro.rutas.push(pathname);
+    // La fuente del texto que leen los tests con OCR, en cualquier host del sandbox.
+    if (atenderFuente(req, res, pathname)) return;
     if (await zona.atender(req, res, nombreHost, leerCuerpo)) return;
     if (fugas.atender(req, res, pathname)) return;
     if (evidencias.atender(req, res, pathname)) return;

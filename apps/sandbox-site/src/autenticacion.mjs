@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { ESTILO_FUENTE, FAMILIA_CONTROL } from './fuente.mjs';
 
 /**
  * La zona con login del sandbox (semana 6b): una app en `/app` con dos roles, un proveedor de identidad
@@ -50,7 +51,8 @@ const formularioLogin = (accion, titulo, extra = '') =>
   <label>Contraseña <input id="clave" name="clave" type="password" autocomplete="off"></label>
   <button type="submit">Entrar</button>
 </form>
-<p>Contraseña escrita: <output id="eco-clave" style="font-size:40px;font-family:monospace"></output></p>
+${ESTILO_FUENTE}
+<p>Contraseña escrita: <output id="eco-clave" style="font-size:40px;font-family:${FAMILIA_CONTROL}"></output></p>
 <script>
 document.getElementById('clave').addEventListener('input', (e) => {
   document.getElementById('eco-clave').textContent = e.target.value;
@@ -172,7 +174,7 @@ export function crearZonaAutenticada({
   const inicio = (rol, mostrar = null) =>
     paginaApp(
       'Inicio',
-      `${mostrar === null ? '' : `<p>Entraste con el enlace:</p><p style="font-size:40px;font-family:monospace">${escapar(mostrar)}</p>`}
+      `${mostrar === null ? '' : `${ESTILO_FUENTE}<p>Entraste con el enlace:</p><p style="font-size:40px;font-family:${FAMILIA_CONTROL}">${escapar(mostrar)}</p>`}
 <p id="menu-usuario">Sesión de ${rol}</p>
 <nav aria-label="Secciones">
 <ul>

@@ -6,6 +6,12 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { chromium } from 'playwright-core';
+import {
+  ESTILO_FUENTE,
+  FAMILIA_CONTROL,
+  leerFuenteDeControl,
+  RUTA_FUENTE,
+} from '../apps/sandbox-site/src/servidor.mjs';
 import { contiene, crearOcr, normalizar } from './ocr';
 
 test.describe.configure({ timeout: 120_000 });
@@ -16,14 +22,28 @@ test('sin los datos locales, el OCR intenta descargar y falla: la red está bloq
 });
 
 test('con los datos locales, lee el texto de una captura de Chromium', async () => {
-  const navegador = await chromium.launch();
+  // El Chromium verificado por hash (ADR 020), como todos: nunca el headless shell.
+  const navegador = await chromium.launch({ channel: 'chromium', headless: true });
   const ocr = await crearOcr({ trabajadores: 1 });
   try {
     const pagina = await navegador.newPage({ viewport: { width: 1280, height: 720 } });
     const texto = 'CANARIO-OCR-7310-QZX';
-    await pagina.setContent(
-      `<p style="font:40px monospace">${texto}</p><p style="font:20px sans-serif">Otra línea</p>`,
-    );
+    // Con la fuente empaquetada del sandbox, no la del sistema: lee lo mismo en Windows y en Linux.
+    // Se sirve desde la memoria del test, sin red.
+    const origen = 'http://ocr.example.test';
+    await pagina.route(`${origen}/**`, (ruta) => {
+      const esFuente = new URL(ruta.request().url()).pathname === RUTA_FUENTE;
+      return ruta.fulfill(
+        esFuente
+          ? { contentType: 'font/woff2', body: leerFuenteDeControl() }
+          : {
+              contentType: 'text/html; charset=utf-8',
+              body: `<!doctype html><head>${ESTILO_FUENTE}</head><body style="font-family:${FAMILIA_CONTROL}"><p style="font-size:40px">${texto}</p><p style="font-size:20px">Otra línea</p></body>`,
+            },
+      );
+    });
+    await pagina.goto(`${origen}/`);
+    expect(await pagina.evaluate(() => document.fonts.check("40px 'QAtlas Control'"))).toBe(true);
     const leido = await ocr.leer(await pagina.screenshot({ type: 'jpeg', quality: 70 }));
     expect(contiene(leido, texto)).toBe(true);
     // Y no encuentra lo que no está.
