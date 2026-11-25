@@ -154,6 +154,14 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 
 - Nunca cerrar procesos por nombre (por ejemplo, todos los `electron.exe`). Solo los que inició Claude,
   por su PID.
+- Nunca `rm -rf` (ni `Remove-Item -Recurse`) con rutas armadas desde variables en la terminal: una variable
+  vacía apunta a la raíz.
+- El trabajo temporal (láminas, diagnósticos, pruebas sueltas) va en `.artefactos/`, ignorada por git, nunca
+  fuera del repo. Se borra solo con `node scripts/borrar-temporal.mjs <ruta>`: verifica que la ruta no esté
+  vacía, que quede dentro del repo (resolviendo enlaces), que no sea la raíz ni la carpeta temporal misma,
+  que git la ignore y que no tenga nada versionado. Si algo no cumple, falla sin borrar.
+  `security-tests/borrar-temporal.test.ts` lo prueba.
+- Nunca borrar nada fuera del repo.
 
 ## Diseño
 

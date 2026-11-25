@@ -6,6 +6,9 @@ release/
 .tsbuild/
 coverage/
 electronegativity.sarif
+
+# Trabajo temporal (láminas, diagnósticos). Se borra solo con scripts/borrar-temporal.mjs.
+.artefactos/
 .env
 .env.*
 !.env.example
