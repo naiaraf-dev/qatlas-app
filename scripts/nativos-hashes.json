@@ -14,15 +14,15 @@
     }
   },
   "better-sqlite3-multiple-ciphers": {
-    "13.0.3": {
-      "prebuilds/darwin-arm64.node": "e220712cd3af9dd575fe4ac7973d5dbfbad3d22760b772a48f1eee977517ef5b",
-      "prebuilds/darwin-x64.node": "4434dfa929e9b83fdc1ea34ee8739e764fcf09af8559ab039082b7b673b18805",
-      "prebuilds/linux-arm64.node": "e5c2b6bd85726bc53a4b8767d4bbb8be82feaad46b45b9c82c885cb02d54e7d0",
-      "prebuilds/linux-x64.node": "3607ea18911c931085eaa896eb831260d549e9bcef2dd6e8896b5bb7a41ec6a8",
-      "prebuilds/linuxmusl-arm64.node": "670af6edb9a5225bd1e934124c23494ba6a9f6f03bf7987d0729ab05a3b21734",
-      "prebuilds/linuxmusl-x64.node": "98bd72b54e55a39bacb4c1eb65ecb2c91e1e69557b9d9f4a0a5a8444c6b742c3",
-      "prebuilds/win32-arm64.node": "95ff36ee761a846fc4d0fae7eed209b47b21c8d41f5528f40d7beb5f30e62666",
-      "prebuilds/win32-x64.node": "d4f29082cde7efd5c1e85e794ba532efeef4f2f968c58cc54fe97c2095270262"
+    "13.2.0": {
+      "prebuilds/darwin-arm64.node": "124d9ae45b387dd6176e093c4c1c0a16716bd215ac3ed55eff897cc4eba40b1d",
+      "prebuilds/darwin-x64.node": "3442b672e1c6440da22bd17f8b0c7e8f18cfb1aac23fb9558135a87423c797e2",
+      "prebuilds/linux-arm64.node": "dd50d2c6f4f29b9ad2db6b66a4f51016883d56904c1ad1a3e5e19050cd1ef2d4",
+      "prebuilds/linux-x64.node": "100cf11dd48c971aaafdb15563cb1251d3ac4c95f7a511deacb209f953f7fe48",
+      "prebuilds/linuxmusl-arm64.node": "bf48d2ba7a8a4b4f9ea8a700a7c84a84eaaffa72d7f1829dc7b655e0ed35948e",
+      "prebuilds/linuxmusl-x64.node": "63c564f7294a0db8d9023ebf28353da4be4d6b925e2bda66e9c9fbbe58473a25",
+      "prebuilds/win32-arm64.node": "cc4812b4fc74626a08c3150b5351068ecff5adb1c093ac58c441ce677a2d688d",
+      "prebuilds/win32-x64.node": "8850ca369b9cb58b4281ac6705a8905d29a7b78bef1660552a017ad9ee3c63d4"
     }
   }
 }

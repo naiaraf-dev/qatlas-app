@@ -80,3 +80,11 @@ Los mensajes del script y del build no llevan rutas: el log del CI es público.
 - `security-tests/nativos-integridad.test.ts`: binario modificado, faltante, paquete inexistente,
   manifiesto vacío y orden de carga.
 - El E2E confirma que la app arranca con los binarios reales.
+
+## Revisiones registradas
+
+- **2026-11-26, `better-sqlite3-multiple-ciphers` 13.0.3 → 13.2.0.** Los 8 binarios de 13.0.3 coincidían
+  con el registro. Los de 13.2.0 se revisaron antes de registrarlos: el tarball coincide con la integridad
+  del lockfile, tiene procedencia SLSA, y cada `.node` contiene la versión de SQLite y de Multiple Ciphers
+  que anuncia la versión. El detalle, en la [ADR 006](006-sqlcipher-prebuild.md). Se reemplazó la entrada
+  de 13.0.3: el registro solo guarda la versión instalada.

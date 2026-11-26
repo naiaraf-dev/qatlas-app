@@ -43,6 +43,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Los `.node` de argon2 y SQLCipher están en `scripts/nativos-hashes.json` (ADR 007). Al actualizar uno de esos
   paquetes, revisar el binario y registrarlo con `node scripts/verificar-nativos.mjs --calcular`; nunca
   desactivar la verificación.
+- Toda actualización de SQLCipher tiene que abrir las bóvedas de formatos anteriores
+  (`boveda/formatos-anteriores.test.ts`, en Node y en Electron). Antes de actualizar, crear el fixture de la
+  versión vieja si no existe; los fixtures nunca se regeneran ni se borran (ADR 006).
 - Fase 1, semana 7a terminada: `packages/redaction` (redacción de red y detector de secretos), redacción en el
   proceso principal de todo lo que se guarda o se muestra, credenciales por HMAC, clave de los hallazgos con HMAC
   del proyecto, redacción de lo guardado al desbloquear, logs técnicos, TS-01 (canario) y TS-13 parcial. Ver las
