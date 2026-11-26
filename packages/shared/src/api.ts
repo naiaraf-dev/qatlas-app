@@ -16,6 +16,9 @@ export interface QatlasApi {
     setTheme(
       req: IpcRequest<'appearance:setTheme'>,
     ): Promise<IpcResult<IpcResponse<'appearance:setTheme'>>>;
+    setBarraLateral(
+      req: IpcRequest<'appearance:setBarraLateral'>,
+    ): Promise<IpcResult<IpcResponse<'appearance:setBarraLateral'>>>;
   };
   privacy: {
     listConnections(

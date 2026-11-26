@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EvidenciaVista, IpcResponse, VistaEvidencia } from '@qatlas/shared';
 import { Button } from '../../ui/components';
+import { Desplegable, Deslizador } from '../../ui/controles';
 import { Aviso } from './comunes';
 
 /**
@@ -181,21 +182,19 @@ function Reproductor({ evidencia }: { evidencia: EvidenciaVista }) {
               Antes de este fotograma se perdieron {hueco} fotogramas: hay un hueco.
             </p>
           )}
-          <label className="flex flex-col gap-1 text-[13.5px]">
-            <span>
-              Fotograma {indice + 1} de {total} · {segundos(video.tiempos[indice] ?? 0)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={total - 1}
-              value={indice}
-              onChange={(event) => {
-                setReproduciendo(false);
-                setIndice(Number(event.target.value));
-              }}
-            />
-          </label>
+          <Deslizador
+            etiqueta="Fotograma"
+            valor={indice}
+            minimo={0}
+            maximo={total - 1}
+            textoDelValor={(i) =>
+              `Fotograma ${String(i + 1)} de ${String(total)} · ${segundos(video.tiempos[i] ?? 0)}`
+            }
+            alCambiar={(i) => {
+              setReproduciendo(false);
+              setIndice(i);
+            }}
+          />
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
@@ -304,17 +303,17 @@ function EnTexto({ evidencia, titulo }: { evidencia: EvidenciaVista; titulo: str
     });
   }, [abierta, vista, evidencia.id]);
   return (
-    <details
+    <Desplegable
       className="text-[13.5px]"
-      onToggle={(event) => {
-        setAbierta(event.currentTarget.open);
-      }}
+      alCambiar={setAbierta}
+      titulo={
+        <>
+          {titulo}
+          {evidencia.entradas !== null && ` (${String(evidencia.entradas)})`}
+        </>
+      }
     >
-      <summary className="cursor-pointer">
-        {titulo}
-        {evidencia.entradas !== null && ` (${evidencia.entradas})`}
-      </summary>
-      <div className="mt-2 flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {evidencia.secretosRedactados > 0 && (
           <Aviso>
             Se redactaron {evidencia.secretosRedactados} secretos: lo que se ve dice qué tipo era,
@@ -336,7 +335,7 @@ function EnTexto({ evidencia, titulo }: { evidencia: EvidenciaVista; titulo: str
           </>
         )}
       </div>
-    </details>
+    </Desplegable>
   );
 }
 

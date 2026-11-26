@@ -33,6 +33,7 @@ import type { PoliticaDeRed } from '../packages/runner/src/red/reglas';
 import { vigilarEntorno } from './entorno';
 import { delSitio } from './ruido';
 import { generarCertificado, type CertificadoDePrueba } from './fixtures/certificado';
+import { vigilarProcesos } from './procesos';
 
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 const HOST_QUIC = 'quic.fuga.test';
@@ -355,3 +356,6 @@ test.describe('HTTPS: sesión TLS completa por el túnel', () => {
     expect(conexiones.filter((c) => c.permitida)).toEqual([]);
   });
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

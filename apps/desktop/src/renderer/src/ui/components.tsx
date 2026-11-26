@@ -1,4 +1,11 @@
 import { useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import {
+  RadioButton,
+  RadioField,
+  RadioGroup,
+  Tooltip,
+  TooltipTrigger,
+} from 'react-aria-components';
 import { Icon, type IconName } from './Icon';
 
 /** Une clases ignorando valores vacíos. */
@@ -8,12 +15,14 @@ export function cx(...classes: Array<string | false | null | undefined>): string
 
 // --- Botón ---------------------------------------------------------------------
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-accent-fg hover:bg-accent-hover',
   secondary: 'bg-surface text-text border border-border-strong hover:bg-surface-2',
   ghost: 'text-text-2 hover:bg-surface-2',
+  // Para lo que no se puede deshacer. El texto del botón dice qué hace: el color no comunica solo.
+  danger: 'bg-crit-text text-surface hover:opacity-90',
 };
 
 export function Button({
@@ -131,48 +140,62 @@ export function PageHeader({
   );
 }
 
-// --- Selector segmentado -------------------------------------------------------
+// --- Selector segmentado (patrón radio group de las APG) ------------------------
+//
+// Radios de React Aria (ADR 042): Tab entra al grupo, las flechas cambian la opción. Con «compacto»
+// (la barra lateral colapsada) va en vertical y solo con íconos: el nombre queda para el lector de
+// pantalla y en una ayuda emergente.
 
 export function SegmentedControl<T extends string>({
   label,
   value,
   options,
   onChange,
+  compacto = false,
 }: {
   label: string;
   value: T;
   options: ReadonlyArray<{ value: T; label: string; icon: IconName }>;
   onChange: (value: T) => void;
+  compacto?: boolean;
 }) {
   return (
-    <div
-      role="radiogroup"
+    <RadioGroup
       aria-label={label}
-      className="flex rounded-[var(--radius-control)] border border-border bg-surface-2 p-1"
+      value={value}
+      orientation={compacto ? 'vertical' : 'horizontal'}
+      onChange={(nuevo) => {
+        onChange(nuevo as T);
+      }}
+      className={cx(
+        'flex rounded-[var(--radius-control)] border border-border bg-surface-2 p-1',
+        compacto && 'flex-col gap-0.5',
+      )}
     >
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            title={option.label}
-            onClick={() => {
-              onChange(option.value);
-            }}
-            className={cx(
-              'flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors',
-              selected ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text',
-            )}
+      {options.map((option) => (
+        <TooltipTrigger key={option.value} delay={300} isDisabled={!compacto}>
+          <RadioField value={option.value} className="flex flex-1">
+            <RadioButton
+              className={cx(
+                'qa-entrada-cubre flex min-h-9 flex-1 cursor-default items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-muted transition-colors hover:text-text',
+                'data-selected:bg-surface data-selected:text-text data-selected:shadow-card',
+                'data-focus-visible:outline-2 data-focus-visible:outline-offset-2 data-focus-visible:outline-accent',
+              )}
+            >
+              <Icon name={option.icon} size={15} />
+              <span className={compacto ? 'sr-only' : undefined}>{option.label}</span>
+            </RadioButton>
+          </RadioField>
+          <Tooltip
+            placement="right"
+            offset={8}
+            className="rounded-lg bg-text px-2.5 py-1.5 text-[12.5px] font-medium text-bg shadow-card data-entering:animate-entrar"
           >
-            <Icon name={option.icon} size={15} />
-            <span>{option.label}</span>
-          </button>
-        );
-      })}
-    </div>
+            {option.label}
+          </Tooltip>
+        </TooltipTrigger>
+      ))}
+    </RadioGroup>
   );
 }
 

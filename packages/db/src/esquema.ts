@@ -25,6 +25,7 @@ export const configuracion = sqliteTable('configuracion', {
   retencionDias: integer('retencion_dias').notNull(),
   idioma: text('idioma').notNull(),
   tema: text('tema', { enum: ['system', 'light', 'dark'] }).notNull(),
+  barraLateral: text('barra_lateral', { enum: ['expandida', 'colapsada'] }).notNull(),
 });
 
 /** Proyectos eliminados: una restauración no debe devolverlos (ADR 009). */

@@ -15,6 +15,7 @@ import {
 } from '@qatlas/shared';
 import { Button, Card } from '../../ui/components';
 import { EntradaSensible, useCampoSensible, type CampoSensible } from '../../ui/EntradaSensible';
+import { Selector } from '../../ui/controles';
 import { Aviso, Campo, CLASE_ENTRADA, erroresDe } from './comunes';
 
 const PASOS_POR_DEFECTO: PasoLogin[] = [
@@ -57,24 +58,15 @@ function EditorPasos({
       <legend className="mb-1 font-medium">Pasos del login</legend>
       {pasos.map((paso, i) => (
         <div key={i} className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label={`Acción del paso ${i + 1}`}
-            className={`${CLASE_ENTRADA} w-auto`}
-            value={valorDeAccion(paso)}
-            onChange={(event) => {
-              onChange(
-                pasos.map((p, j) =>
-                  j === i ? aPaso(event.target.value as ValorAccion, p.selector) : p,
-                ),
-              );
+          <Selector<ValorAccion>
+            etiqueta={`Acción del paso ${String(i + 1)}`}
+            etiquetaOculta
+            valor={valorDeAccion(paso)}
+            opciones={ACCIONES.map(({ valor, texto }) => ({ valor, texto }))}
+            alCambiar={(valor) => {
+              onChange(pasos.map((p, j) => (j === i ? aPaso(valor, p.selector) : p)));
             }}
-          >
-            {ACCIONES.map(({ valor, texto }) => (
-              <option key={valor} value={valor}>
-                {texto}
-              </option>
-            ))}
-          </select>
+          />
           <input
             aria-label={`Selector del paso ${i + 1}`}
             className={`${CLASE_ENTRADA} w-auto min-w-48 flex-1`}
@@ -154,20 +146,20 @@ function EditorIndicador({
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1 font-medium">Indicador de éxito</legend>
-      <select
-        aria-label="Tipo de indicador"
-        className={`${CLASE_ENTRADA} w-auto`}
-        value={tipo}
-        onChange={(event) => {
-          onChange(aIndicador(event.target.value, texto));
+      <Selector
+        etiqueta="Tipo de indicador"
+        etiquetaOculta
+        // Una clave vacía no sirve en una lista: «Sin indicador» es «ninguno» solo acá.
+        valor={tipo === '' ? 'ninguno' : tipo}
+        opciones={TIPOS_DE_INDICADOR.map(({ valor, texto: etiqueta }) => ({
+          valor: valor === '' ? 'ninguno' : valor,
+          texto: etiqueta,
+        }))}
+        alCambiar={(valor) => {
+          onChange(aIndicador(valor === 'ninguno' ? '' : valor, texto));
         }}
-      >
-        {TIPOS_DE_INDICADOR.map(({ valor, texto: etiqueta }) => (
-          <option key={valor} value={valor}>
-            {etiqueta}
-          </option>
-        ))}
-      </select>
+        className="w-auto self-start"
+      />
       {tipo !== '' && (
         <input
           aria-label="Valor del indicador"
@@ -403,24 +395,22 @@ function FormularioCredencial({
         errores={erroresDe(errores, 'estrategia')}
       >
         {(props) => (
-          <select
-            {...props}
-            className={`${CLASE_ENTRADA} w-auto`}
-            value={estrategia}
-            disabled={Boolean(credencial)}
-            onChange={(event) => {
-              setEstrategia(event.target.value as EstrategiaLogin);
-            }}
-          >
-            {(Object.keys(ESTRATEGIAS) as EstrategiaLogin[]).map((valor) => (
-              <option key={valor} value={valor} disabled={!estrategiaDisponible(valor)}>
-                {ESTRATEGIAS[valor].nombre}
-                {estrategiaDisponible(valor)
-                  ? ''
-                  : ` (llega en: ${ESTRATEGIAS_PENDIENTES[valor]?.llega ?? ''})`}
-              </option>
-            ))}
-          </select>
+          <Selector<EstrategiaLogin>
+            etiqueta="Forma de login"
+            aria-labelledby={`${props.id}-etiqueta`}
+            aria-describedby={props['aria-describedby']}
+            valor={estrategia}
+            deshabilitado={Boolean(credencial)}
+            opciones={(Object.keys(ESTRATEGIAS) as EstrategiaLogin[]).map((valor) => ({
+              valor,
+              texto: estrategiaDisponible(valor)
+                ? ESTRATEGIAS[valor].nombre
+                : `${ESTRATEGIAS[valor].nombre} (llega en: ${ESTRATEGIAS_PENDIENTES[valor]?.llega ?? ''})`,
+              deshabilitada: !estrategiaDisponible(valor),
+            }))}
+            alCambiar={setEstrategia}
+            className="w-auto self-start"
+          />
         )}
       </Campo>
       {config.usuario && (

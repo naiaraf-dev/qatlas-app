@@ -7,6 +7,7 @@ import { bovedaMeta, configuracion, proyectoLapida } from './esquema';
 import { VERSION_ESQUEMA } from './migraciones';
 
 export type Tema = 'system' | 'light' | 'dark';
+export type BarraLateral = 'expandida' | 'colapsada';
 
 export interface Configuracion {
   bloqueoMinutos: number;
@@ -14,6 +15,7 @@ export interface Configuracion {
   retencionDias: number;
   idioma: string;
   tema: Tema;
+  barraLateral: BarraLateral;
 }
 
 export const CONFIGURACION_POR_DEFECTO: Readonly<Configuracion> = {
@@ -22,6 +24,7 @@ export const CONFIGURACION_POR_DEFECTO: Readonly<Configuracion> = {
   retencionDias: 90,
   idioma: 'es',
   tema: 'system',
+  barraLateral: 'expandida',
 };
 
 /**
@@ -69,8 +72,9 @@ export function inicializarDatos(base: BaseCifrada, actualizacionesActivas: bool
 export function leerConfiguracion(base: BaseCifrada): Configuracion {
   const fila = orm(base).select().from(configuracion).get();
   if (!fila) throw new ErrorBoveda('BASE_INVALIDA');
-  const { bloqueoMinutos, actualizacionesActivas, retencionDias, idioma, tema } = fila;
-  return { bloqueoMinutos, actualizacionesActivas, retencionDias, idioma, tema };
+  const { bloqueoMinutos, actualizacionesActivas, retencionDias, idioma, tema, barraLateral } =
+    fila;
+  return { bloqueoMinutos, actualizacionesActivas, retencionDias, idioma, tema, barraLateral };
 }
 
 export function guardarConfiguracion(base: BaseCifrada, cambios: Partial<Configuracion>): void {

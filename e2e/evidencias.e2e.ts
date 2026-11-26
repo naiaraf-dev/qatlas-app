@@ -31,6 +31,7 @@ import {
 import { archivosCon, armar, conTemporal, enTexto, type AppEnProceso } from './app-en-proceso';
 import { vigilarEntorno } from './entorno';
 import { contiene, crearOcr, leerTodas, type Ocr } from './ocr';
+import { vigilarProcesos } from './procesos';
 
 /** Único en cada corrida y fácil de leer con OCR: letras y números grandes. */
 const CANARIO = `CANARIO-TS06-${String(randomInt(100000, 999999))}`;
@@ -345,3 +346,6 @@ test('control del punto 6: la traza de Playwright sí deja la página en claro, 
     rmSync(carpeta, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

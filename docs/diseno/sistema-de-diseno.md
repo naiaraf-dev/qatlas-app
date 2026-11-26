@@ -95,17 +95,117 @@ Los nombres de token son los de Tailwind: `bg-surface`, `text-muted`, `border-bo
 
 ## Componentes
 
-| Componente         | Archivo             | Notas                                                                                              |
-| ------------------ | ------------------- | -------------------------------------------------------------------------------------------------- |
-| `Button`           | `ui/components.tsx` | Variantes `primary`, `secondary`, `ghost`. Alto mínimo 44 px. Una sola acción `primary` por vista. |
-| `Card`             | `ui/components.tsx` | Sección con título (`aria-labelledby`) y acción opcional a la derecha.                             |
-| `SeverityBadge`    | `ui/components.tsx` | Siempre con el nombre de la severidad.                                                             |
-| `StatusPill`       | `ui/components.tsx` | Estado global positivo (protecciones activas).                                                     |
-| `PageHeader`       | `ui/components.tsx` | Título, bajada y acciones de la página.                                                            |
-| `SegmentedControl` | `ui/components.tsx` | `radiogroup` accesible; usado para el modo.                                                        |
-| `CheckItem`        | `ui/components.tsx` | Verificación con ícono y texto para lectores de pantalla.                                          |
-| `Icon`, `Logo`     | `ui/Icon.tsx`       | Íconos decorativos (`aria-hidden`); `Logo` es el isotipo (ver «Marca»).                            |
-| `Shell`            | `layout/Shell.tsx`  | Menú lateral fijo + barra superior + contenido con scroll propio.                                  |
+| Componente         | Archivo             | Notas                                                                                                                                |
+| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `Button`           | `ui/components.tsx` | Variantes `primary`, `secondary`, `ghost` y `danger` (lo que no se deshace). Alto mínimo 44 px. Una sola acción `primary` por vista. |
+| `Card`             | `ui/components.tsx` | Sección con título (`aria-labelledby`) y acción opcional a la derecha.                                                               |
+| `SeverityBadge`    | `ui/components.tsx` | Siempre con el nombre de la severidad.                                                                                               |
+| `StatusPill`       | `ui/components.tsx` | Estado global positivo (protecciones activas).                                                                                       |
+| `PageHeader`       | `ui/components.tsx` | Título, bajada y acciones de la página.                                                                                              |
+| `SegmentedControl` | `ui/components.tsx` | Radio group de React Aria; usado para el modo. Ver «Controles».                                                                      |
+| `CheckItem`        | `ui/components.tsx` | Verificación con ícono y texto para lectores de pantalla.                                                                            |
+| `Icon`, `Logo`     | `ui/Icon.tsx`       | Íconos decorativos (`aria-hidden`); `Logo` es el isotipo (ver «Marca»).                                                              |
+| `Shell`            | `layout/Shell.tsx`  | Barra lateral colapsable + barra superior + contenido con scroll propio. Ver «Shell».                                                |
+
+## Shell y barra lateral
+
+La barra lateral se colapsa y se expande (ADR 043), como la de Claude.
+
+- **Botón** arriba, al lado del logo: «Contraer la barra lateral» o «Expandir la barra lateral», con
+  `aria-expanded`, `aria-controls` (la barra) y `aria-keyshortcuts="Control+B"`. Su ayuda emergente dice el atajo.
+- **Atajo: Ctrl + B.** No actúa con el foco en un campo editable. Ctrl + Mayús + L sigue siendo bloquear.
+- **Colapsada (76 px):** solo íconos. El nombre de cada ítem sigue en el árbol accesible (texto oculto) y
+  aparece en una ayuda emergente (`Ayuda`) al pasar el mouse o al enfocar con el teclado. Bloquear y el
+  selector de modo también quedan en íconos, con nombre.
+- **El ítem activo** lleva `aria-current="page"`, el fondo `accent-soft` y una barra de 3 px a la
+  izquierda: la forma acompaña al color.
+- **Animación:** 200 ms en el ancho; con `prefers-reduced-motion` no hay animación.
+- **La preferencia** se guarda en la configuración cifrada, como el modo. Con la bóveda bloqueada se usa
+  el valor por defecto (expandida). Nunca `localStorage`.
+- **El contenido** ocupa el ancho que la barra libera.
+
+## Controles
+
+Controles propios en lugar de los nativos del navegador (ADR 042), sobre **react-aria-components**: el
+patrón de WAI-ARIA Authoring Practices de cada uno (roles, estados, teclado y foco) lo pone la librería; el
+aspecto, los tokens, en los dos modos. Los textos y los anuncios para lector de pantalla salen en español
+(`I18nProvider` con `es-AR`). Un test (`security-tests/ui-controles-nativos.test.ts`) avisa si aparece un control
+nativo fuera de `ui/`.
+
+**Lo que no cambia.** Los diálogos de archivos del sistema los abre el proceso principal (son parte del
+límite de seguridad). Los campos sensibles siguen con `EntradaSensible`: no controlado, sin reflejarse en el
+HTML. Ningún control de `ui/controles.tsx` guarda un secreto en el estado de React. Los campos de texto y los
+`<textarea>` siguen siendo nativos, con los tokens.
+
+### Selector (`Selector`)
+
+- **Cuándo:** elegir una opción de una lista cerrada (forma de login, tipo de indicador, credencial).
+- **Estados:** cerrado, abierto, opción enfocada (`accent-soft`), elegida (negrita y tilde), deshabilitada
+  (visible, con «llega en: …»), inválido.
+- **Accesibilidad:** patrón listbox con botón. Enter, Espacio o flecha abajo abren; las flechas recorren
+  y saltean las deshabilitadas; Enter elige; Escape cierra; el foco vuelve al botón. La etiqueta puede
+  ser propia o externa (`aria-labelledby`, dentro de `Campo`).
+
+### Casilla (`Casilla`)
+
+- **Cuándo:** una opción que se marca o se desmarca dentro de un formulario que se guarda después
+  (declaraciones, opciones del proyecto).
+- **Estados:** sin marcar, marcada (`accent` con tilde), foco visible en la caja, deshabilitada.
+- **Accesibilidad:** un `<input type="checkbox">` real dentro de la etiqueta, que la cubre entera y es
+  invisible: el área de clic es toda la etiqueta. Espacio marca. La ayuda es su descripción
+  (`aria-describedby`), no parte del nombre.
+
+### Selector de modo (`SegmentedControl`)
+
+- **Cuándo:** pocas opciones excluyentes, siempre visibles (el modo de la interfaz).
+- **Accesibilidad:** radio group: Tab entra al grupo, las flechas cambian la opción. En la barra
+  colapsada va en vertical, con íconos y el nombre oculto.
+
+### Campo numérico (`CampoNumerico`)
+
+- **Cuándo:** un número entero (límites del escaneo, minutos de bloqueo, días de retención).
+- **Estados:** normal, foco (contorno `accent`), inválido.
+- **Accesibilidad:** las flechas suben y bajan; los botones − y + están fuera del orden de tabulación
+  y tienen nombre («Reducir …», «Aumentar …»). Sin separador de miles. No recorta al rango: la app
+  valida y muestra su error, como antes; el rango va en la ayuda.
+
+### Deslizador (`Deslizador`)
+
+- **Cuándo:** recorrer un valor continuo con una posición (el fotograma del video).
+- **Accesibilidad:** patrón slider. Flechas, Inicio y Fin; `aria-valuetext` dice el valor completo
+  («Fotograma 3 de 40 · 0:02»).
+
+### Desplegable (`Desplegable`)
+
+- **Cuándo:** contenido secundario que se abre a pedido (detalle de un hallazgo, una evidencia,
+  restaurar una copia).
+- **Accesibilidad:** patrón disclosure: un botón con `aria-expanded` dentro de un encabezado; Enter o
+  Espacio lo abren. Puede avisar al abrirse, para cargar el contenido recién entonces.
+
+### Ayuda emergente (`Ayuda`)
+
+- **Cuándo:** solo para repetir a la vista un nombre que el control ya tiene (íconos solos). Nunca lleva
+  información que no esté en el nombre accesible. Reemplaza al atributo `title`, que no se usa.
+- **Accesibilidad:** patrón tooltip. Aparece al pasar el mouse (300 ms) o al enfocar con el teclado, y
+  Escape la cierra.
+
+### Diálogo de confirmación (`DialogoConfirmacion`)
+
+- **Cuándo:** antes de algo que no se puede deshacer (eliminar evidencias con borrado criptográfico).
+- **Accesibilidad:** `alertdialog` modal: el foco queda adentro, empieza en «Cancelar» (lo seguro) y vuelve al
+  botón que lo abrió. Escape cancela. La acción usa `Button` `danger` y dice qué hace.
+
+### Aviso pasajero (`useAvisos`, `ui/avisos.tsx`)
+
+- **Cuándo:** confirmar algo que salió bien (copia creada). Los errores no: van en línea con
+  `role="alert"`.
+- **Accesibilidad:** una región `role="status"` siempre presente: el lector anuncia sin mover el foco. Se
+  cierra solo a los 6 s, salvo con el mouse o el foco encima, y tiene «Cerrar aviso». Hecho a mano: en la
+  versión 1.22 de la librería es `UNSTABLE_`.
+
+### Barras de scroll
+
+Finas, con `border-strong` sobre transparente (`scrollbar-color`), en los dos modos. Solo CSS.
 
 ## Patrones
 
@@ -164,3 +264,6 @@ El símbolo es un escaneo: el círculo es la aplicación que se prueba; la líne
 - Verificar el contraste en **los dos modos** antes de agregar un color nuevo.
 - Todo lo clickeable es `<button>` o `<a>`, nunca un `<div>` con `onClick`.
 - Cada pantalla nueva suma su caso al E2E (`e2e/`), incluido el cambio de modo si aplica.
+- Nada de controles nativos fuera de `ui/`: `<select>`, casillas, números, deslizadores, `<details>`,
+  `<dialog>`, `title`, `confirm()`. Un control nuevo va en `ui/`, sobre React Aria, con su sección acá y su
+  E2E con teclado.

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ConnectionEntry, SecurityStatus, ThemePreference, VaultStatus } from '@qatlas/shared';
+import type {
+  BarraLateral,
+  ConnectionEntry,
+  SecurityStatus,
+  ThemePreference,
+  VaultStatus,
+} from '@qatlas/shared';
 import { Shell, type PageId } from './layout/Shell';
 import { BovedaDanada, Desbloqueo, PrimerInicio, RestaurarEnPrimerInicio } from './pages/Acceso';
 import { Boveda } from './pages/Boveda';
@@ -16,6 +22,8 @@ import { applyTheme } from './theme';
 export function App() {
   const [boveda, setBoveda] = useState<VaultStatus | null>(null);
   const [theme, setTheme] = useState<ThemePreference>('system');
+  // Con la bóveda bloqueada, el principal responde «expandida»: la preferencia está cifrada.
+  const [barra, setBarra] = useState<BarraLateral>('expandida');
 
   const [refrescos, setRefrescos] = useState(0);
 
@@ -26,7 +34,10 @@ export function App() {
         window.qatlas.appearance.get(),
       ]);
       if (estado.ok) setBoveda(estado.data);
-      if (apariencia.ok) setTheme(apariencia.data.preference);
+      if (apariencia.ok) {
+        setTheme(apariencia.data.preference);
+        setBarra(apariencia.data.barraLateral);
+      }
     })();
   }, [refrescos]);
 
@@ -51,16 +62,33 @@ export function App() {
     case 'bloqueada':
       return <Desbloqueo estado={boveda} onListo={listo} />;
     case 'desbloqueada':
-      return <Principal theme={theme} onThemeChange={setTheme} />;
+      return (
+        <Principal theme={theme} onThemeChange={setTheme} barra={barra} onBarraChange={setBarra} />
+      );
   }
+}
+
+/**
+ * Un campo donde se escribe: ahí Ctrl+B no colapsa la barra (sería sorprendente mientras se tipea).
+ */
+function esEditable(elemento: Element | null): boolean {
+  if (!(elemento instanceof HTMLElement)) return false;
+  if (elemento.isContentEditable || elemento instanceof HTMLTextAreaElement) return true;
+  if (!(elemento instanceof HTMLInputElement)) return false;
+  const noEscritura = ['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'];
+  return !noEscritura.includes(elemento.type) && !elemento.readOnly && !elemento.disabled;
 }
 
 function Principal({
   theme,
   onThemeChange,
+  barra,
+  onBarraChange,
 }: {
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
+  barra: BarraLateral;
+  onBarraChange: (barra: BarraLateral) => void;
 }) {
   const [page, setPage] = useState<PageId>('inicio');
   const [vistaInicial, setVistaInicial] = useState<VistaProyectos>({ tipo: 'lista' });
@@ -82,18 +110,38 @@ function Principal({
     })();
   }, [refreshConnections]);
 
+  const alternarBarra = useCallback(() => {
+    const nueva: BarraLateral = barra === 'expandida' ? 'colapsada' : 'expandida';
+    onBarraChange(nueva);
+    // Se guarda cifrada, como el tema. Si falla, la interfaz queda como la dejó la persona.
+    void window.qatlas.appearance.setBarraLateral({ estado: nueva });
+  }, [barra, onBarraChange]);
+
   useEffect(() => {
     const atajo = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'l') {
         event.preventDefault();
         void window.qatlas.vault.lock();
+        return;
+      }
+      // Ctrl+B: colapsar o expandir la barra lateral, salvo escribiendo en un campo.
+      if (
+        event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === 'b' &&
+        !esEditable(document.activeElement)
+      ) {
+        event.preventDefault();
+        alternarBarra();
       }
     };
     window.addEventListener('keydown', atajo);
     return () => {
       window.removeEventListener('keydown', atajo);
     };
-  }, []);
+  }, [alternarBarra]);
 
   const changeTheme = async (preference: ThemePreference) => {
     onThemeChange(preference);
@@ -120,6 +168,8 @@ function Principal({
       onThemeChange={(t) => void changeTheme(t)}
       onLock={() => void window.qatlas.vault.lock()}
       protectionsOk={protectionsOk}
+      colapsada={barra === 'colapsada'}
+      onToggleBarra={alternarBarra}
     >
       {page === 'inicio' && (
         <Inicio

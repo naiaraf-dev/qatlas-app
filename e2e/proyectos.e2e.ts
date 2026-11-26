@@ -14,7 +14,9 @@ import {
 } from '@playwright/test';
 import type { QatlasApi } from '@qatlas/shared';
 import { vigilarEntorno } from './entorno';
+import { listaDesplegable } from './controles';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 const SECRETO = 'CANARIO-clave-de-prueba-inventada-41';
@@ -43,7 +45,9 @@ test.afterAll(async () => {
 });
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const siguiente = () => boton('Siguiente').click();
 
@@ -140,9 +144,12 @@ test('credenciales: el secreto escrito no se refleja, y se vacía aunque el env�
   await expect(entrada('Secreto')).toHaveAttribute('spellcheck', 'false');
 
   // La básica se ve, deshabilitada, con cuándo llega y por qué (ADR 025).
+  await listaDesplegable(page, 'Forma de login').click();
   await expect(
     page.getByRole('option', { name: 'Autenticación HTTP básica (llega en: fase 2)' }),
   ).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toBeHidden();
   await expect(page.getByText(/podría mandarle la contraseña/)).toBeVisible();
 
   await entrada('URL de login').fill('https://evil.example/login');
@@ -323,3 +330,6 @@ test('el nombre queda libre y el proyecto no vuelve al desbloquear', async () =>
   await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
   await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

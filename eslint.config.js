@@ -15,6 +15,8 @@ export default tseslint.config(
       // Generados por Playwright, también en .gitignore.
       'e2e-report/**',
       'test-results/**',
+      // Trabajo temporal, también en .gitignore (CLAUDE.md, reglas de procesos).
+      '.artefactos/**',
     ],
   },
   js.configs.recommended,

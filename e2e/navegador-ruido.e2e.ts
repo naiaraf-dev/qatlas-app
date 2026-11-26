@@ -31,6 +31,7 @@ import {
 import { iniciarProxy, type RegistroConexion } from '../packages/runner/src/red/proxy';
 import { vigilarEntorno } from './entorno';
 import { DE_GOOGLE, delSitio } from './ruido';
+import { vigilarProcesos } from './procesos';
 
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 vigilarEntorno(test);
@@ -213,3 +214,6 @@ test('control: con los servicios que Playwright apaga encendidos, el net-log los
   expect(DE_GOOGLE.test('www.google.com')).toBe(true);
   expect(DE_GOOGLE.test(HOST_SITIO)).toBe(false);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

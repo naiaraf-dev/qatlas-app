@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import optimizeLocales from '@react-aria/optimize-locales-plugin';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'electron-vite';
@@ -69,7 +70,12 @@ export default defineConfig(({ mode }) => ({
   },
   renderer: {
     root: resolve(import.meta.dirname, 'src/renderer'),
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // Solo las traducciones en español de React Aria (ADR 042). es-AR usa las de es-ES: el mismo idioma.
+      optimizeLocales.vite({ locales: ['es-ES'] }),
+    ],
     build: {
       rolldownOptions: {
         input: { index: resolve(import.meta.dirname, 'src/renderer/index.html') },

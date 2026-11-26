@@ -21,6 +21,11 @@ const PATHS = {
   shieldCheck: ['M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z', 'm9 12 2 2 4-4'],
   lock: ['M5 11h14v10H5z', 'M8 11V8a4 4 0 0 1 8 0v3'],
   chevronDown: ['m7 10 5 5 5-5'],
+  chevronRight: ['m9 6 6 6-6 6'],
+  chevronsLeft: ['m11 17-5-5 5-5', 'm18 17-5-5 5-5'],
+  chevronsRight: ['m13 17 5-5-5-5', 'm6 17 5-5-5-5'],
+  minus: ['M5 12h14'],
+  plus: ['M12 5v14', 'M5 12h14'],
   check: ['m5 12 5 5 9-10'],
   x: ['M6 6l12 12M18 6 6 18'],
   sun: [

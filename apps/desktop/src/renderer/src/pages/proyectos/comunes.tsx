@@ -9,6 +9,10 @@ import {
   type ProyectoEntrada,
 } from '@qatlas/shared';
 import { Icon } from '../../ui/Icon';
+import { CampoNumerico, Casilla } from '../../ui/controles';
+
+// La casilla es la del sistema de diseño (ui/controles.tsx).
+export { Casilla };
 
 export const CLASE_ENTRADA =
   'min-h-11 w-full rounded-[var(--radius-control)] border border-border-strong bg-surface-2 px-3 text-text';
@@ -89,7 +93,8 @@ export function Campo({
   const idAyuda = `${id}-ayuda`;
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="font-medium">
+      {/* El id de la etiqueta: un control propio (Selector) la usa con aria-labelledby. */}
+      <label id={`${id}-etiqueta`} htmlFor={id} className="font-medium">
         {etiqueta}
       </label>
       {children({ id, 'aria-describedby': idAyuda, 'aria-invalid': errores.length > 0 })}
@@ -102,35 +107,6 @@ export function Campo({
         ))}
       </div>
     </div>
-  );
-}
-
-export function Casilla({
-  etiqueta,
-  ayuda,
-  marcada,
-  onChange,
-}: {
-  etiqueta: string;
-  ayuda?: ReactNode;
-  marcada: boolean;
-  onChange: (marcada: boolean) => void;
-}) {
-  return (
-    <label className="flex items-start gap-3">
-      <input
-        type="checkbox"
-        checked={marcada}
-        onChange={(event) => {
-          onChange(event.target.checked);
-        }}
-        className="mt-1 size-4"
-      />
-      <span className="flex flex-col gap-0.5">
-        <span className="font-medium">{etiqueta}</span>
-        {ayuda && <span className="text-[13px] text-muted">{ayuda}</span>}
-      </span>
-    </label>
   );
 }
 
@@ -395,21 +371,15 @@ export function CamposControles({
     <>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         {CAMPOS_NUMERICOS.map(({ campo, etiqueta }) => (
-          <Campo key={campo} etiqueta={etiqueta}>
-            {(props) => (
-              <input
-                {...props}
-                type="number"
-                className={CLASE_ENTRADA}
-                min={LIMITES_PROYECTO[campo].min}
-                max={LIMITES_PROYECTO[campo].max}
-                value={valor[campo]}
-                onChange={(event) => {
-                  onChange({ [campo]: Number(event.target.value) });
-                }}
-              />
-            )}
-          </Campo>
+          <CampoNumerico
+            key={campo}
+            etiqueta={etiqueta}
+            valor={valor[campo]}
+            ayuda={`De ${String(LIMITES_PROYECTO[campo].min)} a ${String(LIMITES_PROYECTO[campo].max)}.`}
+            alCambiar={(n) => {
+              onChange({ [campo]: n });
+            }}
+          />
         ))}
       </div>
       <CampoSesionMaxima

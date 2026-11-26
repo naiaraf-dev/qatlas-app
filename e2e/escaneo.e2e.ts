@@ -19,6 +19,7 @@ import { iniciarSandbox, type SandboxActivo } from '../apps/sandbox-site/src/ser
 import { vigilarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
 import { compararConOraculo, manifiesto, resumenLegible } from './oraculo';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -31,7 +32,9 @@ test.describe.configure({ mode: 'serial', timeout: 180_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const ejecucion = () =>
   page.getByRole('list', { name: 'Ejecuciones del proyecto' }).locator(':scope > li').first();
@@ -145,3 +148,6 @@ test('lo encontrado coincide con el oráculo, sin inesperados', async () => {
   expect(sitio.registro.fugas).toEqual([]);
   expect(sitio.registro.trampas).toEqual([]);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

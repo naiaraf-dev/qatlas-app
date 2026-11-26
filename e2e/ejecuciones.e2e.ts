@@ -33,6 +33,8 @@ import {
 import { vigilarEntorno } from './entorno';
 import { DE_GOOGLE, delSitio } from './ruido';
 import { lanzarApp } from './lanzar';
+import { elegirOpcion } from './controles';
+import { vigilarProcesos } from './procesos';
 
 // El service worker no se registra, así que su destino nunca se intenta.
 const HOSTS_DE_FUGA_DEL_RECORRIDO = HOSTS_DE_FUGA.filter((host) => host !== 'sw.fuga.invalid');
@@ -51,7 +53,9 @@ test.describe.configure({ mode: 'serial', timeout: 150_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const siguiente = () => boton('Siguiente').click();
 const ejecuciones = () =>
@@ -498,7 +502,7 @@ test.describe('Probar login', () => {
     await entrada('Secreto').fill(secreto);
     await entrada('URL de login').fill(`${sitio.url}/login`);
     if (indicador) {
-      await entrada('Tipo de indicador').selectOption('aparece');
+      await elegirOpcion(page, 'Tipo de indicador', 'Aparece un elemento');
       await entrada('Valor del indicador').fill(indicador);
     }
     await boton('Guardar credencial').click();
@@ -582,3 +586,6 @@ test('eliminar el proyecto purga sus ejecuciones y sus conexiones', async () => 
   await boton('Actualizar').click();
   await expect(page.getByText('fuera-de-dominios')).toHaveCount(0);
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

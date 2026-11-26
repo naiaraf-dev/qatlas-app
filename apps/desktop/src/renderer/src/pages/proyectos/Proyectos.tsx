@@ -6,6 +6,7 @@ import type {
   ProyectoResumen,
 } from '@qatlas/shared';
 import { Button, Card, PageHeader } from '../../ui/components';
+import { DialogoConfirmacion } from '../../ui/controles';
 import { Asistente } from './Asistente';
 import {
   aLineas,
@@ -395,39 +396,33 @@ function ModoSensibleExistentes({
             auditoría, solo con la cantidad.
           </p>
           {fallo && <Aviso tipo="peligro">No se pudo completar. Probá de nuevo.</Aviso>}
-          {confirmando ? (
-            <>
-              <Aviso tipo="peligro">
-                Se van a eliminar {total} evidencias. No se puede deshacer.
-              </Aviso>
-              <div className="flex flex-wrap gap-2.5">
-                <Button variant="primary" onClick={() => void resolver('eliminar')}>
-                  Sí, eliminar {total} evidencias
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setConfirmando(false);
-                  }}
-                >
-                  Volver
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-wrap gap-2.5">
-              <Button
-                onClick={() => {
-                  setConfirmando(true);
-                }}
-              >
-                Eliminar {total} evidencias
-              </Button>
-              <Button variant="primary" onClick={() => void resolver('conservar')}>
-                Conservarlas
-              </Button>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2.5">
+            <Button
+              onClick={() => {
+                setConfirmando(true);
+              }}
+            >
+              Eliminar {total} evidencias
+            </Button>
+            <Button variant="primary" onClick={() => void resolver('conservar')}>
+              Conservarlas
+            </Button>
+          </div>
+          <DialogoConfirmacion
+            abierto={confirmando}
+            titulo={`¿Eliminar ${String(total)} evidencias?`}
+            textoConfirmar={`Sí, eliminar ${String(total)} evidencias`}
+            peligroso
+            alCancelar={() => {
+              setConfirmando(false);
+            }}
+            alConfirmar={() => {
+              setConfirmando(false);
+              void resolver('eliminar');
+            }}
+          >
+            <p>Se van a eliminar {total} evidencias. No se puede deshacer.</p>
+          </DialogoConfirmacion>
         </div>
       </Card>
     </>

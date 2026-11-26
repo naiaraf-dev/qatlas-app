@@ -22,6 +22,7 @@ import {
 } from '@playwright/test';
 import { diferenciasDeEntorno, restaurarEntorno } from './entorno';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -134,16 +135,10 @@ test('el tema se puede cambiar a mano y vuelve a seguir al sistema', async () =>
   await themes.getByRole('radio', { name: 'Claro' }).click();
   await expect.poll(background).toBe('rgb(246, 247, 249)');
   await expect.poll(() => coloresDelLogo(page)).toEqual(LOGO_CLARO);
-  await expect(themes.getByRole('radio', { name: 'Claro' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(themes.getByRole('radio', { name: 'Claro' })).toBeChecked();
 
   await themes.getByRole('radio', { name: 'Sistema' }).click();
-  await expect(themes.getByRole('radio', { name: 'Sistema' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(themes.getByRole('radio', { name: 'Sistema' })).toBeChecked();
 });
 
 test('la app no muestra ventanas nuevas aunque la página lo intente', async () => {
@@ -200,3 +195,6 @@ test('Escaneos y Ejecuciones dicen que hoy se lanzan desde cada proyecto, y llev
   await page.getByRole('button', { name: 'Ir a Proyectos' }).click();
   await expect(page.getByRole('heading', { name: 'Proyectos', level: 1 })).toBeVisible();
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

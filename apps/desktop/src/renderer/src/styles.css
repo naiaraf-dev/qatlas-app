@@ -129,6 +129,85 @@
   --shadow-card: var(--qa-shadow);
   --radius-control: 10px;
   --radius-card: 14px;
+
+  /* Movimiento corto. prefers-reduced-motion lo apaga (al final de este archivo). */
+  --animate-entrar: entrar 140ms ease-out;
+  --animate-salir: salir 100ms ease-in forwards;
+  --animate-aparecer: aparecer 140ms ease-out;
+  --animate-desaparecer: desaparecer 100ms ease-in forwards;
+}
+
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes salir {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes aparecer {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes desaparecer {
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * La regla que React Aria inyectaría en un <style> (usePress), acá: la CSP no admite estilos en línea.
+ * El marcador con su id está en index.html (ADR 042).
+ */
+@layer base {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+}
+
+/*
+ * Casilla y radio (ui/controles.tsx, ui/components.tsx): React Aria deja el <input> real en 1×1 px y la
+ * etiqueta lo tapa. Acá el input, invisible, cubre toda la etiqueta: el clic cae en el control de verdad
+ * (también el de las pruebas automáticas), el área es más grande y el lector de pantalla no cambia. El
+ * foco se dibuja en la caja visible, no en el input.
+ */
+@layer components {
+  .qa-entrada-cubre {
+    position: relative;
+  }
+  .qa-entrada-cubre > span:has(> input) {
+    position: absolute !important;
+    inset: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    clip: auto !important;
+    clip-path: none !important;
+    overflow: visible !important;
+  }
+  .qa-entrada-cubre > span > input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+  }
+  .qa-entrada-cubre > span > input:focus-visible {
+    outline: none;
+  }
+}
+
+/* Barras de scroll finas, con los tokens, en los dos modos. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--qa-border-strong) transparent;
 }
 
 html,

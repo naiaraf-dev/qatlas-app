@@ -40,6 +40,7 @@ import {
 } from './app-en-proceso';
 import { vigilarEntorno } from './entorno';
 import { contiene, crearOcr, leerTodas } from './ocr';
+import { vigilarProcesos } from './procesos';
 
 /** Único en cada corrida: si aparece, vino de acá. */
 const CANARIO = `CANARIO-ts01-${randomUUID().slice(0, 8)}`;
@@ -333,3 +334,6 @@ test('control positivo: con la redacción apagada, el mismo escaneo deja el cana
     rmSync(raiz, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

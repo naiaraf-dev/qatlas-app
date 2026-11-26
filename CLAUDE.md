@@ -75,6 +75,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - El oráculo (`hallazgos-esperados.json`) se compara en `e2e/escaneo-oraculo.e2e.ts` y `e2e/escaneo.e2e.ts`:
   un chequeo nuevo necesita su caso plantado en el sandbox, y un hallazgo sin documentar hace fallar el test.
 - `packages/runner/src/motor` no importa red, `child_process` ni `electron`: un test lo verifica.
+- La interfaz usa los controles de `renderer/src/ui/` (React Aria, ADR 042), nunca los nativos: un test lo verifica.
+  React Aria no puede inyectar `<style>` (CSP): el marcador `#react-aria-pressable-style` de `index.html` lo evita,
+  y el E2E de la CSP falla si una versión nueva inyecta otro. La barra lateral se guarda cifrada (ADR 043).
 - Todo navegador de pruebas, de la app, de un test o de un script, se lanza con `opcionesChromium`
   (`opciones-chromium.ts`): un solo `--disable-features`, porque Chromium se queda con el último (ADR 041). Un
   test busca su conexión por destino, nunca «la última».
@@ -154,6 +157,14 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 
 - Nunca cerrar procesos por nombre (por ejemplo, todos los `electron.exe`). Solo los que inició Claude,
   por su PID.
+- Nunca `rm -rf` (ni `Remove-Item -Recurse`) con rutas armadas desde variables en la terminal: una variable
+  vacía apunta a la raíz.
+- El trabajo temporal (láminas, diagnósticos, pruebas sueltas) va en `.artefactos/`, ignorada por git, nunca
+  fuera del repo. Se borra solo con `node scripts/borrar-temporal.mjs <ruta>`: verifica que la ruta no esté
+  vacía, que quede dentro del repo (resolviendo enlaces), que no sea la raíz ni la carpeta temporal misma,
+  que git la ignore y que no tenga nada versionado. Si algo no cumple, falla sin borrar.
+  `security-tests/borrar-temporal.test.ts` lo prueba.
+- Nunca borrar nada fuera del repo.
 
 ## Diseño
 

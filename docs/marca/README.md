@@ -42,6 +42,12 @@ Los íconos para la app están en `apps/desktop/resources/`: `icon.png` (1024 px
 
   `#9C9CF2` es un color nuevo, solo de marca: no existe como token.
 
+- **Ícono de la aplicación (2026-11-25):** el cuadrado índigo ocupa todo el lienzo y el símbolo, casi todo el
+  cuadrado (escala 0,92 en la versión grande y 0,98 en la chica, centrado donde estaba), con esquinas de
+  radio 12 y 10, como los íconos de Windows 11. Antes el símbolo ocupaba la mitad del cuadrado y en la barra
+  de tareas se veía más chico que los de otras apps, aunque el cuadrado ya iba a sangre. La línea de escaneo
+  llega hasta 56 (no 59) solo en el ícono, para que el punto no quede pegado al borde del cuadrado; a 16 px
+  se lee igual. El isotipo sin cuadrado (`Logo` y los `isotipo-*.svg`) no cambia: ahí no hay borde.
 - **Tamaño mínimo:** el logo con nombre, 24 px de alto. Por debajo de 48 px, usar las versiones
   `-chico` del ícono.
 - **Área libre:** alrededor del logo, al menos la altura de la "Q" del nombre.

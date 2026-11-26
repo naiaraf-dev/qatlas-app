@@ -20,7 +20,9 @@ import {
   type SandboxActivo,
 } from '../apps/sandbox-site/src/servidor.mjs';
 import { vigilarEntorno } from './entorno';
+import { capturar, ponerTema, revisarAccesibilidad } from './interfaz';
 import { lanzarApp } from './lanzar';
+import { vigilarProcesos } from './procesos';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
 
@@ -34,7 +36,9 @@ test.describe.configure({ mode: 'serial', timeout: 180_000 });
 vigilarEntorno(test);
 
 const titulo = (nombre: string) => page.getByRole('heading', { name: nombre, level: 1 });
-const entrada = (etiqueta: string) => page.getByLabel(etiqueta, { exact: true });
+// Solo campos: los botones +/- de un campo numérico llevan la misma etiqueta (ADR 042).
+const entrada = (etiqueta: string) =>
+  page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const ejecuciones = () =>
   page.getByRole('list', { name: 'Ejecuciones del proyecto' }).locator(':scope > li');
@@ -119,6 +123,31 @@ test('un escaneo con fallas deja captura y video, y el visor los muestra en un c
   expect(consola.filter((linea) => /Content Security Policy/i.test(linea))).toEqual([]);
 });
 
+test('Deslizador del visor (slider): solo con el teclado, con el valor completo anunciado, axe y capturas', async () => {
+  const info = test.info();
+  const ficha = evidencias().getByRole('region', { name: 'Evidencias de /evidencias/ficha' });
+  const deslizador = ficha.getByRole('slider', { name: 'Fotograma' });
+  await deslizador.focus();
+  await page.keyboard.press('Home');
+  await expect(ficha.getByRole('img', { name: /Fotograma 1 de \d+/ })).toBeVisible();
+  await expect(deslizador).toHaveAttribute('aria-valuetext', /^Fotograma 1 de \d+ · /);
+  await page.keyboard.press('ArrowRight');
+  await expect(ficha.getByRole('img', { name: /Fotograma 2 de \d+/ })).toBeVisible();
+  await expect(deslizador).toHaveAttribute('aria-valuetext', /^Fotograma 2 de \d+ · /);
+  await page.keyboard.press('End');
+  const total = Number(await deslizador.getAttribute('max')) + 1;
+  await expect(ficha.getByRole('img', { name: `Fotograma ${total} de ${total}` })).toBeVisible();
+  for (const tema of ['Claro', 'Oscuro'] as const) {
+    await ponerTema(page, tema);
+    expect(
+      await revisarAccesibilidad(page, 'section[aria-label="Evidencias de la ejecución"]'),
+      tema,
+    ).toEqual([]);
+    await capturar(page, info, `deslizador-${tema.toLowerCase()}`);
+  }
+  await ponerTema(page, 'Claro');
+});
+
 test('EVI-06: la retención se configura en Bóveda y queda guardada', async () => {
   await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
   const dias = entrada('Días que se guardan');
@@ -156,6 +185,7 @@ test('f6: al activar el modo datos sensibles, avisa y se puede conservar lo que 
 });
 
 test('f6: desactivado y activado otra vez, se eliminan con confirmación, y la captura queda', async () => {
+  const info = test.info();
   await boton('Editar proyecto').click();
   await page.getByRole('checkbox', { name: /Modo datos sensibles/ }).uncheck();
   await boton('Guardar cambios').click();
@@ -166,13 +196,46 @@ test('f6: desactivado y activado otra vez, se eliminan con confirmación, y la c
   await boton('Editar proyecto').click();
   await page.getByRole('checkbox', { name: /Modo datos sensibles/ }).check();
   await boton('Guardar cambios').click();
-  await boton(`Eliminar ${total} evidencias`).click();
+  // El diálogo de confirmación (alertdialog), solo con el teclado: el foco empieza en Cancelar, queda
+  // adentro, Escape cancela y vuelve al botón que lo abrió.
+  const abrir = boton(`Eliminar ${total} evidencias`);
+  const dialogo = page.getByRole('alertdialog', { name: `¿Eliminar ${total} evidencias?` });
+  await abrir.focus();
+  await page.keyboard.press('Enter');
+  await expect(dialogo).toBeVisible();
+  await expect(dialogo).toHaveAccessibleDescription(
+    `Se van a eliminar ${total} evidencias. No se puede deshacer.`,
+  );
+  await expect(dialogo.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(
+    dialogo.getByRole('button', { name: `Sí, eliminar ${total} evidencias` }),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialogo.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialogo).toBeHidden();
+  await expect(abrir).toBeFocused();
   // Sin confirmar, nada se borró.
   expect(await noCumplen()).toEqual(antes);
-  await expect(
-    page.getByText(`Se van a eliminar ${total} evidencias. No se puede deshacer.`),
-  ).toBeVisible();
-  await boton(`Sí, eliminar ${total} evidencias`).click();
+
+  // Abierto es modal: el modo se cambia antes de abrirlo.
+  for (const tema of ['Claro', 'Oscuro'] as const) {
+    await ponerTema(page, tema);
+    await abrir.focus();
+    await page.keyboard.press('Enter');
+    await expect(dialogo).toBeVisible();
+    expect(await revisarAccesibilidad(page, 'body'), tema).toEqual([]);
+    await capturar(page, info, `dialogo-${tema.toLowerCase()}`);
+    await page.keyboard.press('Escape');
+    await expect(dialogo).toBeHidden();
+  }
+  await ponerTema(page, 'Claro');
+
+  await abrir.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
   await expect(titulo('Evidencias')).toBeVisible();
   expect(await noCumplen()).toEqual({ videos: 0, snapshots: 0 });
 
@@ -181,3 +244,10 @@ test('f6: desactivado y activado otra vez, se eliminan con confirmación, y la c
   await expect(ficha.getByRole('img', { name: /Captura de la página/ })).toBeVisible();
   await expect(ficha.getByRole('img', { name: /Fotograma/ })).toHaveCount(0);
 });
+
+test('CSP: ninguna violación en todo el recorrido, con el visor, el deslizador y el diálogo', () => {
+  expect(consola.filter((linea) => /Content Security Policy/i.test(linea))).toEqual([]);
+});
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);

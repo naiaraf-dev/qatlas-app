@@ -39,6 +39,7 @@ import {
 import { crearRunner } from '../packages/runner/src/motor/runner';
 import { iniciarProxy } from '../packages/runner/src/red/proxy';
 import { restaurarEntorno, vigilarEntorno } from './entorno';
+import { vigilarProcesos } from './procesos';
 
 /** La contraseña del usuario del sandbox es el canario: es única y se busca byte a byte. */
 const CANARIO = USUARIOS_APP.admin.clave;
@@ -379,3 +380,6 @@ test('la ventana del asistido no ofrece guardar la contraseña: el gestor de Chr
     await proxy.cerrar();
   }
 });
+
+// Último: corre después de los afterAll del archivo (e2e/procesos.ts).
+vigilarProcesos(test, import.meta.filename);
