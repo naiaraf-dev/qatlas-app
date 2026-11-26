@@ -185,10 +185,19 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 ## Antes de dar una tarea por terminada
 
 ```bash
-npm run check                         # formato, lint, tipos, tests, Electronegativity
-npm run navegador:instalar            # una vez, o al subir Playwright
-npm run build && npm run test:e2e     # E2E (en Linux sin pantalla: xvfb-run -a npm run test:e2e)
+npm run check                                   # siempre: formato, lint, tipos, tests, Electronegativity
+npm run navegador:instalar                      # una vez, o al subir Playwright
+npm run build && npm run test:e2e:area -- <área> # E2E del área tocada, más el smoke
 ```
+
+- **Localmente:** `check` siempre; del E2E, solo el área tocada más el smoke (`test:e2e:area`, por
+  ejemplo `-- boveda` o `-- "componentes|barra-lateral"`). Si el cambio no toca un área en particular,
+  `test:e2e:smoke`. La suite completa (`test:e2e`) la confirma el CI, en cinco partes paralelas.
+- **Las «3 corridas seguidas»** son el job nocturno (`.github/workflows/nocturno.yml`): la suite completa
+  con `--repeat-each=3` y `failOnFlakyTests`. Ya no se piden localmente.
+- **Cada test E2E lleva al menos una etiqueta** (`@seguridad`, `@lento`, `@ocr`, `@interfaz`, `@smoke`). Un
+  test `@lento` u `@ocr` de un archivo nuevo necesita su parte en `scripts/e2e-partes.mjs` (un test lo
+  exige). Cada archivo E2E termina con `vigilarProcesos(test, import.meta.filename)` (ADR 044).
 
 Si Electronegativity reporta algo nuevo, corregirlo o documentarlo en
 `docs/seguridad/electronegativity.md` con su justificación.
