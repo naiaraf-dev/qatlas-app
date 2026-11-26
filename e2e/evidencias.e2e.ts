@@ -30,7 +30,7 @@ import {
 } from '../apps/sandbox-site/src/servidor.mjs';
 import { archivosCon, armar, conTemporal, enTexto, type AppEnProceso } from './app-en-proceso';
 import { vigilarEntorno } from './entorno';
-import { contiene, crearOcr, leerTodas, type Ocr } from './ocr';
+import { contiene, crearOcr, esperarSinSecretos, leerTodas, type Ocr } from './ocr';
 import { vigilarProcesos } from './procesos';
 
 /** Único en cada corrida y fácil de leer con OCR: letras y números grandes. */
@@ -143,8 +143,8 @@ test(
         expect(textos.find((t) => t.tipo === 'traza')?.texto).toContain('/app/informes');
 
         expect(enTexto(textos.map((t) => t.texto).join('\n'), CANARIO), id).toEqual([]);
-        const enImagenes = await leidos([...fotogramas, ...capturas]);
-        expect(algunoContiene(enImagenes, CANARIO), id).toBe(false);
+        // Con testigo: cada imagen con algo dibujado tiene que haberse leído (e2e/ocr-texto.ts).
+        await esperarSinSecretos(ocr, [...fotogramas, ...capturas], [CANARIO], `ts06-${id}`);
       }
     });
   },
@@ -183,9 +183,12 @@ test(
       // Control: el OCR lee la captura (lo que no está tapado se ve).
       expect(contiene(leido, DATOS.nombre)).toBe(true);
       expect(contiene(leido, DATOS.nota)).toBe(true);
-      for (const dato of [DATOS.documento, DATOS.email, DATOS.telefono]) {
-        expect(contiene(leido, dato), dato).toBe(false);
-      }
+      await esperarSinSecretos(
+        ocr,
+        [Buffer.from(captura.datos)],
+        [DATOS.documento, DATOS.email, DATOS.telefono],
+        'evi02-ficha',
+      );
       // Control de EVI-05: sin el modo datos sensibles, el valor de un campo se lee en la captura.
       const formulario = await app.evidencias.vista(
         dePagina(app, id, '/evidencias/formulario').find((e) => e.tipo === 'captura')?.id ?? '',
@@ -250,10 +253,15 @@ test(
       const enCapturas = await leidos(capturas);
       // Control: la captura se lee.
       expect(algunoContiene(enCapturas, DATOS.nombre)).toBe(true);
-      expect(algunoContiene(enCapturas, DATOS.nota)).toBe(false);
-      for (let n = 1; n <= CAMPOS_DEL_FORMULARIO; n++) {
-        expect(algunoContiene(enCapturas, valorDeCampo(n)), valorDeCampo(n)).toBe(false);
-      }
+      await esperarSinSecretos(
+        ocr,
+        capturas,
+        [
+          DATOS.nota,
+          ...Array.from({ length: CAMPOS_DEL_FORMULARIO }, (_, i) => valorDeCampo(i + 1)),
+        ],
+        'evi05',
+      );
       expect(textos.find((t) => t.tipo === 'traza')?.texto).not.toContain('"clase":"snapshot"');
     });
   },

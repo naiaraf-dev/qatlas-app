@@ -6,11 +6,13 @@ import { crearZonaAutenticada, HOST_IDP, HOST_PORTAL } from './autenticacion.mjs
 import { CANARIO_POR_DEFECTO, crearFugas } from './fugas.mjs';
 import { crearPaginasDeEvidencias } from './evidencias.mjs';
 import { atenderFuente } from './fuente.mjs';
+import { instalarTestigo } from './testigo.mjs';
 
 export { HOST_IDP, HOST_PORTAL, USUARIO_BASICA, USUARIOS_APP } from './autenticacion.mjs';
 export { CANARIO_POR_DEFECTO, JWT_DE_PRUEBA, PEM_DE_PRUEBA } from './fugas.mjs';
 export { CAMPOS_DEL_FORMULARIO, DATOS_SENSIBLES_DE_PRUEBA, valorDeCampo } from './evidencias.mjs';
 export { ESTILO_FUENTE, FAMILIA_CONTROL, leerFuenteDeControl, RUTA_FUENTE } from './fuente.mjs';
+export { TESTIGO_OCR } from './testigo.mjs';
 
 /**
  * App de prueba de QAtlas: tiene problemas plantados a propósito para que el escáner tenga qué
@@ -434,6 +436,8 @@ export function iniciarSandbox({
   ]);
 
   const atender = async (req, res) => {
+    // El testigo del OCR en toda página HTML (testigo.mjs).
+    instalarTestigo(res);
     const nombreHost = (req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
     registro.hosts.push(nombreHost);
 

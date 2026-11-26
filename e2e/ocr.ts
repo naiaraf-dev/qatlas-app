@@ -4,9 +4,15 @@
  * la red bloqueada (`fixtures/ocr-sin-red.cjs`) y sin caché en disco. Nada se descarga.
  */
 import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { expect, test } from '@playwright/test';
+import { chromium } from 'playwright-core';
 import { createScheduler, createWorker, OEM, type Scheduler } from 'tesseract.js';
+import { TESTIGO_OCR } from '../apps/sandbox-site/src/servidor.mjs';
+import { opcionesChromium } from '../packages/runner/src/motor/opciones-chromium';
+import { veredicto, type Veredicto } from './ocr-texto';
 
 const requerir = createRequire(import.meta.url);
 
@@ -69,58 +75,8 @@ export async function crearOcr({
   };
 }
 
-/**
- * Normaliza para comparar lo leído con lo buscado: mayúsculas, sin espacios ni signos, y las
- * confusiones típicas del OCR (O y 0, I, L y 1, S y 5, B y 8) llevadas a una sola forma.
- */
-export function normalizar(texto: string): string {
-  return texto
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .replace(/O/g, '0')
-    .replace(/[IL]/g, '1')
-    .replace(/S/g, '5')
-    .replace(/B/g, '8');
-}
-
-/** Distancia de edición, para tolerar uno o dos caracteres mal leídos. */
-function distancia(a: string, b: string): number {
-  const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let anterior = fila[0] ?? 0;
-    fila[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const actual = fila[j] ?? 0;
-      fila[j] = Math.min(
-        actual + 1,
-        (fila[j - 1] ?? 0) + 1,
-        anterior + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      anterior = actual;
-    }
-  }
-  return fila[b.length] ?? 0;
-}
-
-/**
- * Si el texto leído contiene lo buscado, con hasta `tolerancia` caracteres distintos. Tolerar errores
- * hace que la búsqueda encuentre más, nunca menos: un falso positivo hace fallar el test, no lo aprueba.
- */
-export function contiene(leido: string, buscado: string, tolerancia = 2): boolean {
-  const texto = normalizar(leido);
-  const aguja = normalizar(buscado);
-  if (aguja.length === 0) return false;
-  if (texto.includes(aguja)) return true;
-  for (let inicio = 0; inicio + aguja.length - tolerancia <= texto.length; inicio++) {
-    for (const largo of [aguja.length - 1, aguja.length, aguja.length + 1]) {
-      const ventana = texto.slice(inicio, inicio + largo);
-      if (ventana.length >= aguja.length - tolerancia && distancia(ventana, aguja) <= tolerancia) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
+// La comparación y el testigo viven en un módulo sin tesseract, que se prueba con Vitest.
+export { contiene, normalizar } from './ocr-texto';
 
 /** Lee cada imagen distinta una sola vez: los fotogramas repetidos no se vuelven a leer. */
 export async function leerTodas(ocr: Ocr, imagenes: readonly Buffer[]): Promise<string[]> {
@@ -129,4 +85,85 @@ export async function leerTodas(ocr: Ocr, imagenes: readonly Buffer[]): Promise<
     unicas.set(createHash('sha256').update(imagen).digest('hex'), imagen);
   }
   return Promise.all([...unicas.values()].map((imagen) => ocr.leer(imagen)));
+}
+
+/** Las imágenes distintas, una vez cada una (los fotogramas se repiten mucho). */
+function unicas(imagenes: readonly Buffer[]): Buffer[] {
+  const mapa = new Map<string, Buffer>();
+  for (const imagen of imagenes)
+    mapa.set(createHash('sha256').update(imagen).digest('hex'), imagen);
+  return [...mapa.values()];
+}
+
+/**
+ * Si cada imagen es de un solo color (una página en blanco mientras navega): no puede tener texto. La
+ * decodifica el Chromium verificado, sin dependencias nuevas. Un píxel de cada cuatro alcanza.
+ */
+export async function uniformes(imagenes: readonly Buffer[]): Promise<boolean[]> {
+  const navegador = await chromium.launch(opcionesChromium());
+  try {
+    const pagina = await navegador.newPage();
+    const salida: boolean[] = [];
+    for (const imagen of imagenes) {
+      salida.push(
+        await pagina.evaluate(async (base64) => {
+          const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+          const mapa = await createImageBitmap(new Blob([bytes]));
+          const lienzo = new OffscreenCanvas(mapa.width, mapa.height);
+          const contexto = lienzo.getContext('2d');
+          if (!contexto) return false;
+          contexto.drawImage(mapa, 0, 0);
+          const { data } = contexto.getImageData(0, 0, mapa.width, mapa.height);
+          let minimo = 255;
+          let maximo = 0;
+          for (let i = 0; i < data.length; i += 16) {
+            const luz =
+              ((data[i] ?? 0) * 299 + (data[i + 1] ?? 0) * 587 + (data[i + 2] ?? 0) * 114) / 1000;
+            minimo = Math.min(minimo, luz);
+            maximo = Math.max(maximo, luz);
+          }
+          return maximo - minimo < 24;
+        }, imagen.toString('base64')),
+      );
+    }
+    return salida;
+  } finally {
+    await navegador.close();
+  }
+}
+
+/**
+ * «Ningún secreto en estas imágenes», con testigo: cada imagen con algo dibujado tiene que mostrar
+ * `TESTIGO_OCR` leído por el OCR. Si alguna no lo muestra, o ninguna se pudo comprobar, falla como «no
+ * se pudo comprobar». Si falla, adjunta esas imágenes y lo que leyó (quedan en el artifact del CI).
+ */
+export async function esperarSinSecretos(
+  ocr: Ocr,
+  imagenes: readonly Buffer[],
+  secretos: readonly string[],
+  nombre: string,
+): Promise<Veredicto> {
+  const distintas = unicas(imagenes);
+  const [textos, vacias] = await Promise.all([
+    Promise.all(distintas.map((imagen) => ocr.leer(imagen))),
+    uniformes(distintas),
+  ]);
+  const lecturas = textos.map((texto, i) => ({ texto, uniforme: vacias[i] ?? false }));
+  const resultado = veredicto(lecturas, secretos, TESTIGO_OCR);
+  if (resultado.resultado !== 'limpio') {
+    const info = test.info();
+    const problema = [...resultado.porClase['con-secreto'], ...resultado.porClase['sin-testigo']];
+    // Como archivos en la carpeta del test: test-results es lo que el CI sube si falla.
+    for (const i of problema.slice(0, 20)) {
+      const imagen = info.outputPath(`${nombre}-imagen-${String(i)}.png`);
+      const lectura = info.outputPath(`${nombre}-lectura-${String(i)}.txt`);
+      writeFileSync(imagen, distintas[i] ?? Buffer.alloc(0));
+      writeFileSync(lectura, lecturas[i]?.texto ?? '');
+      await info.attach(`${nombre}-imagen-${String(i)}`, { path: imagen });
+      await info.attach(`${nombre}-lectura-${String(i)}.txt`, { path: lectura });
+    }
+  }
+  const resumen = `${nombre}: ${String(resultado.porClase.comprobada.length)} comprobadas, ${String(resultado.porClase.vacia.length)} vacías, ${String(resultado.porClase['sin-testigo'].length)} sin testigo, ${String(resultado.porClase['con-secreto'].length)} con un secreto`;
+  expect(resultado.resultado, resumen).toBe('limpio');
+  return resultado;
 }

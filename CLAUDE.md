@@ -60,8 +60,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   su borrado criptográfico (ADR 035). Un archivo sin fila es un resto ilegible y se borra.
 - Una imagen nueva en la interfaz llega en bytes validados por su firma y se dibuja en un canvas. La CSP no
   admite `data:` ni `blob:`, y el build no incrusta nada (`assetsInlineLimit: 0`).
-- Un test que dice «no aparece» en una imagen usa el OCR de `e2e/ocr.ts` (solo desarrollo, sin red) y tiene
-  su control positivo, que sí lo encuentra.
+- Un test que dice «no aparece» en una imagen usa el OCR de `e2e/ocr.ts` (solo desarrollo, sin red), tiene
+  su control positivo, que sí lo encuentra, y usa `esperarSinSecretos`: cada imagen tiene que mostrar el testigo
+  del sandbox leído, o falla como «no se pudo comprobar» (ADR 039).
 - Todo texto del sitio pasa por la redacción en el proceso principal antes de guardarse, mostrarse o registrarse
   (`ejecuciones/redaccion.ts`). Una columna nueva con texto del sitio es `TextoRedactado`; nunca un cast.
 - Logs: solo `registrar()` (`main/registro.ts`), con eventos, códigos de `CODIGOS_PERMITIDOS`, IDs y tiempos. Nunca

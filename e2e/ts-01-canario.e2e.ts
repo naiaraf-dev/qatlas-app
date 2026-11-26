@@ -16,7 +16,7 @@
  * la ventana del asistido. La app no tiene ningún comportamiento especial para tests.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -39,7 +39,7 @@ import {
   type AppEnProceso,
 } from './app-en-proceso';
 import { vigilarEntorno } from './entorno';
-import { contiene, crearOcr, leerTodas } from './ocr';
+import { contiene, crearOcr, esperarSinSecretos, leerTodas } from './ocr';
 import { vigilarProcesos } from './procesos';
 
 /** Único en cada corrida: si aparece, vino de acá. */
@@ -72,11 +72,31 @@ async function evidenciasDeTodas(app: AppEnProceso, ejecuciones: readonly string
   return { textos, capturas };
 }
 
-/** Si el canario se ve en alguna captura, leída con OCR (ADR 039). */
-async function capturasConCanario(capturas: readonly Buffer[]): Promise<boolean> {
+/**
+ * Si el canario se ve en alguna captura, leída con OCR (ADR 039). Con `adjuntarSiNo`, cuando no lo
+ * encuentra adjunta cada captura y lo que leyó, para diagnosticar (queda en el artifact del CI).
+ */
+async function capturasConCanario(
+  capturas: readonly Buffer[],
+  adjuntarSiNo = false,
+): Promise<boolean> {
   const ocr = await crearOcr();
   try {
-    return (await leerTodas(ocr, capturas)).some((leido) => contiene(leido, CANARIO));
+    const leidos = await leerTodas(ocr, capturas);
+    const encontrado = leidos.some((leido) => contiene(leido, CANARIO));
+    if (!encontrado && adjuntarSiNo) {
+      // Como archivos en la carpeta del test: test-results es lo que el CI sube si falla.
+      const info = test.info();
+      for (const [i, captura] of capturas.entries()) {
+        const ruta = info.outputPath(`captura-${String(i)}.png`);
+        writeFileSync(ruta, captura);
+        await info.attach(`captura-${String(i)}.png`, { path: ruta });
+      }
+      const ruta = info.outputPath('lectura-ocr.txt');
+      writeFileSync(ruta, leidos.map((t, i) => `--- lectura ${String(i)}\n${t}`).join('\n'));
+      await info.attach('lectura-ocr.txt', { path: ruta });
+    }
+    return encontrado;
   } finally {
     await ocr.cerrar();
   }
@@ -275,7 +295,14 @@ test(
           expect(deEvidencias.some((t) => t.texto.includes('[REDACTADO:'))).toBe(true);
           expect(capturas.length).toBeGreaterThan(0);
           lugares['evidencias descifradas'] = enTexto(deEvidencias.map((t) => t.texto).join('\n'));
-          lugares['capturas (OCR)'] = (await capturasConCanario(capturas)) ? ['visible'] : [];
+          // Con testigo: cada captura tiene que haberse leído, si no, «no se pudo comprobar».
+          const ocr = await crearOcr();
+          try {
+            await esperarSinSecretos(ocr, capturas, [CANARIO], 'ts01-capturas');
+          } finally {
+            await ocr.cerrar();
+          }
+          lugares['capturas (OCR)'] = [];
           expect(lugares).toEqual({
             archivos: [],
             'base descifrada': [],
@@ -334,8 +361,15 @@ test(
         // Sin redacción, el canario queda en las evidencias descifradas y a la vista en una captura: el
         // OCR lo lee. Así, en el test principal, no encontrarlo dice algo.
         const { textos, capturas } = await evidenciasDeTodas(app, [id, aLaVista]);
+        // Diagnóstico: qué evidencias dejó la página del canario (si no hay captura, el OCR no tiene
+        // qué leer, y eso es otra falla).
+        const deLaVisible = app.evidencias.listar(aLaVista).map((e) => e.tipo);
+        await test.info().attach('evidencias-de-la-pagina-visible.txt', {
+          body: deLaVisible.join(', ') || 'ninguna',
+          contentType: 'text/plain',
+        });
         expect(enTexto(textos.map((t) => t.texto).join('\n'))).toContain('tal cual');
-        expect(await capturasConCanario(capturas)).toBe(true);
+        expect(await capturasConCanario(capturas, true)).toBe(true);
         app.boveda.bloquear();
       });
     } finally {
