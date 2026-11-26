@@ -72,6 +72,8 @@ export const RUTA_FUENTE: string;
 export const FAMILIA_CONTROL: string;
 export const ESTILO_FUENTE: string;
 export function leerFuenteDeControl(): Buffer;
+/** El texto testigo del OCR, en toda página HTML del sandbox (testigo.mjs). */
+export const TESTIGO_OCR: string;
 
 /** Lo que se ve en las páginas de /evidencias (semana 7b). Inventado. */
 export const DATOS_SENSIBLES_DE_PRUEBA: Readonly<{

@@ -55,6 +55,36 @@ Licencias MIT, Apache-2.0 y BSD-2-Clause. Ninguna llega a la app.
 Alternativas: el binario de Tesseract del sistema (no es reproducible entre Windows y el CI), modelos ONNX
 o Python (mucho más pesados) o no hacer OCR (no prueba EVI-01 en los fotogramas).
 
+## Testigo en cada «no aparece» (2026-11-26)
+
+El control positivo de TS-01 falló una vez en el CI y pasó al reintentar: el OCR no vio el canario que
+estaba. Eso pone en duda los «no aparece»: si a veces el OCR no lee, un TS-01 o un TS-06 podría pasar sin
+haber leído nada.
+
+- **Testigo.** Toda página HTML del sandbox muestra un texto fijo, no secreto (`TESTIGO_OCR`, en
+  `apps/sandbox-site/src/testigo.mjs`): arriba a la derecha, fijo, negro sobre blanco, 28 px, con la fuente
+  empaquetada y `font-display: swap`. Cada captura o fotograma que revisa una aserción negativa
+  (`esperarSinSecretos`, en `e2e/ocr.ts`) tiene que mostrarlo leído por el OCR. Una imagen de un solo
+  color (una página en blanco mientras navega) no puede tener texto y no cuenta. Si una imagen con algo
+  dibujado no muestra el testigo, o ninguna se pudo comprobar, la aserción falla como «no se pudo
+  comprobar». La lógica está en `e2e/ocr-texto.ts` y la prueba `security-tests/ocr-testigo.test.ts`.
+  Se aplica a TS-01, TS-06, EVI-02 y EVI-05.
+- **Lo que encontró en la primera corrida.** El testigo, dibujado con un borde negro pegado al texto, no se
+  leía en dos imágenes, aunque se veía perfecto. Sin borde, sí. Es el mismo efecto que con los campos de
+  formulario: el OCR depende de cómo está dibujado el texto. Antes, esa clase de imagen pasaba como «sin
+  el secreto».
+- **Captura recién pintada.** Antes de cada captura, la grabación espera en el mundo aislado las fuentes
+  cargadas y dos cuadros pintados (`EXPRESION_ESPERAR_PINTADO`, en `grabacion.ts`). Playwright ya espera
+  las fuentes al capturar; esto agrega el pintado. Si la señal no llega, captura igual, y el testigo dice
+  si se leía.
+- **Diagnóstico en el CI.** Si un control positivo no encuentra el canario, o una aserción negativa no se
+  puede comprobar, el test escribe las imágenes y lo que leyó el OCR en su carpeta de `test-results`, que
+  el CI sube cuando falla.
+- **La causa de la falla del CI no se reprodujo.** Pasó 10 de 10 en local, también con la máquina
+  cargada. Las posibles (una captura sin pintar, una página sin captura porque el proceso principal tardó
+  más de 5 s en decir qué tapar, una lectura que falla) quedan cubiertas: la primera por la espera, las
+  otras porque ya no pueden pasar en silencio.
+
 ## Mantenimiento
 
 Subir tesseract.js revisando su script de instalación y que siga sin red. El `errorHandler` de la versión

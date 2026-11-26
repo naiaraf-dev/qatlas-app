@@ -73,11 +73,76 @@ jobs:
           sarif_file: electronegativity.sarif
           category: electronegativity
 
+  # El E2E en partes paralelas (ADR 044). Las partes las define scripts/e2e-partes.mjs, y
+  # security-tests/e2e-etiquetas.test.ts verifica que esta lista coincida y que cada test caiga en
+  # exactamente una. Todas son checks obligatorios.
   e2e:
-    name: E2E de la app (Electron real)
+    name: E2E ${{ matrix.numero }}/5 · ${{ matrix.nombre }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     needs: calidad
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { numero: 1, nombre: 'rápidos' }
+          - { numero: 2, nombre: 'Bóveda: inactividad' }
+          - { numero: 3, nombre: 'contención: solo lectura' }
+          - { numero: 4, nombre: 'ejecuciones y escaneos' }
+          - { numero: 5, nombre: 'OCR y evidencias' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/preparar-e2e
+      - name: Tests E2E de la parte
+        env:
+          PARTE: ${{ matrix.numero }}
+        run: |
+          inicio=$SECONDS
+          set +e
+          xvfb-run -a npm run test:e2e:parte -- "$PARTE"
+          estado=$?
+          set -e
+          echo "Duración de la parte $PARTE: $((SECONDS - inicio)) s" >> "$GITHUB_STEP_SUMMARY"
+          exit $estado
+      # El Chromium no cambió mientras corrían los tests (ADR 020).
+      - run: npm run navegador:verificar
+      # Los tests de crypto también dentro de Electron (BoringSSL). Una sola vez: en la parte 1.
+      - name: Crypto en Electron
+        if: matrix.numero == 1
+        run: xvfb-run -a npm run test:crypto:electron
+      - name: Procesos y memoria de cada archivo
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat test-results/procesos-y-memoria.txt 2>/dev/null || echo 'sin registro'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # El repo es público y estos artifacts también: cualquiera puede descargarlos mientras duran.
+      # Solo contienen datos ficticios: los E2E usan contraseñas y secretos inventados y una carpeta
+      # temporal, nunca una bóveda real. Este job no recibe secretos del repositorio.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: blob-report-${{ matrix.numero }}
+          path: blob-report/
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: resultados-e2e-${{ matrix.numero }}
+          path: test-results/
+          retention-days: 7
+
+  # Junta los reportes de las partes en uno HTML. Corre aunque alguna falle, y falla si alguna falló.
+  e2e-reporte:
+    name: E2E · reporte unificado
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: e2e
+    if: ${{ !cancelled() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,26 +152,22 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Scripts de instalación permitidos (binario de Electron)
-        run: npm run setup:native
-      - run: npm run build
-      # Versión exacta de Playwright, y el hash se compara con la primera descarga (ADR 020).
-      - name: Navegador de pruebas
-        run: npx playwright install --with-deps --no-shell chromium
-      # Ubuntu 24.04 restringe los espacios de nombres sin privilegios, y el sandbox de Chromium los
-      # necesita. El navegador de pruebas nunca corre con --no-sandbox (ADR 017).
-      - name: Sandbox de Chromium
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Tests E2E
-        run: xvfb-run -a npm run test:e2e
-      # El repo es público y estos artifacts también: cualquiera puede descargarlos mientras duran.
-      # Solo contienen datos ficticios: los E2E usan contraseñas y secretos inventados y una carpeta
-      # temporal, nunca una bóveda real. Este job no recibe secretos del repositorio.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: blob-report-*
+          path: blobs
+          merge-multiple: true
+      - name: Reporte unificado
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: e2e-report
+        run: npx playwright merge-reports --reporter html ./blobs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
         with:
           name: reporte-e2e
-          path: |
-            e2e-report/
-            test-results/
+          path: e2e-report/
           retention-days: 7
+      - name: Resultado de las partes
+        if: needs.e2e.result != 'success'
+        run: |
+          echo "Al menos una parte del E2E falló: ${{ needs.e2e.result }}"
+          exit 1

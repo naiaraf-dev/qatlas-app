@@ -10,7 +10,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   // El reintento sirve para distinguir una falla inestable de una fija; las dos hacen fallar el job.
   failOnFlakyTests: Boolean(process.env.CI),
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'e2e-report' }]],
+  // En el CI cada parte deja un reporte «blob», y un job final los junta en uno HTML (ADR 044).
+  reporter: process.env.CI
+    ? [['list'], ['blob']]
+    : [['list'], ['html', { open: 'never', outputFolder: 'e2e-report' }]],
   use: {
     // Si algún test usara los fixtures de navegador, que sea el Chromium verificado (ADR 020), nunca el
     // headless shell, que no se instala ni se verifica.

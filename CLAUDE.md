@@ -60,8 +60,9 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   su borrado criptográfico (ADR 035). Un archivo sin fila es un resto ilegible y se borra.
 - Una imagen nueva en la interfaz llega en bytes validados por su firma y se dibuja en un canvas. La CSP no
   admite `data:` ni `blob:`, y el build no incrusta nada (`assetsInlineLimit: 0`).
-- Un test que dice «no aparece» en una imagen usa el OCR de `e2e/ocr.ts` (solo desarrollo, sin red) y tiene
-  su control positivo, que sí lo encuentra.
+- Un test que dice «no aparece» en una imagen usa el OCR de `e2e/ocr.ts` (solo desarrollo, sin red), tiene
+  su control positivo, que sí lo encuentra, y usa `esperarSinSecretos`: cada imagen tiene que mostrar el testigo
+  del sandbox leído, o falla como «no se pudo comprobar» (ADR 039).
 - Todo texto del sitio pasa por la redacción en el proceso principal antes de guardarse, mostrarse o registrarse
   (`ejecuciones/redaccion.ts`). Una columna nueva con texto del sitio es `TextoRedactado`; nunca un cast.
 - Logs: solo `registrar()` (`main/registro.ts`), con eventos, códigos de `CODIGOS_PERMITIDOS`, IDs y tiempos. Nunca
@@ -185,10 +186,19 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 ## Antes de dar una tarea por terminada
 
 ```bash
-npm run check                         # formato, lint, tipos, tests, Electronegativity
-npm run navegador:instalar            # una vez, o al subir Playwright
-npm run build && npm run test:e2e     # E2E (en Linux sin pantalla: xvfb-run -a npm run test:e2e)
+npm run check                                   # siempre: formato, lint, tipos, tests, Electronegativity
+npm run navegador:instalar                      # una vez, o al subir Playwright
+npm run build && npm run test:e2e:area -- <área> # E2E del área tocada, más el smoke
 ```
+
+- **Localmente:** `check` siempre; del E2E, solo el área tocada más el smoke (`test:e2e:area`, por
+  ejemplo `-- boveda` o `-- "componentes|barra-lateral"`). Si el cambio no toca un área en particular,
+  `test:e2e:smoke`. La suite completa (`test:e2e`) la confirma el CI, en cinco partes paralelas.
+- **Las «3 corridas seguidas»** son el job nocturno (`.github/workflows/nocturno.yml`): la suite completa
+  con `--repeat-each=3` y `failOnFlakyTests`. Ya no se piden localmente.
+- **Cada test E2E lleva al menos una etiqueta** (`@seguridad`, `@lento`, `@ocr`, `@interfaz`, `@smoke`). Un
+  test `@lento` u `@ocr` de un archivo nuevo necesita su parte en `scripts/e2e-partes.mjs` (un test lo
+  exige). Cada archivo E2E termina con `vigilarProcesos(test, import.meta.filename)` (ADR 044).
 
 Si Electronegativity reporta algo nuevo, corregirlo o documentarlo en
 `docs/seguridad/electronegativity.md` con su justificación.

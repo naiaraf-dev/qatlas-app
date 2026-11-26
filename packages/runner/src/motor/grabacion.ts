@@ -32,6 +32,18 @@ const MAX_TEXTO_CAPTURA = 5000;
  * El texto visible de cada elemento (el propio, sin el de sus hijos) y el valor de los campos, con un
  * XPath para taparlo sin tocar el DOM. Corre en el mundo aislado: la página no lo ve (ADR 036).
  */
+/**
+ * Una señal de que lo que se ve está pintado: las fuentes cargadas y dos cuadros dibujados después. Corre
+ * en el mundo aislado, antes de leer los textos y de capturar: así la captura no sale con un texto todavía
+ * invisible (una fuente con `font-display: block` que carga). Playwright ya espera las fuentes al capturar;
+ * esto agrega el pintado.
+ */
+export const EXPRESION_ESPERAR_PINTADO = `(async () => {
+  if (document.fonts && document.fonts.status !== 'loaded') await document.fonts.ready;
+  await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(() => listo(true))));
+  return true;
+})()`;
+
 export const EXPRESION_TEXTOS_VISIBLES = `(() => {
   const salida = [];
   const xpath = (el) => {
@@ -312,6 +324,11 @@ export class Grabacion {
   private async capturar(pagina: Page, cdp: CDPSession, tramo: number): Promise<void> {
     if (!this.opciones.capturas || this.capturas >= this.opciones.maxCapturas) return;
     try {
+      // Si la señal no llega a tiempo, se captura igual: el testigo de los tests dice si se leía.
+      await conLimite(
+        this.enMundoAislado<boolean>(cdp, EXPRESION_ESPERAR_PINTADO),
+        LIMITE_LECTURA_MS,
+      ).catch(() => null);
       const conSecretos = await this.secretosALaVista(cdp, tramo);
       // Sin saber qué tiene secretos, la captura podría mostrar uno: no se toma.
       if (!conSecretos) return;

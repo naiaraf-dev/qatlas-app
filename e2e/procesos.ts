@@ -10,7 +10,7 @@
  *   muere antes que sus hijos (un Chromium huérfano), los hijos ya estaban anotados.
  * - Al terminar el archivo espera hasta 15 segundos a que se cierren. Si queda alguno vivo, el archivo
  *   falla y dice cuál (PID y tipo), sin rutas ni líneas de comando.
- * - La memoria libre del sistema al empezar y al terminar va a la consola y a
+ * - La memoria libre del sistema al empezar, la mínima durante el archivo y al terminar van a la consola y a
  *   `test-results/procesos-y-memoria.txt`, para ver si se acumula entre archivos.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -34,8 +34,11 @@ export function vigilarProcesos(test: typeof pruebaBase, archivo: string): void 
   // Por PID y hora de creación: Windows reutiliza los PID (e2e/arbol-procesos.ts).
   const previos = new Set(descendientes(procesos(), process.pid).map(identidad));
   const libreAlEmpezar = os.freemem();
+  // La mínima durante el archivo: la memoria más usada (se mide al anotar).
+  let libreMinima = libreAlEmpezar;
   const vistos = new Map<string, { pid: number; tipo: string }>();
   const anotar = () => {
+    libreMinima = Math.min(libreMinima, os.freemem());
     for (const p of descendientes(procesos(), process.pid)) {
       const clave = identidad(p);
       if (!previos.has(clave)) vistos.set(clave, { pid: p.pid, tipo: tipo(p.nombre) });
@@ -69,6 +72,7 @@ export function vigilarProcesos(test: typeof pruebaBase, archivo: string): void 
 
     const linea =
       `[procesos y memoria] ${nombre}: memoria libre ${gb(libreAlEmpezar)} -> ${gb(os.freemem())} ` +
+      `(mínima ${gb(libreMinima)}) ` +
       `de ${gb(os.totalmem())} · lanzó ${String(vistos.size)} procesos · quedan vivos ${String(vivos.length)}` +
       (vivos.length > 0 ? ` (${vivos.map((v) => `${v.tipo}:${String(v.pid)}`).join(', ')})` : '');
     console.log(linea);

@@ -102,89 +102,105 @@ test.afterAll(async () => {
   rmSync(carpeta, { recursive: true, force: true, maxRetries: 5 });
 });
 
-test('sin credenciales, la única opción es el escaneo anónimo', async () => {
-  await listaDesplegable(page, 'Iniciar sesión con').click();
-  await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
-    'Sin credencial: escaneo anónimo',
-  ]);
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('listbox')).toBeHidden();
-});
+test(
+  'sin credenciales, la única opción es el escaneo anónimo',
+  { tag: ['@interfaz', '@lento'] },
+  async () => {
+    await listaDesplegable(page, 'Iniciar sesión con').click();
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveText([
+      'Sin credencial: escaneo anónimo',
+    ]);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toBeHidden();
+  },
+);
 
-test('formulario: el escaneo entra con el rol elegido y nunca toca «Salir»', async () => {
-  await agregarCredencial({
-    nombre: 'Administración',
-    rol: 'admin',
-    estrategia: 'formulario',
-    usuario: USUARIOS_APP.admin.usuario,
-    secreto: USUARIOS_APP.admin.clave,
-    urlLogin: `${sitio.url}/app/login`,
-  });
-  await elegirOpcion(page, 'Iniciar sesión con', 'admin · Administración');
-  await boton('Lanzar ejecución').click();
-  await expect(ejecucion()).toContainText('Ejecución con el rol admin: Finalizada', {
-    timeout: 120_000,
-  });
-  await expect(ejecucion()).toContainText(
-    'Logins: 1 (0 por sesión vencida, 0 renovaciones planificadas).',
-  );
-  expect(sitio.autenticacion.registro.logins).toEqual([{ via: 'formulario', rol: 'admin' }]);
-  expect(sitio.autenticacion.registro.rutasConSesion).toContain('/app/admin/usuarios');
-  expect(sitio.autenticacion.registro.rutasConSesion).not.toContain('/app/salir');
+test(
+  'formulario: el escaneo entra con el rol elegido y nunca toca «Salir»',
+  { tag: ['@interfaz', '@lento'] },
+  async () => {
+    await agregarCredencial({
+      nombre: 'Administración',
+      rol: 'admin',
+      estrategia: 'formulario',
+      usuario: USUARIOS_APP.admin.usuario,
+      secreto: USUARIOS_APP.admin.clave,
+      urlLogin: `${sitio.url}/app/login`,
+    });
+    await elegirOpcion(page, 'Iniciar sesión con', 'admin · Administración');
+    await boton('Lanzar ejecución').click();
+    await expect(ejecucion()).toContainText('Ejecución con el rol admin: Finalizada', {
+      timeout: 120_000,
+    });
+    await expect(ejecucion()).toContainText(
+      'Logins: 1 (0 por sesión vencida, 0 renovaciones planificadas).',
+    );
+    expect(sitio.autenticacion.registro.logins).toEqual([{ via: 'formulario', rol: 'admin' }]);
+    expect(sitio.autenticacion.registro.rutasConSesion).toContain('/app/admin/usuarios');
+    expect(sitio.autenticacion.registro.rutasConSesion).not.toContain('/app/salir');
 
-  await boton('Ver resultado').click();
-  const medios = page
-    .getByRole('region', { name: 'Hallazgos de la ejecución' })
-    .getByRole('region', { name: 'Hallazgos de severidad Media' });
-  await expect(medios).toContainText('Parámetro sensible en la URL: token');
-  await expect(medios).toContainText('/app/compartir');
-  // La contraseña no aparece en la pantalla.
-  expect(await page.content()).not.toContain(USUARIOS_APP.admin.clave);
-});
+    await boton('Ver resultado').click();
+    const medios = page
+      .getByRole('region', { name: 'Hallazgos de la ejecución' })
+      .getByRole('region', { name: 'Hallazgos de severidad Media' });
+    await expect(medios).toContainText('Parámetro sensible en la URL: token');
+    await expect(medios).toContainText('/app/compartir');
+    // La contraseña no aparece en la pantalla.
+    expect(await page.content()).not.toContain(USUARIOS_APP.admin.clave);
+  },
+);
 
-test('asistido: avisa que se abre una ventana, espera el segundo factor y entra', async () => {
-  await agregarCredencial({
-    nombre: 'Con teléfono',
-    rol: 'admin con segundo factor',
-    estrategia: 'asistido',
-    urlLogin: `${sitio.url}/app/login-push`,
-  });
-  await expect(page.getByText('Secreto: ninguno, entrás a mano en la ventana.')).toBeVisible();
-  await elegirOpcion(page, 'Iniciar sesión con', 'admin con segundo factor · Con teléfono');
-  await expect(page.getByText(/Se va a abrir una ventana del navegador de pruebas/)).toBeVisible();
-  const temporalAntes = new Set(readdirSync(os.tmpdir()));
-  const loginsAntes = sitio.autenticacion.registro.logins.length;
-  await boton('Lanzar ejecución').click();
+test(
+  'asistido: avisa que se abre una ventana, espera el segundo factor y entra',
+  { tag: ['@interfaz', '@lento'] },
+  async () => {
+    await agregarCredencial({
+      nombre: 'Con teléfono',
+      rol: 'admin con segundo factor',
+      estrategia: 'asistido',
+      urlLogin: `${sitio.url}/app/login-push`,
+    });
+    await expect(page.getByText('Secreto: ninguno, entrás a mano en la ventana.')).toBeVisible();
+    await elegirOpcion(page, 'Iniciar sesión con', 'admin con segundo factor · Con teléfono');
+    await expect(
+      page.getByText(/Se va a abrir una ventana del navegador de pruebas/),
+    ).toBeVisible();
+    const temporalAntes = new Set(readdirSync(os.tmpdir()));
+    const loginsAntes = sitio.autenticacion.registro.logins.length;
+    await boton('Lanzar ejecución').click();
 
-  // Señal: la ventana llegó a la pantalla del segundo factor. Mientras tanto, la app lo dice.
-  await expect
-    .poll(() => sitio.autenticacion.registro.segundoFactor, { timeout: 60_000 })
-    .toBeGreaterThan(0);
-  // El perfil de la ventana está dentro de la carpeta de la ejecución, en la de datos (ADR 018 y 028),
-  // y no en el temporal del sistema.
-  const perfiles = path.join(carpeta, 'QAtlas', 'perfiles');
-  const [deLaEjecucion] = readdirSync(perfiles);
-  expect(
-    readdirSync(path.join(perfiles, deLaEjecucion ?? '')).filter((n) => n.startsWith('asistido-')),
-  ).toHaveLength(1);
-  expect(
-    readdirSync(os.tmpdir()).filter((n) => !temporalAntes.has(n) && n.includes('asistido')),
-  ).toEqual([]);
-  await expect(ejecucion()).toContainText('Entrá en la ventana del navegador de pruebas');
-  sitio.autenticacion.aprobarSegundoFactor();
+    // Señal: la ventana llegó a la pantalla del segundo factor. Mientras tanto, la app lo dice.
+    await expect
+      .poll(() => sitio.autenticacion.registro.segundoFactor, { timeout: 60_000 })
+      .toBeGreaterThan(0);
+    // El perfil de la ventana está dentro de la carpeta de la ejecución, en la de datos (ADR 018 y 028),
+    // y no en el temporal del sistema.
+    const perfiles = path.join(carpeta, 'QAtlas', 'perfiles');
+    const [deLaEjecucion] = readdirSync(perfiles);
+    expect(
+      readdirSync(path.join(perfiles, deLaEjecucion ?? '')).filter((n) =>
+        n.startsWith('asistido-'),
+      ),
+    ).toHaveLength(1);
+    expect(
+      readdirSync(os.tmpdir()).filter((n) => !temporalAntes.has(n) && n.includes('asistido')),
+    ).toEqual([]);
+    await expect(ejecucion()).toContainText('Entrá en la ventana del navegador de pruebas');
+    sitio.autenticacion.aprobarSegundoFactor();
 
-  await expect(ejecucion()).toContainText(
-    'Ejecución con el rol admin con segundo factor: Finalizada',
-    { timeout: 120_000 },
-  );
-  // Los logins de esta ejecución, no «el último» de todo el archivo.
-  expect(sitio.autenticacion.registro.logins.slice(loginsAntes)).toContainEqual({
-    via: 'mfa',
-    rol: 'admin',
-  });
-  // Al terminar, la carpeta de la ejecución se borra, con el perfil de la ventana adentro.
-  await expect.poll(() => readdirSync(perfiles)).toEqual([]);
-});
+    await expect(ejecucion()).toContainText(
+      'Ejecución con el rol admin con segundo factor: Finalizada',
+      { timeout: 120_000 },
+    );
+    // Los logins de esta ejecución, no «el último» de todo el archivo.
+    expect(sitio.autenticacion.registro.logins.slice(loginsAntes)).toContainEqual({
+      via: 'mfa',
+      rol: 'admin',
+    });
+    // Al terminar, la carpeta de la ejecución se borra, con el perfil de la ventana adentro.
+    await expect.poll(() => readdirSync(perfiles)).toEqual([]);
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

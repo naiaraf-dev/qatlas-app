@@ -71,7 +71,7 @@ test.afterAll(async () => {
   rmSync(carpeta, { recursive: true, force: true, maxRetries: 5 });
 });
 
-test('el progreso se ve en vivo mientras corre', async () => {
+test('el progreso se ve en vivo mientras corre', { tag: ['@interfaz', '@lento'] }, async () => {
   await boton('Lanzar ejecución').click();
   // Una sola ejecución en este proyecto: la fila es esta.
   await expect(
@@ -85,7 +85,7 @@ test('el progreso se ve en vivo mientras corre', async () => {
   await expect(ejecucion()).toContainText(/Hallazgos: [1-9]/);
 });
 
-test('termina, y el resumen dice lo que no cubrió', async () => {
+test('termina, y el resumen dice lo que no cubrió', { tag: ['@interfaz', '@lento'] }, async () => {
   await expect(ejecucion()).toContainText('Ejecución: Finalizada', { timeout: 150_000 });
   const cobertura = ejecucion().getByRole('list', { name: 'Lo que no se cubrió' });
   await expect(cobertura).toContainText(/botones sin tocar por el modo solo lectura/);
@@ -95,59 +95,67 @@ test('termina, y el resumen dice lo que no cubrió', async () => {
   );
 });
 
-test('los hallazgos se ven por severidad, y los de rendimiento avisan que son orientativos', async () => {
-  await boton('Ver resultado').click();
-  const resultado = page.getByRole('region', { name: 'Hallazgos de la ejecución' });
-  for (const severidad of ['Crítica', 'Alta', 'Media', 'Baja', 'Informativa']) {
+test(
+  'los hallazgos se ven por severidad, y los de rendimiento avisan que son orientativos',
+  { tag: ['@interfaz', '@lento'] },
+  async () => {
+    await boton('Ver resultado').click();
+    const resultado = page.getByRole('region', { name: 'Hallazgos de la ejecución' });
+    for (const severidad of ['Crítica', 'Alta', 'Media', 'Baja', 'Informativa']) {
+      await expect(
+        resultado.getByRole('region', { name: `Hallazgos de severidad ${severidad}` }),
+      ).toBeVisible();
+    }
+    const criticos = resultado.getByRole('region', { name: 'Hallazgos de severidad Crítica' });
+    await expect(criticos).toContainText('La página responde 500');
+    await expect(criticos).toContainText('/error-500');
+    const medios = resultado.getByRole('region', { name: 'Hallazgos de severidad Media' });
+    await expect(medios).toContainText('/no-existe-1 · link en /links-rotos');
     await expect(
-      resultado.getByRole('region', { name: `Hallazgos de severidad ${severidad}` }),
-    ).toBeVisible();
-  }
-  const criticos = resultado.getByRole('region', { name: 'Hallazgos de severidad Crítica' });
-  await expect(criticos).toContainText('La página responde 500');
-  await expect(criticos).toContainText('/error-500');
-  const medios = resultado.getByRole('region', { name: 'Hallazgos de severidad Media' });
-  await expect(medios).toContainText('/no-existe-1 · link en /links-rotos');
-  await expect(
-    resultado.getByRole('listitem').filter({ hasText: 'Página lenta' }).first(),
-  ).toContainText('Medición orientativa, tomada en este equipo.');
-});
+      resultado.getByRole('listitem').filter({ hasText: 'Página lenta' }).first(),
+    ).toContainText('Medición orientativa, tomada en este equipo.');
+  },
+);
 
-test('lo encontrado coincide con el oráculo, sin inesperados', async () => {
-  const detalle = await page.evaluate(async () => {
-    const { qatlas } = window as unknown as { qatlas: QatlasApi };
-    const proyectos = await qatlas.proyectos.listar();
-    const proyectoId = proyectos.ok ? proyectos.data[0]?.id : undefined;
-    const lista = await qatlas.ejecuciones.listar({ proyectoId: proyectoId as string });
-    const id = lista.ok ? lista.data[0]?.id : undefined;
-    const res = await qatlas.ejecuciones.detalle({ ejecucionId: id as string });
-    return res.ok ? res.data : null;
-  });
-  const encontrados = (detalle?.hallazgos ?? []).map((h) => ({
-    tipo: h.tipo,
-    severidad: h.severidad,
-    url: h.url,
-    urlOrigen: h.urlOrigen,
-    // La clave no viaja a la interfaz: el título y la URL alcanzan para comparar.
-    clave: h.titulo.replace(/^Recurso fuera del alcance bloqueado: /, ''),
-  }));
-  const esperados = manifiesto.hallazgos
-    .filter((h) => !h.requiere)
-    .map(({ clave, ...resto }) =>
-      resto.tipo === 'recurso-externo-bloqueado' && clave ? { ...resto, clave } : resto,
-    );
-  const comparacion = compararConOraculo(esperados, encontrados);
-  const resumen = resumenLegible(comparacion);
-  console.log(resumen);
-  expect(comparacion.faltantes, resumen).toEqual([]);
-  expect(comparacion.conOtraSeveridad, resumen).toEqual([]);
-  expect(comparacion.inesperados, resumen).toEqual([]);
-  expect(comparacion.enPaginasSanas, resumen).toEqual([]);
-  // En solo lectura: ningún botón tocado, nada escrito, nada afuera.
-  expect(sitio.registro.posts).toEqual([]);
-  expect(sitio.registro.fugas).toEqual([]);
-  expect(sitio.registro.trampas).toEqual([]);
-});
+test(
+  'lo encontrado coincide con el oráculo, sin inesperados',
+  { tag: ['@interfaz', '@lento'] },
+  async () => {
+    const detalle = await page.evaluate(async () => {
+      const { qatlas } = window as unknown as { qatlas: QatlasApi };
+      const proyectos = await qatlas.proyectos.listar();
+      const proyectoId = proyectos.ok ? proyectos.data[0]?.id : undefined;
+      const lista = await qatlas.ejecuciones.listar({ proyectoId: proyectoId as string });
+      const id = lista.ok ? lista.data[0]?.id : undefined;
+      const res = await qatlas.ejecuciones.detalle({ ejecucionId: id as string });
+      return res.ok ? res.data : null;
+    });
+    const encontrados = (detalle?.hallazgos ?? []).map((h) => ({
+      tipo: h.tipo,
+      severidad: h.severidad,
+      url: h.url,
+      urlOrigen: h.urlOrigen,
+      // La clave no viaja a la interfaz: el título y la URL alcanzan para comparar.
+      clave: h.titulo.replace(/^Recurso fuera del alcance bloqueado: /, ''),
+    }));
+    const esperados = manifiesto.hallazgos
+      .filter((h) => !h.requiere)
+      .map(({ clave, ...resto }) =>
+        resto.tipo === 'recurso-externo-bloqueado' && clave ? { ...resto, clave } : resto,
+      );
+    const comparacion = compararConOraculo(esperados, encontrados);
+    const resumen = resumenLegible(comparacion);
+    console.log(resumen);
+    expect(comparacion.faltantes, resumen).toEqual([]);
+    expect(comparacion.conOtraSeveridad, resumen).toEqual([]);
+    expect(comparacion.inesperados, resumen).toEqual([]);
+    expect(comparacion.enPaginasSanas, resumen).toEqual([]);
+    // En solo lectura: ningún botón tocado, nada escrito, nada afuera.
+    expect(sitio.registro.posts).toEqual([]);
+    expect(sitio.registro.fugas).toEqual([]);
+    expect(sitio.registro.trampas).toEqual([]);
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

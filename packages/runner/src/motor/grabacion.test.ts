@@ -1,7 +1,12 @@
 import type { CDPSession, Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import type { MensajeDelRunner, OpcionesEvidencias } from '../protocolo';
-import { Grabacion, MAX_FOTOGRAMAS_EN_VUELO } from './grabacion';
+import {
+  EXPRESION_ESPERAR_PINTADO,
+  EXPRESION_TEXTOS_VISIBLES,
+  Grabacion,
+  MAX_FOTOGRAMAS_EN_VUELO,
+} from './grabacion';
 
 /**
  * La grabación del lado del runner, con una página falsa: el orden de los fotogramas y de las
@@ -141,6 +146,46 @@ describe('Fotogramas (f5)', () => {
 });
 
 describe('Capturas (EVI-02 y EVI-05)', () => {
+  it('antes de capturar espera el pintado (fuentes y cuadros), y si la señal falla captura igual', async () => {
+    for (const falla of [false, true]) {
+      const pedidas: string[] = [];
+      const registrar = ((_cdp: CDPSession, expresion: string) => {
+        pedidas.push(expresion);
+        if (expresion === EXPRESION_ESPERAR_PINTADO) {
+          return falla ? Promise.reject(new Error('sin señal')) : Promise.resolve(true);
+        }
+        return Promise.resolve(TEXTOS);
+      }) as unknown as ConstructorParameters<typeof Grabacion>[2];
+      const enviados: MensajeDelRunner[] = [];
+      const grabacion: Grabacion = new Grabacion(
+        OPCIONES,
+        (m) => {
+          enviados.push(m);
+          if (m.tipo === 'textos-de-captura') {
+            queueMicrotask(() => {
+              grabacion.mascaras([1]);
+            });
+          }
+        },
+        registrar,
+      );
+      const { pagina } = paginaFalsa();
+      await grabacion.vincular(pagina);
+      grabacion.iniciarTramo('http://app.example.test/');
+      await grabacion.terminarTramo(pagina, cdp, { hallazgos: 1, errorNavegacion: false });
+      // Primero la señal, después los textos visibles; y la captura sale.
+      expect(pedidas.indexOf(EXPRESION_ESPERAR_PINTADO)).toBe(0);
+      expect(pedidas.indexOf(EXPRESION_TEXTOS_VISIBLES)).toBe(1);
+      expect(
+        enviados.filter((m) => m.tipo === 'captura'),
+        String(falla),
+      ).toHaveLength(1);
+    }
+    // Control de la expresión: espera las fuentes y dos cuadros.
+    expect(EXPRESION_ESPERAR_PINTADO).toContain('document.fonts.ready');
+    expect(EXPRESION_ESPERAR_PINTADO.match(/requestAnimationFrame/g)).toHaveLength(2);
+  });
+
   it('sin respuesta del principal sobre qué tapar, no hay captura (falla cerrado)', async () => {
     const { grabacion, enviados } = grabar(OPCIONES, null);
     const { pagina } = paginaFalsa();

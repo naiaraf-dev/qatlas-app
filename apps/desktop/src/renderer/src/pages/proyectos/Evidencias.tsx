@@ -262,7 +262,11 @@ function Traza({ vista }: { vista: Texto }) {
     }
   });
   return (
-    <ol className="flex max-h-96 flex-col gap-1 overflow-auto font-mono text-[12px]">
+    <ol
+      tabIndex={0}
+      aria-label="Eventos de la traza"
+      className="flex max-h-96 flex-col gap-1 overflow-auto font-mono text-[12px]"
+    >
       {eventos.map((evento, i) => (
         <li key={i} className="break-all">
           {typeof evento.t === 'number' ? segundos(evento.t) : ''} · {resumirEvento(evento)}
@@ -281,7 +285,11 @@ function Har({ vista }: { vista: Texto }) {
     return <p className="text-muted">No se pudo leer el HAR.</p>;
   }
   return (
-    <ol className="flex max-h-96 flex-col gap-1 overflow-auto font-mono text-[12px]">
+    <ol
+      tabIndex={0}
+      aria-label="Solicitudes del HAR"
+      className="flex max-h-96 flex-col gap-1 overflow-auto font-mono text-[12px]"
+    >
       {entradas.slice(0, MAX_LINEAS).map((entrada, i) => (
         <li key={i} className="break-all">
           {entrada.request?.method} {entrada.request?.url} → {entrada.response?.status ?? '—'}
@@ -329,7 +337,12 @@ function EnTexto({ evidencia, titulo }: { evidencia: EvidenciaVista; titulo: str
             <p className="text-[13px] text-muted">
               Se muestra como texto: QAtlas nunca abre el sitio probado en su ventana.
             </p>
-            <pre className="max-h-96 overflow-auto font-mono text-[12px] break-all whitespace-pre-wrap">
+            {/* Con scroll propio: enfocable y con nombre, para desplazarlo con el teclado (axe). */}
+            <pre
+              tabIndex={0}
+              aria-label="Snapshot del DOM, como texto"
+              className="max-h-96 overflow-auto font-mono text-[12px] break-all whitespace-pre-wrap"
+            >
               {vista.texto}
             </pre>
           </>

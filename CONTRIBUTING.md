@@ -42,8 +42,10 @@ git rm --cached -r -q . && git reset --hard
 
    ```bash
    npm run check
-   npm run build && npm run test:e2e
+   npm run build && npm run test:e2e:area -- <área>   # el área tocada, más el smoke
    ```
+
+   La suite completa la corre el CI, en cinco partes paralelas, y el job nocturno la repite tres veces.
 
 3. Abrir el PR **contra `develop`** y completar la
    [plantilla](.github/pull_request_template.md): el checklist ítem por ítem y la tabla de dependencias
@@ -51,7 +53,14 @@ git rm --cached -r -q . && git reset --hard
 4. Esperar el CI en verde. Sus jobs son obligatorios para mergear:
    - `Lint, tipos, tests y seguridad`
    - `Análisis de configuración de Electron`
-   - `E2E de la app (Electron real)`
+   - `E2E 1/5 · rápidos`
+   - `E2E 2/5 · Bóveda: inactividad`
+   - `E2E 3/5 · contención: solo lectura`
+   - `E2E 4/5 · ejecuciones y escaneos`
+   - `E2E 5/5 · OCR y evidencias`
+   - `E2E · reporte unificado` (junta los reportes y falla si alguna parte falló)
+
+   Las partes las define `scripts/e2e-partes.mjs` (ADR 044). Agregar o renombrar una cambia estos nombres.
 
    **No hay que renombrar estos jobs sin actualizar a la vez la protección de ramas en GitHub**: un
    check obligatorio que cambia de nombre deja de reportarse y bloquea los PR.
