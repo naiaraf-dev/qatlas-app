@@ -121,49 +121,68 @@ const de = (lista: Pedido[], origen: string, ruta: string) => {
   return encontrado;
 };
 
-test('https: va al origen base, y no a un recurso de otro origen', async () => {
-  const vistos = await visitar(`${S}/pagina?otro=${S_OTRO}`, { origen: S, permitirHttp: false });
-  expect(de(vistos, S, '/pagina').autorizacion).toBe(ESPERADO);
-  expect(de(vistos, S_OTRO, '/recurso.png').autorizacion).toBeUndefined();
-});
+test(
+  'https: va al origen base, y no a un recurso de otro origen',
+  { tag: ['@seguridad'] },
+  async () => {
+    const vistos = await visitar(`${S}/pagina?otro=${S_OTRO}`, { origen: S, permitirHttp: false });
+    expect(de(vistos, S, '/pagina').autorizacion).toBe(ESPERADO);
+    expect(de(vistos, S_OTRO, '/recurso.png').autorizacion).toBeUndefined();
+  },
+);
 
 // Dentro del mismo origen la conserva (Chromium la arrastra, y ahí corresponde).
-test('https: una redirección dentro del mismo origen la conserva', async () => {
-  const mismo = await visitar(`${S}/redirigir?a=${S}/destino`, { origen: S, permitirHttp: false });
-  expect(de(mismo, S, '/redirigir').autorizacion).toBe(ESPERADO);
-  expect(de(mismo, S, '/destino').autorizacion).toBe(ESPERADO);
-});
+test(
+  'https: una redirección dentro del mismo origen la conserva',
+  { tag: ['@seguridad'] },
+  async () => {
+    const mismo = await visitar(`${S}/redirigir?a=${S}/destino`, {
+      origen: S,
+      permitirHttp: false,
+    });
+    expect(de(mismo, S, '/redirigir').autorizacion).toBe(ESPERADO);
+    expect(de(mismo, S, '/destino').autorizacion).toBe(ESPERADO);
+  },
+);
 
-test('http sin «Permitir login sin cifrar»: nunca, ni en el origen base ni después de redirigir', async () => {
-  const basica = { origen: H, permitirHttp: false };
-  const vistos = await visitar(`${H}/pagina?otro=${H_OTRO}`, basica);
-  expect(vistos.length).toBeGreaterThan(1);
-  expect(vistos.every((p) => p.autorizacion === undefined)).toBe(true);
-  const redirigido = await visitar(`${H}/redirigir?a=${H}/destino`, basica);
-  expect(redirigido.every((p) => p.autorizacion === undefined)).toBe(true);
-});
+test(
+  'http sin «Permitir login sin cifrar»: nunca, ni en el origen base ni después de redirigir',
+  { tag: ['@seguridad'] },
+  async () => {
+    const basica = { origen: H, permitirHttp: false };
+    const vistos = await visitar(`${H}/pagina?otro=${H_OTRO}`, basica);
+    expect(vistos.length).toBeGreaterThan(1);
+    expect(vistos.every((p) => p.autorizacion === undefined)).toBe(true);
+    const redirigido = await visitar(`${H}/redirigir?a=${H}/destino`, basica);
+    expect(redirigido.every((p) => p.autorizacion === undefined)).toBe(true);
+  },
+);
 
-test('http con la opción: solo al origen base, nunca a otro', async () => {
+test('http con la opción: solo al origen base, nunca a otro', { tag: ['@seguridad'] }, async () => {
   const vistos = await visitar(`${H}/pagina?otro=${H_OTRO}`, { origen: H, permitirHttp: true });
   expect(de(vistos, H, '/pagina').autorizacion).toBe(ESPERADO);
   expect(de(vistos, H_OTRO, '/recurso.png').autorizacion).toBeUndefined();
 });
 
-test('fuga conocida (fase 2): una redirección a otro origen se lleva el encabezado', async () => {
-  // Esperado que falle mientras Chromium arrastre el encabezado: lo de abajo es lo que debería pasar.
-  test.fail();
-  const casos = [
-    { basica: { origen: S, permitirHttp: false }, desde: S, destinos: [S_OTRO, H, H_OTRO] },
-    { basica: { origen: H, permitirHttp: true }, desde: H, destinos: [H_OTRO, S] },
-  ];
-  for (const { basica, desde, destinos } of casos) {
-    for (const destino of destinos) {
-      const vistos = await visitar(`${desde}/redirigir?a=${destino}/destino`, basica);
-      expect(de(vistos, desde, '/redirigir').autorizacion).toBe(ESPERADO);
-      expect.soft(de(vistos, destino, '/destino').autorizacion).toBeUndefined();
+test(
+  'fuga conocida (fase 2): una redirección a otro origen se lleva el encabezado',
+  { tag: ['@seguridad'] },
+  async () => {
+    // Esperado que falle mientras Chromium arrastre el encabezado: lo de abajo es lo que debería pasar.
+    test.fail();
+    const casos = [
+      { basica: { origen: S, permitirHttp: false }, desde: S, destinos: [S_OTRO, H, H_OTRO] },
+      { basica: { origen: H, permitirHttp: true }, desde: H, destinos: [H_OTRO, S] },
+    ];
+    for (const { basica, desde, destinos } of casos) {
+      for (const destino of destinos) {
+        const vistos = await visitar(`${desde}/redirigir?a=${destino}/destino`, basica);
+        expect(de(vistos, desde, '/redirigir').autorizacion).toBe(ESPERADO);
+        expect.soft(de(vistos, destino, '/destino').autorizacion).toBeUndefined();
+      }
     }
-  }
-});
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

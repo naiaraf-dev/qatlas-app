@@ -51,7 +51,7 @@ const entrada = (etiqueta: string) =>
 const boton = (nombre: string) => page.getByRole('button', { name: nombre, exact: true });
 const siguiente = () => boton('Siguiente').click();
 
-test('Inicio habilita "Crear proyecto" y abre el asistente', async () => {
+test('Inicio habilita "Crear proyecto" y abre el asistente', { tag: ['@interfaz'] }, async () => {
   await boton('Crear proyecto').click();
   await expect(titulo('Nuevo proyecto')).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: '1. Datos' })).toHaveAttribute(
@@ -60,70 +60,86 @@ test('Inicio habilita "Crear proyecto" y abre el asistente', async () => {
   );
 });
 
-test('el asistente propone el dominio de la URL y rechaza los comodines amplios', async () => {
-  await expect(boton('Siguiente')).toBeDisabled();
-  await entrada('Nombre').fill('Lexora');
-  await entrada('URL base').fill('HTTPS://App.Lexora.test/inicio');
-  await siguiente();
+test(
+  'el asistente propone el dominio de la URL y rechaza los comodines amplios',
+  { tag: ['@interfaz'] },
+  async () => {
+    await expect(boton('Siguiente')).toBeDisabled();
+    await entrada('Nombre').fill('Lexora');
+    await entrada('URL base').fill('HTTPS://App.Lexora.test/inicio');
+    await siguiente();
 
-  const dominios = entrada('Dominios permitidos');
-  await expect(dominios).toHaveValue('app.lexora.test');
+    const dominios = entrada('Dominios permitidos');
+    await expect(dominios).toHaveValue('app.lexora.test');
 
-  await dominios.fill('*.com');
-  await siguiente();
-  await expect(page.getByText('demasiado amplio')).toBeVisible();
-  await expect(titulo('Nuevo proyecto')).toBeVisible();
+    await dominios.fill('*.com');
+    await siguiente();
+    await expect(page.getByText('demasiado amplio')).toBeVisible();
+    await expect(titulo('Nuevo proyecto')).toBeVisible();
 
-  await dominios.fill('lexora.test.evil.example');
-  await siguiente();
-  await expect(page.getByText('tiene que pertenecer a un dominio permitido')).toBeVisible();
+    await dominios.fill('lexora.test.evil.example');
+    await siguiente();
+    await expect(page.getByText('tiene que pertenecer a un dominio permitido')).toBeVisible();
 
-  await dominios.fill('app.lexora.test');
-  await siguiente();
-});
+    await dominios.fill('app.lexora.test');
+    await siguiente();
+  },
+);
 
-test('los límites y el modo solo lectura traen sus valores por defecto', async () => {
-  await expect(entrada('Solicitudes por segundo')).toHaveValue('2');
-  await expect(entrada('Máximo de páginas')).toHaveValue('200');
-  await expect(entrada('Profundidad')).toHaveValue('5');
-  await expect(entrada('Timeout por página (segundos)')).toHaveValue('30');
-  await expect(page.getByRole('checkbox', { name: /Modo solo lectura/ })).toBeChecked();
-  await expect(entrada('Exclusiones')).toHaveValue(/logout/);
-  await expect(page.getByRole('checkbox', { name: /Modo datos sensibles/ })).not.toBeChecked();
-  await siguiente();
-});
+test(
+  'los límites y el modo solo lectura traen sus valores por defecto',
+  { tag: ['@interfaz'] },
+  async () => {
+    await expect(entrada('Solicitudes por segundo')).toHaveValue('2');
+    await expect(entrada('Máximo de páginas')).toHaveValue('200');
+    await expect(entrada('Profundidad')).toHaveValue('5');
+    await expect(entrada('Timeout por página (segundos)')).toHaveValue('30');
+    await expect(page.getByRole('checkbox', { name: /Modo solo lectura/ })).toBeChecked();
+    await expect(entrada('Exclusiones')).toHaveValue(/logout/);
+    await expect(page.getByRole('checkbox', { name: /Modo datos sensibles/ })).not.toBeChecked();
+    await siguiente();
+  },
+);
 
-test('la autorización es el último paso: sin marcar, no se puede crear', async () => {
-  await expect(page.getByText('Declaración de autorización')).toBeVisible();
-  await expect(page.getByText('https://app.lexora.test/inicio · app.lexora.test')).toBeVisible();
-  const casilla = page.getByRole('checkbox', { name: 'Acepto esta declaración' });
-  await expect(casilla).not.toBeChecked();
-  await expect(boton('Crear proyecto')).toBeDisabled();
-  await casilla.check();
-  await expect(boton('Crear proyecto')).toBeEnabled();
-  await boton('Crear proyecto').click();
+test(
+  'la autorización es el último paso: sin marcar, no se puede crear',
+  { tag: ['@interfaz'] },
+  async () => {
+    await expect(page.getByText('Declaración de autorización')).toBeVisible();
+    await expect(page.getByText('https://app.lexora.test/inicio · app.lexora.test')).toBeVisible();
+    const casilla = page.getByRole('checkbox', { name: 'Acepto esta declaración' });
+    await expect(casilla).not.toBeChecked();
+    await expect(boton('Crear proyecto')).toBeDisabled();
+    await casilla.check();
+    await expect(boton('Crear proyecto')).toBeEnabled();
+    await boton('Crear proyecto').click();
 
-  await expect(titulo('Lexora')).toBeVisible();
-  await expect(page.getByText('Autorización vigente')).toBeVisible();
-});
+    await expect(titulo('Lexora')).toBeVisible();
+    await expect(page.getByText('Autorización vigente')).toBeVisible();
+  },
+);
 
-test('la lista muestra el proyecto', async () => {
+test('la lista muestra el proyecto', { tag: ['@interfaz'] }, async () => {
   await boton('Volver').click();
   await expect(titulo('Proyectos')).toBeVisible();
   await page.getByRole('button', { name: /Lexora/ }).click();
   await expect(titulo('Lexora')).toBeVisible();
 });
 
-test('un nombre repetido se rechaza sin distinguir mayúsculas', async () => {
-  await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
-  await boton('Crear proyecto').click();
-  await entrada('Nombre').fill('LEXORA');
-  await entrada('URL base').fill('https://otra.lexora.test/');
-  await siguiente();
-  await expect(page.getByText('Ya hay un proyecto con ese nombre')).toBeVisible();
-  await boton('Cancelar').click();
-  await page.getByRole('button', { name: /Lexora/ }).click();
-});
+test(
+  'un nombre repetido se rechaza sin distinguir mayúsculas',
+  { tag: ['@interfaz'] },
+  async () => {
+    await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
+    await boton('Crear proyecto').click();
+    await entrada('Nombre').fill('LEXORA');
+    await entrada('URL base').fill('https://otra.lexora.test/');
+    await siguiente();
+    await expect(page.getByText('Ya hay un proyecto con ese nombre')).toBeVisible();
+    await boton('Cancelar').click();
+    await page.getByRole('button', { name: /Lexora/ }).click();
+  },
+);
 
 /** Escrito pero sin enviar: ningún atributo lo refleja, aunque el campo lo tenga. */
 async function verificarSinReflejo(etiqueta: string, valor: string): Promise<void> {
@@ -132,54 +148,66 @@ async function verificarSinReflejo(etiqueta: string, valor: string): Promise<voi
   expect(await page.content()).not.toContain(valor);
 }
 
-test('credenciales: el secreto escrito no se refleja, y se vacía aunque el envío falle', async () => {
-  await boton('Agregar credencial').click();
-  await entrada('Nombre de la credencial').fill('Usuario de prueba');
-  await entrada('Rol').fill('admin');
-  await entrada('Usuario').fill('ana@example.com');
-  await entrada('Secreto').fill(SECRETO);
-  await verificarSinReflejo('Secreto', SECRETO);
-  await expect(entrada('Secreto')).toHaveAttribute('type', 'password');
-  await expect(entrada('Secreto')).toHaveAttribute('autocomplete', 'new-password');
-  await expect(entrada('Secreto')).toHaveAttribute('spellcheck', 'false');
+test(
+  'credenciales: el secreto escrito no se refleja, y se vacía aunque el envío falle',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Agregar credencial').click();
+    await entrada('Nombre de la credencial').fill('Usuario de prueba');
+    await entrada('Rol').fill('admin');
+    await entrada('Usuario').fill('ana@example.com');
+    await entrada('Secreto').fill(SECRETO);
+    await verificarSinReflejo('Secreto', SECRETO);
+    await expect(entrada('Secreto')).toHaveAttribute('type', 'password');
+    await expect(entrada('Secreto')).toHaveAttribute('autocomplete', 'new-password');
+    await expect(entrada('Secreto')).toHaveAttribute('spellcheck', 'false');
 
-  // La básica se ve, deshabilitada, con cuándo llega y por qué (ADR 025).
-  await listaDesplegable(page, 'Forma de login').click();
-  await expect(
-    page.getByRole('option', { name: 'Autenticación HTTP básica (llega en: fase 2)' }),
-  ).toBeDisabled();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('listbox')).toBeHidden();
-  await expect(page.getByText(/podría mandarle la contraseña/)).toBeVisible();
+    // La básica se ve, deshabilitada, con cuándo llega y por qué (ADR 025).
+    await listaDesplegable(page, 'Forma de login').click();
+    await expect(
+      page.getByRole('option', { name: 'Autenticación HTTP básica (llega en: fase 2)' }),
+    ).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toBeHidden();
+    await expect(page.getByText(/podría mandarle la contraseña/)).toBeVisible();
 
-  await entrada('URL de login').fill('https://evil.example/login');
-  await boton('Guardar credencial').click();
-  // La ayuda del campo está siempre en pantalla y también dice «dentro de los dominios permitidos»:
-  // el error se busca por su alerta. Con getByText, el test pasaba solo si miraba antes de que llegara
-  // la respuesta (un elemento) y fallaba si miraba después (dos).
-  await expect(
-    page.getByRole('alert').filter({ hasText: 'dentro de los dominios permitidos' }),
-  ).toBeVisible();
-  await expect(entrada('Secreto')).toHaveValue('');
-  await expect(boton('Guardar credencial')).toBeDisabled();
-  expect(await page.content()).not.toContain(SECRETO);
-});
+    await entrada('URL de login').fill('https://evil.example/login');
+    await boton('Guardar credencial').click();
+    // La ayuda del campo está siempre en pantalla y también dice «dentro de los dominios permitidos»:
+    // el error se busca por su alerta. Con getByText, el test pasaba solo si miraba antes de que llegara
+    // la respuesta (un elemento) y fallaba si miraba después (dos).
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'dentro de los dominios permitidos' }),
+    ).toBeVisible();
+    await expect(entrada('Secreto')).toHaveValue('');
+    await expect(boton('Guardar credencial')).toBeDisabled();
+    expect(await page.content()).not.toContain(SECRETO);
+  },
+);
 
-test('credenciales: guarda el secreto y solo muestra "configurado"', async () => {
-  await entrada('Secreto').fill(SECRETO);
-  await entrada('URL de login').fill('https://app.lexora.test/login');
-  await boton('Guardar credencial').click();
+test(
+  'credenciales: guarda el secreto y solo muestra "configurado"',
+  { tag: ['@interfaz'] },
+  async () => {
+    await entrada('Secreto').fill(SECRETO);
+    await entrada('URL de login').fill('https://app.lexora.test/login');
+    await boton('Guardar credencial').click();
 
-  await expect(page.getByText(/Configurado · reemplazado el/)).toBeVisible();
-  expect(await page.content()).not.toContain(SECRETO);
-});
+    await expect(page.getByText(/Configurado · reemplazado el/)).toBeVisible();
+    expect(await page.content()).not.toContain(SECRETO);
+  },
+);
 
-test('sin indicador de éxito, "Probar login" no está disponible y dice por qué', async () => {
-  await expect(boton('Probar login')).toBeDisabled();
-  await expect(page.getByText('Configurá un indicador de éxito')).toBeVisible();
-});
+test(
+  'sin indicador de éxito, "Probar login" no está disponible y dice por qué',
+  { tag: ['@interfaz'] },
+  async () => {
+    await expect(boton('Probar login')).toBeDisabled();
+    await expect(page.getByText('Configurá un indicador de éxito')).toBeVisible();
+  },
+);
 
-test('el secreto se puede reemplazar, nunca ver', async () => {
+test('el secreto se puede reemplazar, nunca ver', { tag: ['@interfaz'] }, async () => {
   await boton('Reemplazar secreto').click();
   await expect(entrada('Secreto nuevo')).toHaveValue('');
   await expect(page.getByText('conservan el secreto viejo')).toBeVisible();
@@ -193,7 +221,7 @@ test('el secreto se puede reemplazar, nunca ver', async () => {
   expect(await page.content()).not.toContain(SECRETO_NUEVO);
 });
 
-test('cancelar el reemplazo descarta lo escrito', async () => {
+test('cancelar el reemplazo descarta lo escrito', { tag: ['@interfaz'] }, async () => {
   await boton('Reemplazar secreto').click();
   await entrada('Secreto nuevo').fill(SECRETO_NUEVO);
   await boton('Cancelar').click();
@@ -202,7 +230,7 @@ test('cancelar el reemplazo descarta lo escrito', async () => {
   await boton('Cancelar').click();
 });
 
-test('un secreto a medio escribir se pierde al bloquear', async () => {
+test('un secreto a medio escribir se pierde al bloquear', { tag: ['@interfaz'] }, async () => {
   await boton('Reemplazar secreto').click();
   await entrada('Secreto nuevo').fill(SECRETO_NUEVO);
   await boton('Bloquear').click();
@@ -218,7 +246,7 @@ test('un secreto a medio escribir se pierde al bloquear', async () => {
   await boton('Cancelar').click();
 });
 
-test('el secreto no queda en ningún archivo de la carpeta de datos', () => {
+test('el secreto no queda en ningún archivo de la carpeta de datos', { tag: ['@interfaz'] }, () => {
   const datos = path.join(carpeta, 'QAtlas');
   for (const nombre of readdirSync(datos, { withFileTypes: true })) {
     if (!nombre.isFile()) continue;
@@ -228,7 +256,7 @@ test('el secreto no queda en ningún archivo de la carpeta de datos', () => {
   }
 });
 
-test('editar sin cambiar el alcance mantiene la autorización', async () => {
+test('editar sin cambiar el alcance mantiene la autorización', { tag: ['@interfaz'] }, async () => {
   await boton('Editar proyecto').click();
   await entrada('Solicitudes por segundo').fill('5');
   await expect(page.getByText('Cambiaste el alcance')).toBeHidden();
@@ -237,62 +265,78 @@ test('editar sin cambiar el alcance mantiene la autorización', async () => {
   await expect(page.getByText('Autorización vigente')).toBeVisible();
 });
 
-test('activar el login sin cifrar muestra un aviso claro y no invalida la autorización', async () => {
-  await boton('Editar proyecto').click();
-  const opcion = page.getByRole('checkbox', { name: /Permitir login sin cifrar/ });
-  await expect(opcion).not.toBeChecked();
-  await opcion.check();
-  await expect(page.getByText('pueden viajar sin cifrar')).toBeVisible();
-  await opcion.uncheck();
-  await boton('Cancelar').click();
-  await expect(page.getByText('Autorización vigente')).toBeVisible();
-});
+test(
+  'activar el login sin cifrar muestra un aviso claro y no invalida la autorización',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Editar proyecto').click();
+    const opcion = page.getByRole('checkbox', { name: /Permitir login sin cifrar/ });
+    await expect(opcion).not.toBeChecked();
+    await opcion.check();
+    await expect(page.getByText('pueden viajar sin cifrar')).toBeVisible();
+    await opcion.uncheck();
+    await boton('Cancelar').click();
+    await expect(page.getByText('Autorización vigente')).toBeVisible();
+  },
+);
 
-test('una opción relajada rechaza lo que siempre está prohibido', async () => {
-  await boton('Editar proyecto').click();
-  await page.getByRole('checkbox', { name: /Sistema interno/ }).check();
-  await entrada('Dominios permitidos').fill('169.254.169.254');
-  await boton('Guardar cambios').click();
-  await expect(page.getByText('Esa IP no se admite')).toBeVisible();
-  await boton('Cancelar').click();
-});
+test(
+  'una opción relajada rechaza lo que siempre está prohibido',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Editar proyecto').click();
+    await page.getByRole('checkbox', { name: /Sistema interno/ }).check();
+    await entrada('Dominios permitidos').fill('169.254.169.254');
+    await boton('Guardar cambios').click();
+    await expect(page.getByText('Esa IP no se admite')).toBeVisible();
+    await boton('Cancelar').click();
+  },
+);
 
-test('cambiar el alcance invalida la autorización y exige aceptarla de nuevo', async () => {
-  await boton('Editar proyecto').click();
-  await entrada('URL base').fill('https://app.lexora.test/otra');
-  await expect(page.getByText('Cambiaste el alcance')).toBeVisible();
-  await boton('Guardar cambios').click();
+test(
+  'cambiar el alcance invalida la autorización y exige aceptarla de nuevo',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Editar proyecto').click();
+    await entrada('URL base').fill('https://app.lexora.test/otra');
+    await expect(page.getByText('Cambiaste el alcance')).toBeVisible();
+    await boton('Guardar cambios').click();
 
-  await expect(page.getByText('Cambió el alcance: hay que aceptarla de nuevo')).toBeVisible();
-  await expect(page.getByText('no se puede ejecutar nada')).toBeVisible();
-  await expect(page.getByText('https://app.lexora.test/otra · app.lexora.test')).toBeVisible();
+    await expect(page.getByText('Cambió el alcance: hay que aceptarla de nuevo')).toBeVisible();
+    await expect(page.getByText('no se puede ejecutar nada')).toBeVisible();
+    await expect(page.getByText('https://app.lexora.test/otra · app.lexora.test')).toBeVisible();
 
-  const casilla = page.getByRole('checkbox', { name: 'Acepto esta declaración' });
-  await expect(casilla).not.toBeChecked();
-  await expect(boton('Aceptar autorización')).toBeDisabled();
-  await casilla.check();
-  await boton('Aceptar autorización').click();
-  await expect(page.getByText('Autorización vigente')).toBeVisible();
-  await expect(page.getByText(/^Aceptada el/)).toBeVisible();
-});
+    const casilla = page.getByRole('checkbox', { name: 'Acepto esta declaración' });
+    await expect(casilla).not.toBeChecked();
+    await expect(boton('Aceptar autorización')).toBeDisabled();
+    await casilla.check();
+    await boton('Aceptar autorización').click();
+    await expect(page.getByText('Autorización vigente')).toBeVisible();
+    await expect(page.getByText(/^Aceptada el/)).toBeVisible();
+  },
+);
 
-test('los datos sobreviven a bloquear y desbloquear, y con la bóveda bloqueada no hay nada', async () => {
-  await boton('Bloquear').click();
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  expect(await page.content()).not.toContain('Lexora');
-  const res = await page.evaluate(() =>
-    (window as unknown as { qatlas: QatlasApi }).qatlas.proyectos.listar(),
-  );
-  expect(res).toEqual({ ok: false, error: 'BOVEDA_BLOQUEADA' });
+test(
+  'los datos sobreviven a bloquear y desbloquear, y con la bóveda bloqueada no hay nada',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Bloquear').click();
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    expect(await page.content()).not.toContain('Lexora');
+    const res = await page.evaluate(() =>
+      (window as unknown as { qatlas: QatlasApi }).qatlas.proyectos.listar(),
+    );
+    expect(res).toEqual({ ok: false, error: 'BOVEDA_BLOQUEADA' });
 
-  await entrada('Contraseña maestra').fill(CONTRASENA);
-  await boton('Desbloquear').click();
-  await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
-  await expect(page.getByRole('button', { name: /Lexora/ })).toBeVisible();
-});
+    await entrada('Contraseña maestra').fill(CONTRASENA);
+    await boton('Desbloquear').click();
+    await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
+    await expect(page.getByRole('button', { name: /Lexora/ })).toBeVisible();
+  },
+);
 
 for (const tema of ['Claro', 'Oscuro'] as const) {
-  test(`el detalle se ve bien en modo ${tema}`, async () => {
+  test(`el detalle se ve bien en modo ${tema}`, { tag: ['@interfaz'] }, async () => {
     await page.getByRole('radio', { name: tema }).click();
     await page.getByRole('button', { name: /Lexora/ }).click();
     await expect(titulo('Lexora')).toBeVisible();
@@ -308,28 +352,36 @@ for (const tema of ['Claro', 'Oscuro'] as const) {
   });
 }
 
-test('eliminar exige escribir el nombre y avisa de las copias', async () => {
-  await page.getByRole('button', { name: /Lexora/ }).click();
-  await expect(page.getByText('copias de seguridad anteriores todavía contienen')).toBeVisible();
-  const eliminar = boton('Eliminar definitivamente');
-  await expect(eliminar).toBeDisabled();
-  await entrada('Para confirmar, escribí «Lexora»').fill('lexora');
-  await expect(eliminar).toBeDisabled();
-  await entrada('Para confirmar, escribí «Lexora»').fill('Lexora');
-  await eliminar.click();
+test(
+  'eliminar exige escribir el nombre y avisa de las copias',
+  { tag: ['@interfaz'] },
+  async () => {
+    await page.getByRole('button', { name: /Lexora/ }).click();
+    await expect(page.getByText('copias de seguridad anteriores todavía contienen')).toBeVisible();
+    const eliminar = boton('Eliminar definitivamente');
+    await expect(eliminar).toBeDisabled();
+    await entrada('Para confirmar, escribí «Lexora»').fill('lexora');
+    await expect(eliminar).toBeDisabled();
+    await entrada('Para confirmar, escribí «Lexora»').fill('Lexora');
+    await eliminar.click();
 
-  await expect(titulo('Proyectos')).toBeVisible();
-  await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Lexora/ })).toBeHidden();
-});
+    await expect(titulo('Proyectos')).toBeVisible();
+    await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Lexora/ })).toBeHidden();
+  },
+);
 
-test('el nombre queda libre y el proyecto no vuelve al desbloquear', async () => {
-  await boton('Bloquear').click();
-  await entrada('Contraseña maestra').fill(CONTRASENA);
-  await boton('Desbloquear').click();
-  await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
-  await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
-});
+test(
+  'el nombre queda libre y el proyecto no vuelve al desbloquear',
+  { tag: ['@interfaz'] },
+  async () => {
+    await boton('Bloquear').click();
+    await entrada('Contraseña maestra').fill(CONTRASENA);
+    await boton('Desbloquear').click();
+    await page.getByRole('navigation', { name: 'Principal' }).getByText('Proyectos').click();
+    await expect(page.getByText('Todavía no hay proyectos.')).toBeVisible();
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

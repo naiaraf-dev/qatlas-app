@@ -1,0 +1,29 @@
+name: Preparar los E2E
+description: >-
+  Node, dependencias, el binario de Electron, el build y el Chromium verificado, con el sandbox de
+  Chromium habilitado. La comparten las partes del E2E del CI y del job nocturno (ADR 044).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 22
+        cache: npm
+    # .npmrc tiene ignore-scripts=true: ningún paquete ejecuta código al instalarse.
+    - run: npm ci
+      shell: bash
+    - name: Scripts de instalación permitidos (binario de Electron)
+      run: npm run setup:native
+      shell: bash
+    - run: npm run build
+      shell: bash
+    # Versión exacta de Playwright, y el hash se compara con la primera descarga (ADR 020).
+    - name: Navegador de pruebas
+      run: npx playwright install --with-deps --no-shell chromium
+      shell: bash
+    # Ubuntu 24.04 restringe los espacios de nombres sin privilegios, y el sandbox de Chromium los
+    # necesita. El navegador de pruebas nunca corre con --no-sandbox (ADR 017).
+    - name: Sandbox de Chromium
+      run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      shell: bash

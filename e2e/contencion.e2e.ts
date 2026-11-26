@@ -176,36 +176,44 @@ test.describe('Control: sin proxy, cada fuga llega al sandbox', () => {
     await directo.close();
   });
 
-  test('el mapa de la semana 4 funciona en un navegador real, y las fugas se registran', async () => {
-    const pagina = await (await directo.newContext()).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/fuga`);
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/websocket-externo`);
-    await pagina.evaluate('window.resultadoWs');
-    await pagina
-      .goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`)
-      .catch(() => undefined);
-    await expect
-      .poll(() => [...new Set(sitio.registro.fugas)].sort())
-      .toEqual(
-        expect.arrayContaining([
-          'analitica.fuga.test',
-          'pixel.fuga.example',
-          'api.fuga.invalid',
-          'redireccion.fuga.test',
-          'ws.fuga.example',
-        ]),
-      );
-  });
+  test(
+    'el mapa de la semana 4 funciona en un navegador real, y las fugas se registran',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await directo.newContext()).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/fuga`);
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/websocket-externo`);
+      await pagina.evaluate('window.resultadoWs');
+      await pagina
+        .goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`)
+        .catch(() => undefined);
+      await expect
+        .poll(() => [...new Set(sitio.registro.fugas)].sort())
+        .toEqual(
+          expect.arrayContaining([
+            'analitica.fuga.test',
+            'pixel.fuga.example',
+            'api.fuga.invalid',
+            'redireccion.fuga.test',
+            'ws.fuga.example',
+          ]),
+        );
+    },
+  );
 
-  test('un service worker sin bloquear sí se registra y sale por su cuenta', async () => {
-    // En 127.0.0.1: un service worker exige un contexto seguro.
-    const pagina = await (await directo.newContext()).newPage();
-    await pagina.goto(`${sitio.url}/service-worker`);
-    expect(await pagina.evaluate('window.resultadoSw')).toBe('registrado');
-    await expect.poll(() => sitio.registro.fugas).toContain('sw.fuga.invalid');
-  });
+  test(
+    'un service worker sin bloquear sí se registra y sale por su cuenta',
+    { tag: ['@seguridad'] },
+    async () => {
+      // En 127.0.0.1: un service worker exige un contexto seguro.
+      const pagina = await (await directo.newContext()).newPage();
+      await pagina.goto(`${sitio.url}/service-worker`);
+      expect(await pagina.evaluate('window.resultadoSw')).toBe('registrado');
+      await expect.poll(() => sitio.registro.fugas).toContain('sw.fuga.invalid');
+    },
+  );
 
-  test('otro puerto local tampoco tiene ningún freno propio', async () => {
+  test('otro puerto local tampoco tiene ningún freno propio', { tag: ['@seguridad'] }, async () => {
     const pagina = await (await directo.newContext()).newPage();
     await pagina.goto(`${sitio.url}/puerto-no-declarado`);
     expect(await pagina.evaluate('window.resultadoTrampa')).toBe('llego');
@@ -218,72 +226,88 @@ test.describe('TS-04 · Contención, solo con el proxy', () => {
     await conProxy(politica());
   });
 
-  test('el mapa de hosts no se usa con proxy: Chromium le pasa el nombre', async () => {
-    const pagina = await (await contextoSoloProxy()).newPage();
-    const respuesta = await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
-    expect(respuesta?.status()).toBe(200);
-    expect(conexiones).toContainEqual({
-      destino: `${HOST_SITIO}:${sitio.puerto}`,
-      permitida: true,
-      regla: 'loopback-declarado',
-    });
-  });
+  test(
+    'el mapa de hosts no se usa con proxy: Chromium le pasa el nombre',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contextoSoloProxy()).newPage();
+      const respuesta = await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
+      expect(respuesta?.status()).toBe(200);
+      expect(conexiones).toContainEqual({
+        destino: `${HOST_SITIO}:${sitio.puerto}`,
+        permitida: true,
+        regla: 'loopback-declarado',
+      });
+    },
+  );
 
-  test('cada intento de fuga del manifiesto se bloquea, se registra y no llega', async () => {
-    const pagina = await (await contextoSoloProxy()).newPage();
-    for (const origen of ['/fuga', '/websocket-externo', '/service-worker']) {
-      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}${origen}`).catch(() => undefined);
-    }
-    await pagina
-      .goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`)
-      .catch(() => undefined);
-    // El service worker no se puede registrar en http://sandbox.test: va en la prueba de abajo.
-    await asentar();
-    for (const { host } of manifiesto.fugas.filter((f) => f.id !== 'fuga-service-worker')) {
-      expect(destinoBloqueado(host), host).toBe(true);
-    }
-    expect(sitio.registro.fugas).toEqual([]);
-    expect(bloqueadas().every((c) => c.regla === 'fuera-de-dominios')).toBe(true);
-  });
+  test(
+    'cada intento de fuga del manifiesto se bloquea, se registra y no llega',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contextoSoloProxy()).newPage();
+      for (const origen of ['/fuga', '/websocket-externo', '/service-worker']) {
+        await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}${origen}`).catch(() => undefined);
+      }
+      await pagina
+        .goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`)
+        .catch(() => undefined);
+      // El service worker no se puede registrar en http://sandbox.test: va en la prueba de abajo.
+      await asentar();
+      for (const { host } of manifiesto.fugas.filter((f) => f.id !== 'fuga-service-worker')) {
+        expect(destinoBloqueado(host), host).toBe(true);
+      }
+      expect(sitio.registro.fugas).toEqual([]);
+      expect(bloqueadas().every((c) => c.regla === 'fuera-de-dominios')).toBe(true);
+    },
+  );
 
-  test('cada salto de una redirección se decide: hacia adentro pasa, hacia afuera no', async () => {
-    const pagina = await (await contextoSoloProxy()).newPage();
-    const adentro = await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-adentro`);
-    expect(adentro?.url()).toBe(`http://${HOST_SITIO}:${sitio.puerto}/`);
-    await expect(
-      pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`),
-    ).rejects.toThrow();
-    expect(destinoBloqueado('redireccion.fuga.test')).toBe(true);
-    expect(sitio.registro.fugas).toEqual([]);
-  });
+  test(
+    'cada salto de una redirección se decide: hacia adentro pasa, hacia afuera no',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contextoSoloProxy()).newPage();
+      const adentro = await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-adentro`);
+      expect(adentro?.url()).toBe(`http://${HOST_SITIO}:${sitio.puerto}/`);
+      await expect(
+        pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/redirige-afuera`),
+      ).rejects.toThrow();
+      expect(destinoBloqueado('redireccion.fuga.test')).toBe(true);
+      expect(sitio.registro.fugas).toEqual([]);
+    },
+  );
 
-  test('una navegación directa a otro dominio no sale', async () => {
+  test('una navegación directa a otro dominio no sale', { tag: ['@seguridad'] }, async () => {
     const pagina = await (await contextoSoloProxy()).newPage();
     await expect(pagina.goto(`http://pixel.fuga.example:${sitio.puerto}/`)).rejects.toThrow();
     expect(sitio.registro.fugas).toEqual([]);
   });
 
-  test('un WebSocket a un dominio permitido sí abre, por CONNECT', async () => {
-    const pagina = await (await contextoSoloProxy()).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
-    const resultado = await pagina.evaluate(
-      (url) =>
-        new Promise((listo) => {
-          const ws = new WebSocket(url);
-          ws.onopen = () => {
-            listo('abierto');
-          };
-          ws.onerror = () => {
-            listo('error');
-          };
-        }),
-      `ws://${HOST_SITIO}:${sitio.puerto}/canal`,
-    );
-    expect(resultado).toBe('abierto');
-    expect(sitio.registro.websockets).toContain(HOST_SITIO);
-  });
+  test(
+    'un WebSocket a un dominio permitido sí abre, por CONNECT',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contextoSoloProxy()).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
+      const resultado = await pagina.evaluate(
+        (url) =>
+          new Promise((listo) => {
+            const ws = new WebSocket(url);
+            ws.onopen = () => {
+              listo('abierto');
+            };
+            ws.onerror = () => {
+              listo('error');
+            };
+          }),
+        `ws://${HOST_SITIO}:${sitio.puerto}/canal`,
+      );
+      expect(resultado).toBe('abierto');
+      expect(sitio.registro.websockets).toContain(HOST_SITIO);
+    },
+  );
 
-  test('un WebSocket a otro dominio no llega', async () => {
+  test('un WebSocket a otro dominio no llega', { tag: ['@seguridad'] }, async () => {
     const pagina = await (await contextoSoloProxy()).newPage();
     await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/websocket-externo`);
     expect(await pagina.evaluate('window.resultadoWs')).toBe('error');
@@ -291,21 +315,25 @@ test.describe('TS-04 · Contención, solo con el proxy', () => {
     expect(sitio.registro.fugas).toEqual([]);
   });
 
-  test('el sandbox de Chromium está encendido: el sitio probado corre confinado', async () => {
-    await (await navegador.newContext()).newPage();
-    const linea = await lineaDeComandoDelRenderer(navegador);
-    expect(linea).toContain('--type=renderer');
-    expect(linea).not.toContain('--no-sandbox');
-  });
+  test(
+    'el sandbox de Chromium está encendido: el sitio probado corre confinado',
+    { tag: ['@seguridad'] },
+    async () => {
+      await (await navegador.newContext()).newPage();
+      const linea = await lineaDeComandoDelRenderer(navegador);
+      expect(linea).toContain('--type=renderer');
+      expect(linea).not.toContain('--no-sandbox');
+    },
+  );
 
-  test('control: si se apagara, el test lo vería', async () => {
+  test('control: si se apagara, el test lo vería', { tag: ['@seguridad'] }, async () => {
     const sinSandbox = await chromium.launch(opcionesChromium({ control: { sinSandbox: true } }));
     await (await sinSandbox.newContext()).newPage();
     expect(await lineaDeComandoDelRenderer(sinSandbox)).toContain('--no-sandbox');
     await sinSandbox.close();
   });
 
-  test('el dominio de fuga nunca llega al DNS', async () => {
+  test('el dominio de fuga nunca llega al DNS', { tag: ['@seguridad'] }, async () => {
     const consultados: string[] = [];
     await conProxy(politica(), (host) => {
       consultados.push(host);
@@ -325,28 +353,36 @@ test.describe('TS-04 · Service workers', () => {
     await conProxy(politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] }));
   });
 
-  test('bloqueados: no se registran y el sandbox no recibe nada', async () => {
-    const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
-    const pagina = await (await contexto(p)).newPage();
-    await pagina.goto(`${sitio.url}/service-worker`);
-    await pagina.evaluate('window.resultadoSw');
-    // Playwright hace que register() responda sin registrar nada: lo que cuenta es esto.
-    const registrados = await pagina.evaluate(
-      async () => (await navigator.serviceWorker.getRegistrations()).length,
-    );
-    expect(registrados).toBe(0);
-    await asentar();
-    expect(sitio.registro.serviceWorkers).toEqual([]);
-    expect(sitio.registro.fugas).toEqual([]);
-  });
+  test(
+    'bloqueados: no se registran y el sandbox no recibe nada',
+    { tag: ['@seguridad'] },
+    async () => {
+      const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
+      const pagina = await (await contexto(p)).newPage();
+      await pagina.goto(`${sitio.url}/service-worker`);
+      await pagina.evaluate('window.resultadoSw');
+      // Playwright hace que register() responda sin registrar nada: lo que cuenta es esto.
+      const registrados = await pagina.evaluate(
+        async () => (await navigator.serviceWorker.getRegistrations()).length,
+      );
+      expect(registrados).toBe(0);
+      await asentar();
+      expect(sitio.registro.serviceWorkers).toEqual([]);
+      expect(sitio.registro.fugas).toEqual([]);
+    },
+  );
 
-  test('aun si uno se registrara, su salida también pasa por el proxy', async () => {
-    const pagina = await (await contextoSoloProxy()).newPage();
-    await pagina.goto(`${sitio.url}/service-worker`);
-    expect(await pagina.evaluate('window.resultadoSw')).toBe('registrado');
-    await expect.poll(() => destinoBloqueado('sw.fuga.invalid')).toBe(true);
-    expect(sitio.registro.fugas).toEqual([]);
-  });
+  test(
+    'aun si uno se registrara, su salida también pasa por el proxy',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contextoSoloProxy()).newPage();
+      await pagina.goto(`${sitio.url}/service-worker`);
+      expect(await pagina.evaluate('window.resultadoSw')).toBe('registrado');
+      await expect.poll(() => destinoBloqueado('sw.fuga.invalid')).toBe(true);
+      expect(sitio.registro.fugas).toEqual([]);
+    },
+  );
 });
 
 test.describe('TS-04 · Segunda capa', () => {
@@ -354,72 +390,84 @@ test.describe('TS-04 · Segunda capa', () => {
     await conProxy(politica());
   });
 
-  test('lo que el proxy bloquearía se corta antes y queda registrado, también en el navegador', async () => {
-    const pagina = await (await contexto(politica())).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/fuga`);
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/websocket-externo`);
-    await pagina.evaluate('window.resultadoWs');
-    await asentar();
-    const hosts = delNavegador.map((r) => r.destino.split(':')[0]);
-    expect(hosts).toEqual(
-      expect.arrayContaining([
-        'analitica.fuga.test',
-        'pixel.fuga.example',
-        'api.fuga.invalid',
-        'ws.fuga.example',
-      ]),
-    );
-    expect(sitio.registro.fugas).toEqual([]);
-  });
+  test(
+    'lo que el proxy bloquearía se corta antes y queda registrado, también en el navegador',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contexto(politica())).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/fuga`);
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/websocket-externo`);
+      await pagina.evaluate('window.resultadoWs');
+      await asentar();
+      const hosts = delNavegador.map((r) => r.destino.split(':')[0]);
+      expect(hosts).toEqual(
+        expect.arrayContaining([
+          'analitica.fuga.test',
+          'pixel.fuga.example',
+          'api.fuga.invalid',
+          'ws.fuga.example',
+        ]),
+      );
+      expect(sitio.registro.fugas).toEqual([]);
+    },
+  );
 
-  test('un WebSocket permitido abre a través de la segunda capa', async () => {
-    const pagina = await (await contexto(politica())).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
-    const resultado = await pagina.evaluate(
-      (url) =>
-        new Promise((listo) => {
-          const ws = new WebSocket(url);
-          ws.onopen = () => {
-            listo('abierto');
-          };
-          ws.onerror = () => {
-            listo('error');
-          };
-        }),
-      `ws://${HOST_SITIO}:${sitio.puerto}/canal`,
-    );
-    expect(resultado).toBe('abierto');
-  });
+  test(
+    'un WebSocket permitido abre a través de la segunda capa',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contexto(politica())).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`);
+      const resultado = await pagina.evaluate(
+        (url) =>
+          new Promise((listo) => {
+            const ws = new WebSocket(url);
+            ws.onopen = () => {
+              listo('abierto');
+            };
+            ws.onerror = () => {
+              listo('error');
+            };
+          }),
+        `ws://${HOST_SITIO}:${sitio.puerto}/canal`,
+      );
+      expect(resultado).toBe('abierto');
+    },
+  );
 });
 
 test.describe('TS-03 · Puertos locales', () => {
-  test('la API en un puerto declarado llega; otro puerto local, no', async () => {
-    const p = politica({
-      urlBase: `${sitio.url}/`,
-      dominios: ['127.0.0.1'],
-      puertosLocales: [sitio.puertoApi],
-    });
-    await conProxy(p);
-    const pagina = await (await contextoSoloProxy()).newPage();
+  test(
+    'la API en un puerto declarado llega; otro puerto local, no',
+    { tag: ['@seguridad'] },
+    async () => {
+      const p = politica({
+        urlBase: `${sitio.url}/`,
+        dominios: ['127.0.0.1'],
+        puertosLocales: [sitio.puertoApi],
+      });
+      await conProxy(p);
+      const pagina = await (await contextoSoloProxy()).newPage();
 
-    await pagina.goto(`${sitio.url}/api-en-otro-puerto`);
-    expect(await pagina.evaluate('window.resultadoApi')).toBe('api');
-    expect(sitio.registro.api).toHaveLength(1);
+      await pagina.goto(`${sitio.url}/api-en-otro-puerto`);
+      expect(await pagina.evaluate('window.resultadoApi')).toBe('api');
+      expect(sitio.registro.api).toHaveLength(1);
 
-    await pagina.goto(`${sitio.url}/puerto-no-declarado`);
-    // La página ve el 403 del proxy como una respuesta: lo que cuenta es que no llegó.
-    await pagina.evaluate('window.resultadoTrampa');
-    expect(sitio.registro.puertoNoDeclarado).toEqual([]);
-    expect(bloqueadas()).toEqual([
-      {
-        destino: `127.0.0.1:${sitio.puertoTrampa}`,
-        permitida: false,
-        regla: 'puerto-local-no-declarado',
-      },
-    ]);
-  });
+      await pagina.goto(`${sitio.url}/puerto-no-declarado`);
+      // La página ve el 403 del proxy como una respuesta: lo que cuenta es que no llegó.
+      await pagina.evaluate('window.resultadoTrampa');
+      expect(sitio.registro.puertoNoDeclarado).toEqual([]);
+      expect(bloqueadas()).toEqual([
+        {
+          destino: `127.0.0.1:${sitio.puertoTrampa}`,
+          permitida: false,
+          regla: 'puerto-local-no-declarado',
+        },
+      ]);
+    },
+  );
 
-  test('sin declararla, la misma API no llega', async () => {
+  test('sin declararla, la misma API no llega', { tag: ['@seguridad'] }, async () => {
     const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
     await conProxy(p);
     const pagina = await (await contextoSoloProxy()).newPage();
@@ -428,7 +476,7 @@ test.describe('TS-03 · Puertos locales', () => {
     expect(sitio.registro.api).toEqual([]);
   });
 
-  test('al puerto del proxy no se llega', async () => {
+  test('al puerto del proxy no se llega', { tag: ['@seguridad'] }, async () => {
     const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
     await conProxy(p);
     const pagina = await (await contextoSoloProxy()).newPage();
@@ -441,51 +489,63 @@ test.describe('TS-03 · Puertos locales', () => {
 });
 
 test.describe('DNS rebinding en un navegador real', () => {
-  test('un nombre público que resuelve a una IP privada se bloquea', async () => {
-    const p = politica({
-      urlBase: 'http://publico.example.com/',
-      dominios: ['publico.example.com'],
-    });
-    await conProxy(p, () => Promise.resolve(['10.0.0.1']));
-    const pagina = await (await contextoSoloProxy()).newPage();
-    await expect(pagina.goto('http://publico.example.com/')).rejects.toThrow();
-    // Cada intento a ese nombre se bloquea por lo mismo. Solo los suyos: el resto no es de este test.
-    const intentos = bloqueadas().filter((c) => c.destino.startsWith('publico.example.com:'));
-    expect(intentos.map((c) => c.destino)).toContain('publico.example.com:80');
-    expect(intentos.every((c) => c.regla === 'dns-ip-privada')).toBe(true);
-  });
+  test(
+    'un nombre público que resuelve a una IP privada se bloquea',
+    { tag: ['@seguridad'] },
+    async () => {
+      const p = politica({
+        urlBase: 'http://publico.example.com/',
+        dominios: ['publico.example.com'],
+      });
+      await conProxy(p, () => Promise.resolve(['10.0.0.1']));
+      const pagina = await (await contextoSoloProxy()).newPage();
+      await expect(pagina.goto('http://publico.example.com/')).rejects.toThrow();
+      // Cada intento a ese nombre se bloquea por lo mismo. Solo los suyos: el resto no es de este test.
+      const intentos = bloqueadas().filter((c) => c.destino.startsWith('publico.example.com:'));
+      expect(intentos.map((c) => c.destino)).toContain('publico.example.com:80');
+      expect(intentos.every((c) => c.regla === 'dns-ip-privada')).toBe(true);
+    },
+  );
 
-  test('un nombre público que resuelve a loopback no llega al sandbox', async () => {
-    const p = politica({
-      urlBase: `http://publico.example.com:${sitio.puerto}/`,
-      dominios: ['publico.example.com'],
-    });
-    await conProxy(p, () => Promise.resolve(['127.0.0.1']));
-    const antes = sitio.registro.hosts.length;
-    const pagina = await (await contextoSoloProxy()).newPage();
-    await expect(pagina.goto(`http://publico.example.com:${sitio.puerto}/`)).rejects.toThrow();
-    expect(sitio.registro.hosts.slice(antes)).toEqual([]);
-    expect(
-      bloqueadas().find((c) => c.destino === `publico.example.com:${sitio.puerto}`)?.regla,
-    ).toBe('dns-loopback-no-local');
-  });
+  test(
+    'un nombre público que resuelve a loopback no llega al sandbox',
+    { tag: ['@seguridad'] },
+    async () => {
+      const p = politica({
+        urlBase: `http://publico.example.com:${sitio.puerto}/`,
+        dominios: ['publico.example.com'],
+      });
+      await conProxy(p, () => Promise.resolve(['127.0.0.1']));
+      const antes = sitio.registro.hosts.length;
+      const pagina = await (await contextoSoloProxy()).newPage();
+      await expect(pagina.goto(`http://publico.example.com:${sitio.puerto}/`)).rejects.toThrow();
+      expect(sitio.registro.hosts.slice(antes)).toEqual([]);
+      expect(
+        bloqueadas().find((c) => c.destino === `publico.example.com:${sitio.puerto}`)?.regla,
+      ).toBe('dns-loopback-no-local');
+    },
+  );
 });
 
 test.describe('Fallar cerrado', () => {
-  test('con el proxy caído, el navegador no llega a ningún lado: tampoco en directo', async () => {
-    const p = politica();
-    await conProxy(p);
-    await proxy.cerrar();
-    const antes = sitio.registro.hosts.length;
-    const pagina = await (await navegador.newContext()).newPage();
-    await expect(
-      pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`, { timeout: 5000 }),
-    ).rejects.toThrow();
-    await expect(pagina.goto(`${sitio.url}/`, { timeout: 5000 })).rejects.toThrow();
-    expect(sitio.registro.hosts.slice(antes)).toEqual([]);
-  });
+  test(
+    'con el proxy caído, el navegador no llega a ningún lado: tampoco en directo',
+    { tag: ['@seguridad'] },
+    async () => {
+      const p = politica();
+      await conProxy(p);
+      await proxy.cerrar();
+      const antes = sitio.registro.hosts.length;
+      const pagina = await (await navegador.newContext()).newPage();
+      await expect(
+        pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/`, { timeout: 5000 }),
+      ).rejects.toThrow();
+      await expect(pagina.goto(`${sitio.url}/`, { timeout: 5000 })).rejects.toThrow();
+      expect(sitio.registro.hosts.slice(antes)).toEqual([]);
+    },
+  );
 
-  test('con la credencial equivocada, tampoco', async () => {
+  test('con la credencial equivocada, tampoco', { tag: ['@seguridad'] }, async () => {
     const p = politica({ urlBase: `${sitio.url}/`, dominios: ['127.0.0.1'] });
     await conProxy(p);
     const otro = await chromium.launch(
@@ -503,34 +563,45 @@ test.describe('Fallar cerrado', () => {
   });
 });
 
-test.describe('TS-05 · Solo lectura y exclusiones', () => {
+// Unos 2,5 minutos: escaneos reales del sandbox.
+test.describe('TS-05 · Solo lectura y exclusiones', { tag: '@lento' }, () => {
   test.describe.configure({ timeout: 180_000 });
   const p = (): PoliticaDeRed => politica();
   test.beforeAll(async () => {
     await conProxy(politica());
   });
 
-  test('control: sin solo lectura, el POST automático llega', async () => {
+  test('control: sin solo lectura, el POST automático llega', { tag: ['@seguridad'] }, async () => {
     const pagina = await (await contexto(p(), false)).newPage();
     await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/auto-post`);
     await expect.poll(() => sitio.registro.posts).toEqual(['/formulario/enviar']);
   });
 
-  test('con solo lectura, un POST automático se corta y se registra', async () => {
-    const pagina = await (await contexto(p())).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/auto-post`);
-    await expect.poll(() => delNavegador.filter((r) => r.regla === 'solo-lectura')).toHaveLength(1);
-    expect(sitio.registro.posts).toEqual([]);
-  });
+  test(
+    'con solo lectura, un POST automático se corta y se registra',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contexto(p())).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/auto-post`);
+      await expect
+        .poll(() => delNavegador.filter((r) => r.regla === 'solo-lectura'))
+        .toHaveLength(1);
+      expect(sitio.registro.posts).toEqual([]);
+    },
+  );
 
-  test('con solo lectura, un formulario enviado tampoco llega', async () => {
-    const pagina = await (await contexto(p())).newPage();
-    await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/formulario`);
-    await pagina.locator('form button').click();
-    await asentar();
-    expect(sitio.registro.posts).toEqual([]);
-    expect(delNavegador.some((r) => r.regla === 'solo-lectura')).toBe(true);
-  });
+  test(
+    'con solo lectura, un formulario enviado tampoco llega',
+    { tag: ['@seguridad'] },
+    async () => {
+      const pagina = await (await contexto(p())).newPage();
+      await pagina.goto(`http://${HOST_SITIO}:${sitio.puerto}/formulario`);
+      await pagina.locator('form button').click();
+      await asentar();
+      expect(sitio.registro.posts).toEqual([]);
+      expect(delNavegador.some((r) => r.regla === 'solo-lectura')).toBe(true);
+    },
+  );
 
   /** Un recorrido con el crawler de la app. Devuelve también las páginas y lo que se descartó por WebSocket. */
   async function recorrer(
@@ -567,76 +638,98 @@ test.describe('TS-05 · Solo lectura y exclusiones', () => {
   }
   const rutas = (paginas: readonly PaginaVisitada[]) => paginas.map((x) => new URL(x.url).pathname);
 
-  test('en solo lectura: no visita lo excluido, no clickea, no escribe y no sale', async () => {
-    const { resultado, paginas, wsDescartados } = await recorrer();
-    expect(resultado.linksExcluidos).toBe(2);
-    expect(resultado.paginasVisitadas).toBeGreaterThan(10);
-    expect(sitio.registro.trampas).toEqual([]);
-    expect(sitio.registro.posts).toEqual([]);
-    expect(sitio.registro.fugas).toEqual([]);
-    expect(sitio.registro.puertoNoDeclarado).toEqual([]);
-    // Ningún clic: la ruta de la SPA no se descubrió, y la cobertura no alcanzada se informa.
-    expect(rutas(paginas)).not.toContain('/spa/detalle');
-    expect(resultado.noRecorridosSoloLectura).toBeGreaterThanOrEqual(3);
-    // El WebSocket abrió, pero lo que la página mandó no salió, y se cuenta.
-    expect(sitio.registro.wsMensajes).toEqual([]);
-    expect(wsDescartados).toBeGreaterThan(0);
-    // RN-ESC-04: cada URL se analiza una sola vez. Y la profundidad se respeta.
-    const urls = paginas.map((x) => x.url);
-    expect(new Set(urls).size).toBe(urls.length);
-    expect(Math.max(...paginas.map((x) => x.profundidad))).toBe(1);
-  });
+  test(
+    'en solo lectura: no visita lo excluido, no clickea, no escribe y no sale',
+    { tag: ['@seguridad'] },
+    async () => {
+      const { resultado, paginas, wsDescartados } = await recorrer();
+      expect(resultado.linksExcluidos).toBe(2);
+      expect(resultado.paginasVisitadas).toBeGreaterThan(10);
+      expect(sitio.registro.trampas).toEqual([]);
+      expect(sitio.registro.posts).toEqual([]);
+      expect(sitio.registro.fugas).toEqual([]);
+      expect(sitio.registro.puertoNoDeclarado).toEqual([]);
+      // Ningún clic: la ruta de la SPA no se descubrió, y la cobertura no alcanzada se informa.
+      expect(rutas(paginas)).not.toContain('/spa/detalle');
+      expect(resultado.noRecorridosSoloLectura).toBeGreaterThanOrEqual(3);
+      // El WebSocket abrió, pero lo que la página mandó no salió, y se cuenta.
+      expect(sitio.registro.wsMensajes).toEqual([]);
+      expect(wsDescartados).toBeGreaterThan(0);
+      // RN-ESC-04: cada URL se analiza una sola vez. Y la profundidad se respeta.
+      const urls = paginas.map((x) => x.url);
+      expect(new Set(urls).size).toBe(urls.length);
+      expect(Math.max(...paginas.map((x) => x.profundidad))).toBe(1);
+    },
+  );
 
-  test('control: sin solo lectura y sin exclusiones, los botones escriben y el WebSocket llega', async () => {
-    const { paginas, wsDescartados } = await recorrer({
-      soloLectura: false,
-      exclusiones: [],
-      // La ruta que descubre un clic queda un nivel más abajo.
-      maxProfundidad: 2,
-    });
-    expect(sitio.registro.posts).toEqual(expect.arrayContaining(['/api/guardar', '/api/eliminar']));
-    expect(rutas(paginas)).toContain('/spa/detalle');
-    expect(sitio.registro.wsMensajes).toContain('guardar');
-    expect(wsDescartados).toBe(0);
-    expect(sitio.registro.trampas.length).toBeGreaterThan(0);
-    // Un botón que envía un formulario nunca se toca, aun sin solo lectura: el único envío es el
-    // automático de /auto-post, que no es un clic.
-    expect(sitio.registro.posts.filter((r) => r === '/formulario/enviar')).toEqual([
-      '/formulario/enviar',
-    ]);
-  });
+  test(
+    'control: sin solo lectura y sin exclusiones, los botones escriben y el WebSocket llega',
+    { tag: ['@seguridad'] },
+    async () => {
+      const { paginas, wsDescartados } = await recorrer({
+        soloLectura: false,
+        exclusiones: [],
+        // La ruta que descubre un clic queda un nivel más abajo.
+        maxProfundidad: 2,
+      });
+      expect(sitio.registro.posts).toEqual(
+        expect.arrayContaining(['/api/guardar', '/api/eliminar']),
+      );
+      expect(rutas(paginas)).toContain('/spa/detalle');
+      expect(sitio.registro.wsMensajes).toContain('guardar');
+      expect(wsDescartados).toBe(0);
+      expect(sitio.registro.trampas.length).toBeGreaterThan(0);
+      // Un botón que envía un formulario nunca se toca, aun sin solo lectura: el único envío es el
+      // automático de /auto-post, que no es un clic.
+      expect(sitio.registro.posts.filter((r) => r === '/formulario/enviar')).toEqual([
+        '/formulario/enviar',
+      ]);
+    },
+  );
 
-  test('sin solo lectura, las exclusiones valen para botones, por texto o por atributos', async () => {
-    const { resultado, paginas } = await recorrer({
-      soloLectura: false,
-      exclusiones: ['cerrar sesión', 'eliminar', 'guardar'],
-      maxProfundidad: 2,
-    });
-    // «Guardar cambios» por su texto; «Quitar todo» por su data-testid, eliminar-todo.
-    expect(sitio.registro.posts).not.toContain('/api/guardar');
-    expect(sitio.registro.posts).not.toContain('/api/eliminar');
-    // «Ver detalle» no está excluido: se clickeó y descubrió la ruta.
-    expect(rutas(paginas)).toContain('/spa/detalle');
-    expect(resultado.noRecorridosExclusiones).toBeGreaterThanOrEqual(4);
-    expect(sitio.registro.trampas).toEqual([]);
-  });
+  test(
+    'sin solo lectura, las exclusiones valen para botones, por texto o por atributos',
+    { tag: ['@seguridad'] },
+    async () => {
+      const { resultado, paginas } = await recorrer({
+        soloLectura: false,
+        exclusiones: ['cerrar sesión', 'eliminar', 'guardar'],
+        maxProfundidad: 2,
+      });
+      // «Guardar cambios» por su texto; «Quitar todo» por su data-testid, eliminar-todo.
+      expect(sitio.registro.posts).not.toContain('/api/guardar');
+      expect(sitio.registro.posts).not.toContain('/api/eliminar');
+      // «Ver detalle» no está excluido: se clickeó y descubrió la ruta.
+      expect(rutas(paginas)).toContain('/spa/detalle');
+      expect(resultado.noRecorridosExclusiones).toBeGreaterThanOrEqual(4);
+      expect(sitio.registro.trampas).toEqual([]);
+    },
+  );
 
-  test('las trampas de URLs infinitas se cortan, y se cuentan', async () => {
-    const { resultado, paginas } = await recorrer({ maxProfundidad: 50 });
-    const visitadas = rutas(paginas);
-    expect(visitadas.filter((r) => r.startsWith('/calendario/')).length).toBeLessThanOrEqual(10);
-    expect(visitadas.filter((r) => r === '/buscar').length).toBeLessThanOrEqual(20);
-    expect(resultado.urlsDescartadas).toBeGreaterThan(0);
-    expect(resultado.detenido).toBeNull();
-  });
+  test(
+    'las trampas de URLs infinitas se cortan, y se cuentan',
+    { tag: ['@seguridad'] },
+    async () => {
+      const { resultado, paginas } = await recorrer({ maxProfundidad: 50 });
+      const visitadas = rutas(paginas);
+      expect(visitadas.filter((r) => r.startsWith('/calendario/')).length).toBeLessThanOrEqual(10);
+      expect(visitadas.filter((r) => r === '/buscar').length).toBeLessThanOrEqual(20);
+      expect(resultado.urlsDescartadas).toBeGreaterThan(0);
+      expect(resultado.detenido).toBeNull();
+    },
+  );
 
-  test('RN-ESC-05: se detiene en el máximo de páginas y lo dice', async () => {
-    const { resultado } = await recorrer({ maxPaginas: 2 });
-    expect(resultado.paginasVisitadas).toBe(2);
-    expect(resultado.detenido).toBe('max-paginas');
-  });
+  test(
+    'RN-ESC-05: se detiene en el máximo de páginas y lo dice',
+    { tag: ['@seguridad'] },
+    async () => {
+      const { resultado } = await recorrer({ maxPaginas: 2 });
+      expect(resultado.paginasVisitadas).toBe(2);
+      expect(resultado.detenido).toBe('max-paginas');
+    },
+  );
 
-  test('RN-ESC-05: se detiene en el tiempo máximo y lo dice', async () => {
+  test('RN-ESC-05: se detiene en el tiempo máximo y lo dice', { tag: ['@seguridad'] }, async () => {
     const vistas: PaginaVisitada[] = [];
     // Después de la primera página, el reloj salta 10 minutos.
     const { resultado } = await recorrer(
@@ -683,45 +776,56 @@ test.describe('Prueba de login: una contraseña mala nunca da verde', () => {
   });
 
   for (const tipo of ['url', 'aparece', 'desaparece'] as const) {
-    test(`${tipo}: la contraseña correcta funciona`, async () => {
+    test(`${tipo}: la contraseña correcta funciona`, { tag: ['@seguridad'] }, async () => {
       const indicador = indicadores().find(([t]) => t === tipo)?.[1] as IndicadorExito;
       expect(await intentar(indicador, CREDENCIALES_DE_PRUEBA.clave)).toBe(true);
     });
 
-    test(`${tipo}: una contraseña mala falla`, async () => {
+    test(`${tipo}: una contraseña mala falla`, { tag: ['@seguridad'] }, async () => {
       const indicador = indicadores().find(([t]) => t === tipo)?.[1] as IndicadorExito;
       expect(await intentar(indicador, 'contrasena-equivocada')).toBe(false);
     });
   }
 
-  test('un indicador que ya se cumple antes de enviar no dice nada: falla', async () => {
-    expect(await intentar({ tipo: 'aparece', selector: 'h1' }, CREDENCIALES_DE_PRUEBA.clave)).toBe(
-      false,
-    );
-    expect(
-      await intentar(
-        { tipo: 'url', patron: `http://${HOST_SITIO}:${sitio.puerto}/*` },
-        CREDENCIALES_DE_PRUEBA.clave,
-      ),
-    ).toBe(false);
-    expect(
-      await intentar({ tipo: 'desaparece', selector: '#no-existe' }, CREDENCIALES_DE_PRUEBA.clave),
-    ).toBe(false);
-  });
+  test(
+    'un indicador que ya se cumple antes de enviar no dice nada: falla',
+    { tag: ['@seguridad'] },
+    async () => {
+      expect(
+        await intentar({ tipo: 'aparece', selector: 'h1' }, CREDENCIALES_DE_PRUEBA.clave),
+      ).toBe(false);
+      expect(
+        await intentar(
+          { tipo: 'url', patron: `http://${HOST_SITIO}:${sitio.puerto}/*` },
+          CREDENCIALES_DE_PRUEBA.clave,
+        ),
+      ).toBe(false);
+      expect(
+        await intentar(
+          { tipo: 'desaparece', selector: '#no-existe' },
+          CREDENCIALES_DE_PRUEBA.clave,
+        ),
+      ).toBe(false);
+    },
+  );
 
-  test('un selector de un paso que no existe falla, sin tirar el proceso', async () => {
-    const resultado = await probarLogin(await contexto(politica(), false), {
-      urlLogin: urlLogin(),
-      pasos: [{ accion: 'click', selector: '#no-existe' }],
-      indicador: { tipo: 'aparece', selector: '#tampoco' },
-      usuario: 'x',
-      secreto: new Uint8Array([1]),
-      timeoutMs: 500,
-    });
-    expect(resultado).toBe(false);
-  });
+  test(
+    'un selector de un paso que no existe falla, sin tirar el proceso',
+    { tag: ['@seguridad'] },
+    async () => {
+      const resultado = await probarLogin(await contexto(politica(), false), {
+        urlLogin: urlLogin(),
+        pasos: [{ accion: 'click', selector: '#no-existe' }],
+        indicador: { tipo: 'aparece', selector: '#tampoco' },
+        usuario: 'x',
+        secreto: new Uint8Array([1]),
+        timeoutMs: 500,
+      });
+      expect(resultado).toBe(false);
+    },
+  );
 
-  test('el arreglo del secreto queda en cero', async () => {
+  test('el arreglo del secreto queda en cero', { tag: ['@seguridad'] }, async () => {
     const secreto = new TextEncoder().encode(CREDENCIALES_DE_PRUEBA.clave);
     await probarLogin(await contexto(politica(), false), {
       urlLogin: urlLogin(),
@@ -734,22 +838,26 @@ test.describe('Prueba de login: una contraseña mala nunca da verde', () => {
     expect(secreto.every((byte) => byte === 0)).toBe(true);
   });
 
-  test('un login a otro dominio no sale, aunque esté en los pasos', async () => {
-    const resultado = await probarLogin(await contexto(politica(), false), {
-      urlLogin: `http://pixel.fuga.example:${sitio.puerto}/login`,
-      pasos: PASOS,
-      indicador: { tipo: 'aparece', selector: 'h1' },
-      usuario: 'x',
-      secreto: new Uint8Array([1]),
-      timeoutMs: 500,
-    });
-    expect(resultado).toBe(false);
-    expect(sitio.registro.fugas).toEqual([]);
-  });
+  test(
+    'un login a otro dominio no sale, aunque esté en los pasos',
+    { tag: ['@seguridad'] },
+    async () => {
+      const resultado = await probarLogin(await contexto(politica(), false), {
+        urlLogin: `http://pixel.fuga.example:${sitio.puerto}/login`,
+        pasos: PASOS,
+        indicador: { tipo: 'aparece', selector: 'h1' },
+        usuario: 'x',
+        secreto: new Uint8Array([1]),
+        timeoutMs: 500,
+      });
+      expect(resultado).toBe(false);
+      expect(sitio.registro.fugas).toEqual([]);
+    },
+  );
 });
 
 test.describe('Perfil en memoria (ADR 018)', () => {
-  test('lo que el sitio guarda no llega al disco del perfil', async () => {
+  test('lo que el sitio guarda no llega al disco del perfil', { tag: ['@seguridad'] }, async () => {
     const canario = `CANARIO-perfil-${Date.now()}`;
     const carpeta = mkdtempSync(path.join(os.tmpdir(), 'qatlas-e2e-perfil-'));
     const original = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };

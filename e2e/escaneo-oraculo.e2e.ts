@@ -100,34 +100,42 @@ test.afterAll(async () => {
   await sitio.cerrar();
 });
 
-test('cada problema plantado se encuentra, con su tipo, su URL y su severidad', () => {
-  const comparacion = compararConOraculo(manifiesto.hallazgos, hallazgos);
-  const resumen = resumenLegible(comparacion);
-  console.log(resumen);
-  test.info().annotations.push({ type: 'oráculo', description: resumen });
-  expect(comparacion.faltantes, resumen).toEqual([]);
-  expect(comparacion.conOtraSeveridad, resumen).toEqual([]);
-});
+test(
+  'cada problema plantado se encuentra, con su tipo, su URL y su severidad',
+  { tag: ['@lento'] },
+  () => {
+    const comparacion = compararConOraculo(manifiesto.hallazgos, hallazgos);
+    const resumen = resumenLegible(comparacion);
+    console.log(resumen);
+    test.info().annotations.push({ type: 'oráculo', description: resumen });
+    expect(comparacion.faltantes, resumen).toEqual([]);
+    expect(comparacion.conOtraSeveridad, resumen).toEqual([]);
+  },
+);
 
-test('ningún hallazgo sin documentar, y nada sobre las páginas sanas', () => {
+test('ningún hallazgo sin documentar, y nada sobre las páginas sanas', { tag: ['@lento'] }, () => {
   const comparacion = compararConOraculo(manifiesto.hallazgos, hallazgos);
   const resumen = resumenLegible(comparacion);
   expect(comparacion.enPaginasSanas, resumen).toEqual([]);
   expect(comparacion.inesperados, resumen).toEqual([]);
 });
 
-test('las cookies: la de sesión es alta, «tema» informativa, y anti-CSRF y «preferences» no aparecen', () => {
-  const cookies = hallazgos
-    .filter((h) => h.tipo === 'cookie-insegura')
-    .map((h) => `${h.clave}:${h.severidad}`)
-    .sort();
-  expect(cookies).toEqual(['sesion_anonima:alta', 'tema:informativa']);
-  expect(hallazgos.find((h) => h.clave === 'tema')?.titulo).toBe(
-    'Cookie sin vencimiento y sin HttpOnly; si guarda la sesión, debería tener HttpOnly',
-  );
-});
+test(
+  'las cookies: la de sesión es alta, «tema» informativa, y anti-CSRF y «preferences» no aparecen',
+  { tag: ['@lento'] },
+  () => {
+    const cookies = hallazgos
+      .filter((h) => h.tipo === 'cookie-insegura')
+      .map((h) => `${h.clave}:${h.severidad}`)
+      .sort();
+    expect(cookies).toEqual(['sesion_anonima:alta', 'tema:informativa']);
+    expect(hallazgos.find((h) => h.clave === 'tema')?.titulo).toBe(
+      'Cookie sin vencimiento y sin HttpOnly; si guarda la sesión, debería tener HttpOnly',
+    );
+  },
+);
 
-test('el recorrido terminó sin salir del alcance ni escribir', () => {
+test('el recorrido terminó sin salir del alcance ni escribir', { tag: ['@lento'] }, () => {
   expect(resultado.detenido).toBeNull();
   expect(resultado.noRecorridosSoloLectura).toBeGreaterThan(0);
   expect(sitio.registro.fugas).toEqual([]);
@@ -136,14 +144,18 @@ test('el recorrido terminó sin salir del alcance ni escribir', () => {
   expect(sitio.registro.udp).toEqual([]);
 });
 
-test('el detalle de un hallazgo lleva lo que puede ser sensible; el título y la clave, no', () => {
-  const consola = hallazgos.find((h) => h.tipo === 'console-error');
-  expect(consola?.detalle).toContain('Error plantado en el sandbox');
-  for (const h of hallazgos) {
-    expect(`${h.titulo} ${h.clave}`).not.toContain('Error plantado en el sandbox');
-    expect(h.url).not.toContain('?');
-  }
-});
+test(
+  'el detalle de un hallazgo lleva lo que puede ser sensible; el título y la clave, no',
+  { tag: ['@lento'] },
+  () => {
+    const consola = hallazgos.find((h) => h.tipo === 'console-error');
+    expect(consola?.detalle).toContain('Error plantado en el sandbox');
+    for (const h of hallazgos) {
+      expect(`${h.titulo} ${h.clave}`).not.toContain('Error plantado en el sandbox');
+      expect(h.url).not.toContain('?');
+    }
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

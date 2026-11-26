@@ -226,39 +226,56 @@ test.afterAll(async () => {
   await sitio.cerrar();
 });
 
-test('formulario, admin: recorre lo suyo, nunca el login ni «Salir»', async () => {
-  const escenario = autenticado.escenarios.admin as Escenario;
-  const resultado = await escanear(
-    sitio,
-    escenario,
-    USUARIOS_APP.admin.clave,
-    USUARIOS_APP.admin.usuario,
-  );
-  comprobarEscenario(escenario, resultado);
-  expect(resultado.logins).toEqual(['inicial']);
-  expect(sitio.autenticacion.registro.rutasConSesion).not.toContain('/app/salir');
-  // El estado guardado no tiene la contraseña.
-  expect(JSON.stringify(resultado.sesiones)).not.toContain(USUARIOS_APP.admin.clave);
-});
+test(
+  'formulario, admin: recorre lo suyo, nunca el login ni «Salir»',
+  { tag: ['@seguridad', '@lento'] },
+  async () => {
+    const escenario = autenticado.escenarios.admin as Escenario;
+    const resultado = await escanear(
+      sitio,
+      escenario,
+      USUARIOS_APP.admin.clave,
+      USUARIOS_APP.admin.usuario,
+    );
+    comprobarEscenario(escenario, resultado);
+    expect(resultado.logins).toEqual(['inicial']);
+    expect(sitio.autenticacion.registro.rutasConSesion).not.toContain('/app/salir');
+    // El estado guardado no tiene la contraseña.
+    expect(JSON.stringify(resultado.sesiones)).not.toContain(USUARIOS_APP.admin.clave);
+  },
+);
 
-test('formulario, lector: un 403 por rol no es una sesión vencida', async () => {
-  const escenario = autenticado.escenarios.lector as Escenario;
-  const resultado = await escanear(
-    sitio,
-    escenario,
-    USUARIOS_APP.lector.clave,
-    USUARIOS_APP.lector.usuario,
-  );
-  comprobarEscenario(escenario, resultado);
-  expect(resultado.logins).toEqual(['inicial']);
-});
+test(
+  'formulario, lector: un 403 por rol no es una sesión vencida',
+  { tag: ['@seguridad', '@lento'] },
+  async () => {
+    const escenario = autenticado.escenarios.lector as Escenario;
+    const resultado = await escanear(
+      sitio,
+      escenario,
+      USUARIOS_APP.lector.clave,
+      USUARIOS_APP.lector.usuario,
+    );
+    comprobarEscenario(escenario, resultado);
+    expect(resultado.logins).toEqual(['inicial']);
+  },
+);
 
-test('autenticación básica: las credenciales van solas en cada pedido', async () => {
-  const escenario = autenticado.escenarios.basica as Escenario;
-  const resultado = await escanear(sitio, escenario, USUARIO_BASICA.clave, USUARIO_BASICA.usuario);
-  comprobarEscenario(escenario, resultado);
-  expect(resultado.logins).toEqual(['inicial']);
-});
+test(
+  'autenticación básica: las credenciales van solas en cada pedido',
+  { tag: ['@seguridad', '@lento'] },
+  async () => {
+    const escenario = autenticado.escenarios.basica as Escenario;
+    const resultado = await escanear(
+      sitio,
+      escenario,
+      USUARIO_BASICA.clave,
+      USUARIO_BASICA.usuario,
+    );
+    comprobarEscenario(escenario, resultado);
+    expect(resultado.logins).toEqual(['inicial']);
+  },
+);
 
 test.describe('con la sesión que vence a mitad del escaneo', () => {
   let vence: SandboxActivo;
@@ -274,57 +291,69 @@ test.describe('con la sesión que vence a mitad del escaneo', () => {
     await vence.cerrar();
   });
 
-  test('formulario: confirma, vuelve a entrar, y la página vuelve a la cola sin hallazgos del login', async () => {
-    const escenario = autenticado.escenarios.admin as Escenario;
-    const resultado = await escanear(
-      vence,
-      escenario,
-      USUARIOS_APP.admin.clave,
-      USUARIOS_APP.admin.usuario,
-    );
-    comprobarEscenario(escenario, resultado);
-    expect(resultado.logins[0]).toBe('inicial');
-    expect(resultado.logins.slice(1).length).toBeGreaterThan(0);
-    expect(new Set(resultado.logins.slice(1))).toEqual(new Set(['vencida']));
-    expect(vence.autenticacion.registro.vencidas.length).toBeGreaterThan(0);
-  });
+  test(
+    'formulario: confirma, vuelve a entrar, y la página vuelve a la cola sin hallazgos del login',
+    { tag: ['@seguridad', '@lento'] },
+    async () => {
+      const escenario = autenticado.escenarios.admin as Escenario;
+      const resultado = await escanear(
+        vence,
+        escenario,
+        USUARIOS_APP.admin.clave,
+        USUARIOS_APP.admin.usuario,
+      );
+      comprobarEscenario(escenario, resultado);
+      expect(resultado.logins[0]).toBe('inicial');
+      expect(resultado.logins.slice(1).length).toBeGreaterThan(0);
+      expect(new Set(resultado.logins.slice(1))).toEqual(new Set(['vencida']));
+      expect(vence.autenticacion.registro.vencidas.length).toBeGreaterThan(0);
+    },
+  );
 
-  test('SSO: la redirección al proveedor es la señal, y el escaneo nunca sale por el proveedor', async () => {
-    const escenario = autenticado.escenarios.sso as Escenario;
-    const antes = vence.autenticacion.registro.logins.length;
-    const resultado = await escanear(
-      vence,
-      escenario,
-      USUARIOS_APP.admin.clave,
-      USUARIOS_APP.admin.usuario,
-    );
-    comprobarEscenario(escenario, resultado);
-    expect(resultado.logins).toContain('vencida');
-    const nuevos = vence.autenticacion.registro.logins.slice(antes);
-    expect(new Set(nuevos.map((l) => l.via))).toEqual(new Set(['sso']));
-    // El proxy del escaneo nunca dejó pasar una conexión al proveedor.
-    expect(
-      resultado.escaneoProxy.filter((r) => r.permitida && r.destino.startsWith(HOST_IDP)),
-    ).toEqual([]);
-    // Las cookies del proveedor no quedan en el estado del escaneo.
-    expect(JSON.stringify(resultado.sesiones)).not.toContain('idp_sesion');
-  });
+  test(
+    'SSO: la redirección al proveedor es la señal, y el escaneo nunca sale por el proveedor',
+    { tag: ['@seguridad', '@lento'] },
+    async () => {
+      const escenario = autenticado.escenarios.sso as Escenario;
+      const antes = vence.autenticacion.registro.logins.length;
+      const resultado = await escanear(
+        vence,
+        escenario,
+        USUARIOS_APP.admin.clave,
+        USUARIOS_APP.admin.usuario,
+      );
+      comprobarEscenario(escenario, resultado);
+      expect(resultado.logins).toContain('vencida');
+      const nuevos = vence.autenticacion.registro.logins.slice(antes);
+      expect(new Set(nuevos.map((l) => l.via))).toEqual(new Set(['sso']));
+      // El proxy del escaneo nunca dejó pasar una conexión al proveedor.
+      expect(
+        resultado.escaneoProxy.filter((r) => r.permitida && r.destino.startsWith(HOST_IDP)),
+      ).toEqual([]);
+      // Las cookies del proveedor no quedan en el estado del escaneo.
+      expect(JSON.stringify(resultado.sesiones)).not.toContain('idp_sesion');
+    },
+  );
 
-  test('enlace con token: vuelve a entrar con el mismo enlace, que nunca queda en el estado', async () => {
-    const escenario = autenticado.escenarios.enlace as Escenario;
-    const enlace = vence.autenticacion.emitirEnlace('lector', { reutilizable: true });
-    const token = new URL(enlace).searchParams.get('token') ?? '';
-    const resultado = await escanear(
-      vence,
-      { ...escenario, dominiosAutenticacion: [HOST_PORTAL] },
-      enlace,
-      '',
-    );
-    comprobarEscenario(escenario, resultado);
-    expect(resultado.logins).toContain('vencida');
-    expect(JSON.stringify(resultado.sesiones)).not.toContain(token);
-    expect(JSON.stringify(resultado.hallazgos)).not.toContain(token);
-  });
+  test(
+    'enlace con token: vuelve a entrar con el mismo enlace, que nunca queda en el estado',
+    { tag: ['@seguridad', '@lento'] },
+    async () => {
+      const escenario = autenticado.escenarios.enlace as Escenario;
+      const enlace = vence.autenticacion.emitirEnlace('lector', { reutilizable: true });
+      const token = new URL(enlace).searchParams.get('token') ?? '';
+      const resultado = await escanear(
+        vence,
+        { ...escenario, dominiosAutenticacion: [HOST_PORTAL] },
+        enlace,
+        '',
+      );
+      comprobarEscenario(escenario, resultado);
+      expect(resultado.logins).toContain('vencida');
+      expect(JSON.stringify(resultado.sesiones)).not.toContain(token);
+      expect(JSON.stringify(resultado.hallazgos)).not.toContain(token);
+    },
+  );
 });
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).

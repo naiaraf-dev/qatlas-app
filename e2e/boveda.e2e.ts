@@ -84,193 +84,237 @@ async function simularDialogos(ruta: string): Promise<void> {
   }, ruta);
 }
 
-test('primer inicio: pide una contraseña fuerte y avisa que no hay recuperación', async () => {
-  await expect(titulo('Creá tu bóveda')).toBeVisible();
-  await expect(page.getByText('No hay forma de recuperarla')).toBeVisible();
-  const crear = page.getByRole('button', { name: 'Crear bóveda' });
-  await expect(crear).toBeDisabled();
+test(
+  'primer inicio: pide una contraseña fuerte y avisa que no hay recuperación',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await expect(titulo('Creá tu bóveda')).toBeVisible();
+    await expect(page.getByText('No hay forma de recuperarla')).toBeVisible();
+    const crear = page.getByRole('button', { name: 'Crear bóveda' });
+    await expect(crear).toBeDisabled();
 
-  await entrada('Contraseña maestra').fill('corta');
-  await expect(page.getByText('al menos 12 caracteres')).toBeVisible();
-  await entrada('Contraseña maestra').fill('aaaaaaaaaaaaaaaa');
-  await expect(page.getByText(/Fortaleza: (Muy débil|Débil)/)).toBeVisible();
+    await entrada('Contraseña maestra').fill('corta');
+    await expect(page.getByText('al menos 12 caracteres')).toBeVisible();
+    await entrada('Contraseña maestra').fill('aaaaaaaaaaaaaaaa');
+    await expect(page.getByText(/Fortaleza: (Muy débil|Débil)/)).toBeVisible();
 
-  await entrada('Contraseña maestra').fill(CONTRASENA);
-  await expect(page.getByText(/Fortaleza: (Fuerte|Muy fuerte)/)).toBeVisible();
-  await verificarSinReflejo('Contraseña maestra', CONTRASENA, 'new-password');
-  await entrada('Repetí la contraseña').fill(OTRA);
-  await expect(page.getByText('no coinciden')).toBeVisible();
-  await entrada('Repetí la contraseña').fill(CONTRASENA);
-  await verificarSinReflejo('Repetí la contraseña', CONTRASENA, 'new-password');
-  await expect(crear).toBeDisabled();
+    await entrada('Contraseña maestra').fill(CONTRASENA);
+    await expect(page.getByText(/Fortaleza: (Fuerte|Muy fuerte)/)).toBeVisible();
+    await verificarSinReflejo('Contraseña maestra', CONTRASENA, 'new-password');
+    await entrada('Repetí la contraseña').fill(OTRA);
+    await expect(page.getByText('no coinciden')).toBeVisible();
+    await entrada('Repetí la contraseña').fill(CONTRASENA);
+    await verificarSinReflejo('Repetí la contraseña', CONTRASENA, 'new-password');
+    await expect(crear).toBeDisabled();
 
-  await page.getByRole('checkbox', { name: /no hay recuperación/ }).check();
-  await expect(crear).toBeEnabled();
-});
+    await page.getByRole('checkbox', { name: /no hay recuperación/ }).check();
+    await expect(crear).toBeEnabled();
+  },
+);
 
-test('las actualizaciones aparecen deshabilitadas, con cuándo llegan', async () => {
-  await expect(page.getByRole('checkbox', { name: /Buscar actualizaciones/ })).toBeDisabled();
-  await expect(page.getByText('Llega en: semana 10')).toBeVisible();
-});
+test(
+  'las actualizaciones aparecen deshabilitadas, con cuándo llegan',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await expect(page.getByRole('checkbox', { name: /Buscar actualizaciones/ })).toBeDisabled();
+    await expect(page.getByText('Llega en: semana 10')).toBeVisible();
+  },
+);
 
-test('primer inicio: crea la bóveda y entra a la app', async () => {
-  await page.getByRole('button', { name: 'Crear bóveda' }).click();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  expect(existsSync(path.join(carpeta, 'QAtlas', 'boveda.db'))).toBe(true);
-  expect(existsSync(path.join(carpeta, 'QAtlas', 'boveda.sellada'))).toBe(true);
-});
+test(
+  'primer inicio: crea la bóveda y entra a la app',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await page.getByRole('button', { name: 'Crear bóveda' }).click();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+    expect(existsSync(path.join(carpeta, 'QAtlas', 'boveda.db'))).toBe(true);
+    expect(existsSync(path.join(carpeta, 'QAtlas', 'boveda.sellada'))).toBe(true);
+  },
+);
 
-test('TS-02 en la app real: ningún archivo de la carpeta tiene la base en texto plano', () => {
-  const datos = path.join(carpeta, 'QAtlas');
-  const base = readFileSync(path.join(datos, 'boveda.db'));
-  expect(base.includes(Buffer.from('SQLite format 3'))).toBe(false);
-  expect(base.includes(Buffer.from('CREATE TABLE'))).toBe(false);
-  const sellada = readFileSync(path.join(datos, 'boveda.sellada'), 'utf8');
-  expect(sellada).not.toContain(CONTRASENA);
-  expect(readdirSync(datos).some((n) => n.includes('.tmp-'))).toBe(false);
-});
+test(
+  'TS-02 en la app real: ningún archivo de la carpeta tiene la base en texto plano',
+  { tag: ['@interfaz', '@seguridad'] },
+  () => {
+    const datos = path.join(carpeta, 'QAtlas');
+    const base = readFileSync(path.join(datos, 'boveda.db'));
+    expect(base.includes(Buffer.from('SQLite format 3'))).toBe(false);
+    expect(base.includes(Buffer.from('CREATE TABLE'))).toBe(false);
+    const sellada = readFileSync(path.join(datos, 'boveda.sellada'), 'utf8');
+    expect(sellada).not.toContain(CONTRASENA);
+    expect(readdirSync(datos).some((n) => n.includes('.tmp-'))).toBe(false);
+  },
+);
 
-test('la API expuesta a la interfaz incluye solo funciones de la bóveda, sin claves', async () => {
-  const claves = await page.evaluate(() => {
-    const scope = globalThis as unknown as { qatlas: Record<string, object> };
-    return Object.keys(scope.qatlas.vault ?? {}).sort();
-  });
-  expect(claves).toEqual([
-    'create',
-    'createBackup',
-    'getSettings',
-    'getStatus',
-    'lock',
-    'restoreBackup',
-    'setSettings',
-    'unlock',
-  ]);
-});
-
-test('el tema elegido se guarda en la configuración cifrada', async () => {
-  const fondo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await page.getByRole('radio', { name: 'Oscuro' }).click();
-  await expect.poll(fondo).toBe('rgb(11, 13, 18)');
-
-  await page.getByRole('button', { name: 'Bloquear', exact: true }).click();
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Oscuro' })).toBeChecked();
-  await expect.poll(fondo).toBe('rgb(11, 13, 18)');
-});
-
-test('la pantalla bloqueada se ve bien en los dos modos', async () => {
-  await page.getByRole('button', { name: 'Bloquear', exact: true }).click();
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  for (const [modo, fondo] of [
-    ['dark', 'rgb(11, 13, 18)'],
-    ['light', 'rgb(246, 247, 249)'],
-  ] as const) {
-    // Bloqueada no se conoce la preferencia guardada: la pantalla sigue al sistema.
-    await page.emulateMedia({ colorScheme: modo });
-    await expect
-      .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
-      .toBe(fondo);
-    await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeVisible();
-    // El logo de la pantalla de acceso, con los colores de la marca del modo.
-    await expect(page.locator('main [data-marca="isotipo"]')).toBeVisible();
-    await expect
-      .poll(() => coloresDelLogo(page))
-      .toEqual(modo === 'dark' ? LOGO_OSCURO : LOGO_CLARO);
-  }
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-});
-
-test('sin el menú por defecto de Electron, y los atajos de las herramientas de desarrollo no abren nada', async () => {
-  const menu = await app.evaluate(({ Menu }) => {
-    const actual = Menu.getApplicationMenu();
-    return actual ? actual.items.map((item) => item.label) : null;
-  });
-  // En macOS, uno mínimo (los atajos de edición dependen del menú); en Windows y Linux, ninguno.
-  expect(menu).toEqual(process.platform === 'darwin' ? ['QAtlas', 'Edición', 'Ventana'] : null);
-
-  await app.evaluate(({ BrowserWindow }) => {
-    const ventana = BrowserWindow.getAllWindows()[0];
-    const global = globalThis as unknown as { devtoolsAbiertas: number };
-    global.devtoolsAbiertas = 0;
-    ventana?.webContents.on('devtools-opened', () => {
-      global.devtoolsAbiertas += 1;
+test(
+  'la API expuesta a la interfaz incluye solo funciones de la bóveda, sin claves',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const claves = await page.evaluate(() => {
+      const scope = globalThis as unknown as { qatlas: Record<string, object> };
+      return Object.keys(scope.qatlas.vault ?? {}).sort();
     });
-  });
-  for (const atajo of [
-    'F12',
-    'Control+Shift+I',
-    'Control+Shift+J',
-    'Control+Shift+C',
-    'Meta+Alt+I',
-  ]) {
-    await page.keyboard.press(atajo);
-  }
-  // Señal: Ctrl+Mayús+L bloquea. Las teclas llegan en orden, así que al ver la bóveda bloqueada,
-  // los atajos de antes ya se procesaron (y además prueba que el teclado llega a la app).
-  await page.keyboard.press('Control+Shift+L');
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  const estado = await app.evaluate(({ BrowserWindow }) => ({
-    abiertas: BrowserWindow.getAllWindows()[0]?.webContents.isDevToolsOpened(),
-    veces: (globalThis as unknown as { devtoolsAbiertas: number }).devtoolsAbiertas,
-    ventanas: BrowserWindow.getAllWindows().length,
-  }));
-  expect(estado).toEqual({ abiertas: false, veces: 0, ventanas: 1 });
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-});
-
-test('TS-09: al bloquear no queda ningún dato en la interfaz y los canales se rechazan', async () => {
-  await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
-  await expect(titulo('Bóveda')).toBeVisible();
-  await page.keyboard.press('Control+Shift+L');
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-
-  const visible = await page.evaluate(() => document.body.innerText);
-  expect(visible).not.toContain('Privacidad y conexiones');
-  expect(visible).not.toContain('Copia de seguridad');
-
-  const respuestas = await page.evaluate(async () => {
-    const { qatlas } = globalThis as unknown as {
-      qatlas: {
-        vault: { getSettings(): Promise<unknown>; setSettings(r: unknown): Promise<unknown> };
-        privacy: { listConnections(r: unknown): Promise<unknown> };
-        appearance: { setTheme(r: unknown): Promise<unknown> };
-      };
-    };
-    return Promise.all([
-      qatlas.vault.getSettings(),
-      qatlas.vault.setSettings({ bloqueoMinutos: 5 }),
-      qatlas.privacy.listConnections({ limit: 10 }),
-      qatlas.appearance.setTheme({ preference: 'dark' }),
+    expect(claves).toEqual([
+      'create',
+      'createBackup',
+      'getSettings',
+      'getStatus',
+      'lock',
+      'restoreBackup',
+      'setSettings',
+      'unlock',
     ]);
-  });
-  for (const respuesta of respuestas) {
-    expect(respuesta).toEqual({ ok: false, error: 'BOVEDA_BLOQUEADA' });
-  }
-});
+  },
+);
 
-test('TS-09: las claves no están en ningún objeto global de la interfaz', async () => {
-  const nombres = await page.evaluate(() => {
-    const scope = globalThis as unknown as { qatlas: object; localStorage: Storage };
-    return {
-      globales: Object.keys(globalThis).filter((k) =>
-        /clave|maestra|contrase|secret|^key$/i.test(k),
-      ),
-      almacen: scope.localStorage.length,
-    };
-  });
-  expect(nombres).toEqual({ globales: [], almacen: 0 });
-});
+test(
+  'el tema elegido se guarda en la configuración cifrada',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const fondo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.getByRole('radio', { name: 'Oscuro' }).click();
+    await expect.poll(fondo).toBe('rgb(11, 13, 18)');
 
-test('desbloqueo: una contraseña incorrecta da un error sin detalles internos', async () => {
-  await desbloquear(OTRA);
-  await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  await expect(entrada('Contraseña maestra')).toHaveValue('');
-});
+    await page.getByRole('button', { name: 'Bloquear', exact: true }).click();
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    await desbloquear();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Oscuro' })).toBeChecked();
+    await expect.poll(fondo).toBe('rgb(11, 13, 18)');
+  },
+);
+
+test(
+  'la pantalla bloqueada se ve bien en los dos modos',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await page.getByRole('button', { name: 'Bloquear', exact: true }).click();
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    for (const [modo, fondo] of [
+      ['dark', 'rgb(11, 13, 18)'],
+      ['light', 'rgb(246, 247, 249)'],
+    ] as const) {
+      // Bloqueada no se conoce la preferencia guardada: la pantalla sigue al sistema.
+      await page.emulateMedia({ colorScheme: modo });
+      await expect
+        .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+        .toBe(fondo);
+      await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeVisible();
+      // El logo de la pantalla de acceso, con los colores de la marca del modo.
+      await expect(page.locator('main [data-marca="isotipo"]')).toBeVisible();
+      await expect
+        .poll(() => coloresDelLogo(page))
+        .toEqual(modo === 'dark' ? LOGO_OSCURO : LOGO_CLARO);
+    }
+    await desbloquear();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+  },
+);
+
+test(
+  'sin el menú por defecto de Electron, y los atajos de las herramientas de desarrollo no abren nada',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const menu = await app.evaluate(({ Menu }) => {
+      const actual = Menu.getApplicationMenu();
+      return actual ? actual.items.map((item) => item.label) : null;
+    });
+    // En macOS, uno mínimo (los atajos de edición dependen del menú); en Windows y Linux, ninguno.
+    expect(menu).toEqual(process.platform === 'darwin' ? ['QAtlas', 'Edición', 'Ventana'] : null);
+
+    await app.evaluate(({ BrowserWindow }) => {
+      const ventana = BrowserWindow.getAllWindows()[0];
+      const global = globalThis as unknown as { devtoolsAbiertas: number };
+      global.devtoolsAbiertas = 0;
+      ventana?.webContents.on('devtools-opened', () => {
+        global.devtoolsAbiertas += 1;
+      });
+    });
+    for (const atajo of [
+      'F12',
+      'Control+Shift+I',
+      'Control+Shift+J',
+      'Control+Shift+C',
+      'Meta+Alt+I',
+    ]) {
+      await page.keyboard.press(atajo);
+    }
+    // Señal: Ctrl+Mayús+L bloquea. Las teclas llegan en orden, así que al ver la bóveda bloqueada,
+    // los atajos de antes ya se procesaron (y además prueba que el teclado llega a la app).
+    await page.keyboard.press('Control+Shift+L');
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    const estado = await app.evaluate(({ BrowserWindow }) => ({
+      abiertas: BrowserWindow.getAllWindows()[0]?.webContents.isDevToolsOpened(),
+      veces: (globalThis as unknown as { devtoolsAbiertas: number }).devtoolsAbiertas,
+      ventanas: BrowserWindow.getAllWindows().length,
+    }));
+    expect(estado).toEqual({ abiertas: false, veces: 0, ventanas: 1 });
+    await desbloquear();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+  },
+);
+
+test(
+  'TS-09: al bloquear no queda ningún dato en la interfaz y los canales se rechazan',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
+    await expect(titulo('Bóveda')).toBeVisible();
+    await page.keyboard.press('Control+Shift+L');
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+
+    const visible = await page.evaluate(() => document.body.innerText);
+    expect(visible).not.toContain('Privacidad y conexiones');
+    expect(visible).not.toContain('Copia de seguridad');
+
+    const respuestas = await page.evaluate(async () => {
+      const { qatlas } = globalThis as unknown as {
+        qatlas: {
+          vault: { getSettings(): Promise<unknown>; setSettings(r: unknown): Promise<unknown> };
+          privacy: { listConnections(r: unknown): Promise<unknown> };
+          appearance: { setTheme(r: unknown): Promise<unknown> };
+        };
+      };
+      return Promise.all([
+        qatlas.vault.getSettings(),
+        qatlas.vault.setSettings({ bloqueoMinutos: 5 }),
+        qatlas.privacy.listConnections({ limit: 10 }),
+        qatlas.appearance.setTheme({ preference: 'dark' }),
+      ]);
+    });
+    for (const respuesta of respuestas) {
+      expect(respuesta).toEqual({ ok: false, error: 'BOVEDA_BLOQUEADA' });
+    }
+  },
+);
+
+test(
+  'TS-09: las claves no están en ningún objeto global de la interfaz',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const nombres = await page.evaluate(() => {
+      const scope = globalThis as unknown as { qatlas: object; localStorage: Storage };
+      return {
+        globales: Object.keys(globalThis).filter((k) =>
+          /clave|maestra|contrase|secret|^key$/i.test(k),
+        ),
+        almacen: scope.localStorage.length,
+      };
+    });
+    expect(nombres).toEqual({ globales: [], almacen: 0 });
+  },
+);
+
+test(
+  'desbloqueo: una contraseña incorrecta da un error sin detalles internos',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await desbloquear(OTRA);
+    await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    await expect(entrada('Contraseña maestra')).toHaveValue('');
+  },
+);
 
 /**
  * Un evento del sistema operativo llega como una tarea nueva del proceso principal. `app.evaluate` no:
@@ -285,185 +329,138 @@ async function emitirDelSistema(evento: 'lock-screen' | 'suspend'): Promise<void
   }, evento);
 }
 
-test('bloqueo al bloquear el sistema operativo y al suspender', async () => {
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await emitirDelSistema('lock-screen');
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await emitirDelSistema('suspend');
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-});
-
-test('la copia de seguridad se crea con la ruta del proceso principal y sale cifrada', async () => {
-  const destino = path.join(carpeta, 'copia.qatlas');
-  await simularDialogos(destino);
-  await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
-  await page.getByRole('button', { name: 'Crear copia de seguridad' }).click();
-  await expect(page.getByText('Copia creada.')).toBeVisible();
-  // La bóveda sigue abierta: VACUUM INTO no la bloquea.
-  await expect(titulo('Bóveda')).toBeVisible();
-
-  const bytes = readFileSync(destino);
-  expect(bytes.subarray(0, 4).toString()).toBe('QATB');
-  expect(bytes.includes(Buffer.from('SQLite format 3'))).toBe(false);
-  expect(bytes.includes(Buffer.from('CREATE TABLE'))).toBe(false);
-  expect(bytes.includes(Buffer.from(CONTRASENA))).toBe(false);
-});
-
-test('una carpeta sincronizada se advierte, y al cancelar no se escribe nada', async () => {
-  const destino = path.join(carpeta, 'OneDrive', 'copia.qatlas');
-  await simularDialogos(destino);
-  const mensajes = await app.evaluate(({ dialog }) => {
-    const vistos: string[] = [];
-    dialog.showMessageBox = (...args: unknown[]) => {
-      vistos.push((args.at(-1) as { message: string }).message);
-      (globalThis as unknown as { vistos: string[] }).vistos = vistos;
-      return Promise.resolve({ response: 0, checkboxChecked: false });
-    };
-    return vistos.length;
-  });
-  expect(mensajes).toBe(0);
-
-  await page.getByRole('button', { name: 'Crear copia de seguridad' }).click();
-  await expect
-    .poll(() => app.evaluate(() => (globalThis as unknown as { vistos?: string[] }).vistos))
-    .toEqual(['Esta carpeta parece estar sincronizada con la nube']);
-  expect(existsSync(destino)).toBe(false);
-  await simularDialogos(path.join(carpeta, 'copia.qatlas'));
-});
-
-test('los minutos de bloqueo se configuran, y una restauración vuelve a los de la copia', async () => {
-  const minutos = entrada('Minutos sin actividad');
-  await expect(minutos).toHaveValue('15');
-  await minutos.fill('30');
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByText('Guardado.')).toBeVisible();
-
-  await page.getByLabel('Contraseña de la copia').fill(OTRA);
-  await verificarSinReflejo('Contraseña de la copia', OTRA, 'current-password');
-  await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
-  await expect(page.getByText('no corresponde a la copia')).toBeVisible();
-  await expect(page.getByLabel('Contraseña de la copia')).toHaveValue('');
-  expect(await page.content()).not.toContain(OTRA);
-  await expect(minutos).toHaveValue('30');
-
-  await page.getByLabel('Contraseña de la copia').fill(CONTRASENA);
-  await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
-  await expect(entrada('Minutos sin actividad')).toHaveValue('15');
-});
-
-/** Aísla la ventana del mouse y del teclado reales del equipo, solo durante una espera. */
-async function aislarVentana(): Promise<() => Promise<void>> {
-  // La ventana está visible en el equipo: un movimiento del mouse encima o una tecla real
-  // reiniciarían el contador. setFocusable solo existe en Windows y macOS; en Linux el CI corre bajo
-  // xvfb, sin teclado real.
-  await app.evaluate(({ BrowserWindow }) => {
-    const ventana = BrowserWindow.getAllWindows()[0];
-    ventana?.setIgnoreMouseEvents(true);
-    if (process.platform !== 'linux') ventana?.setFocusable(false);
-    ventana?.blur();
-  });
-  if (process.platform === 'win32') {
-    expect(
-      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocusable()),
-    ).toBe(false);
-  }
-  const sinFoco = await expect
-    .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isFocused()))
-    .toBe(false)
-    .then(
-      () => true,
-      () => false,
-    );
-  if (!sinFoco) {
-    // En CI no hay entrada humana, así que no hay excusa: si la ventana sigue enfocada, algo cambió.
-    // En un equipo con gente, cerca de 1 de cada 20 veces isFocused() sigue en verdadero en Windows, y
-    // ni repetir blur ni minimizar lo cambian. Ahí solo se anota: una tecla real puede atrasar el
-    // bloqueo, lo que haría fallar la espera de TS-09, nunca pasarla en falso.
-    if (process.env.CI) throw new Error('En CI, la ventana no debería conservar el foco.');
-    test.info().annotations.push({ type: 'aviso', description: 'La ventana conservó el foco.' });
-  }
-  return async () => {
-    await app.evaluate(({ BrowserWindow }) => {
-      const ventana = BrowserWindow.getAllWindows()[0];
-      ventana?.setIgnoreMouseEvents(false);
-      if (process.platform !== 'linux') ventana?.setFocusable(true);
-    });
-  };
-}
-
-test('TS-09: bloqueo automático por inactividad con el mínimo de 1 minuto', async () => {
-  test.setTimeout(120_000);
-  const minutos = entrada('Minutos sin actividad');
-  await minutos.fill('1');
-  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-  await expect(page.getByText('Guardado.')).toBeVisible();
-  const restaurar = await aislarVentana();
-  try {
-    await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 90_000 });
-  } finally {
-    await restaurar();
-  }
-});
-
-test('la actividad reinicia el contador: una tecla a los 40 s la deja abierta a los 70 s', async () => {
-  test.setTimeout(180_000);
-  await desbloquear();
-  await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-  const inicio = Date.now();
-  const hasta = (segundos: number) => page.waitForTimeout(segundos * 1000 - (Date.now() - inicio));
-  const restaurar = await aislarVentana();
-  try {
-    await hasta(40);
-    await page.keyboard.press('Shift');
-    await hasta(70);
+test(
+  'bloqueo al bloquear el sistema operativo y al suspender',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await desbloquear();
     await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
-    await expect(titulo('Bóveda bloqueada')).toHaveCount(0);
-    // 60 s después de la tecla, más el intervalo de 5 s con el que se revisa.
-    await expect(titulo('Bóveda bloqueada')).toBeVisible({ timeout: 45_000 });
-    expect(Date.now() - inicio).toBeGreaterThanOrEqual(99_000);
-  } finally {
-    await restaurar();
-  }
-});
+    await emitirDelSistema('lock-screen');
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
 
-test('la bóveda sigue bloqueada al reiniciar, y al cerrar no quedan archivos sueltos', async () => {
-  await app.close();
-  ({ app, page } = await lanzarApp(electron, carpeta));
-  await expect(titulo('Bóveda bloqueada')).toBeVisible();
-  const datos = path.join(carpeta, 'QAtlas');
-  expect(readdirSync(datos).some((n) => n.includes('.nueva') || n.includes('.tmp-'))).toBe(false);
-});
+    await desbloquear();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+    await emitirDelSistema('suspend');
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    await desbloquear();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+  },
+);
 
-test('desbloqueo: la contraseña escrita no se refleja, y se vacía aunque falle', async () => {
-  await entrada('Contraseña maestra').fill(OTRA);
-  await verificarSinReflejo('Contraseña maestra', OTRA, 'current-password');
-  await page.getByRole('button', { name: 'Desbloquear' }).click();
-  await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
-  await expect(entrada('Contraseña maestra')).toHaveValue('');
-  expect(await page.content()).not.toContain(OTRA);
-});
+test(
+  'la copia de seguridad se crea con la ruta del proceso principal y sale cifrada',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const destino = path.join(carpeta, 'copia.qatlas');
+    await simularDialogos(destino);
+    await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
+    await page.getByRole('button', { name: 'Crear copia de seguridad' }).click();
+    await expect(page.getByText('Copia creada.')).toBeVisible();
+    // La bóveda sigue abierta: VACUUM INTO no la bloquea.
+    await expect(titulo('Bóveda')).toBeVisible();
 
-test('freno ante intentos repetidos: a los 5 fallos hay que esperar', async () => {
-  // Un intento ya se hizo en el test anterior.
-  for (let i = 0; i < 4; i++) {
-    await desbloquear(OTRA);
+    const bytes = readFileSync(destino);
+    expect(bytes.subarray(0, 4).toString()).toBe('QATB');
+    expect(bytes.includes(Buffer.from('SQLite format 3'))).toBe(false);
+    expect(bytes.includes(Buffer.from('CREATE TABLE'))).toBe(false);
+    expect(bytes.includes(Buffer.from(CONTRASENA))).toBe(false);
+  },
+);
+
+test(
+  'una carpeta sincronizada se advierte, y al cancelar no se escribe nada',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const destino = path.join(carpeta, 'OneDrive', 'copia.qatlas');
+    await simularDialogos(destino);
+    const mensajes = await app.evaluate(({ dialog }) => {
+      const vistos: string[] = [];
+      dialog.showMessageBox = (...args: unknown[]) => {
+        vistos.push((args.at(-1) as { message: string }).message);
+        (globalThis as unknown as { vistos: string[] }).vistos = vistos;
+        return Promise.resolve({ response: 0, checkboxChecked: false });
+      };
+      return vistos.length;
+    });
+    expect(mensajes).toBe(0);
+
+    await page.getByRole('button', { name: 'Crear copia de seguridad' }).click();
+    await expect
+      .poll(() => app.evaluate(() => (globalThis as unknown as { vistos?: string[] }).vistos))
+      .toEqual(['Esta carpeta parece estar sincronizada con la nube']);
+    expect(existsSync(destino)).toBe(false);
+    await simularDialogos(path.join(carpeta, 'copia.qatlas'));
+  },
+);
+
+test(
+  'los minutos de bloqueo se configuran, y una restauración vuelve a los de la copia',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    const minutos = entrada('Minutos sin actividad');
+    await expect(minutos).toHaveValue('15');
+    await minutos.fill('30');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(page.getByText('Guardado.')).toBeVisible();
+
+    await page.getByLabel('Contraseña de la copia').fill(OTRA);
+    await verificarSinReflejo('Contraseña de la copia', OTRA, 'current-password');
+    await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
+    await expect(page.getByText('no corresponde a la copia')).toBeVisible();
+    await expect(page.getByLabel('Contraseña de la copia')).toHaveValue('');
+    expect(await page.content()).not.toContain(OTRA);
+    await expect(minutos).toHaveValue('30');
+
+    await page.getByLabel('Contraseña de la copia').fill(CONTRASENA);
+    await page.getByRole('button', { name: 'Elegir copia y restaurar' }).click();
+    await expect(titulo('Te damos la bienvenida a QAtlas')).toBeVisible();
+    await page.getByRole('button', { name: 'Bóveda', exact: true }).click();
+    await expect(entrada('Minutos sin actividad')).toHaveValue('15');
+  },
+);
+
+test(
+  'la bóveda sigue bloqueada al reiniciar, y al cerrar no quedan archivos sueltos',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await app.close();
+    ({ app, page } = await lanzarApp(electron, carpeta));
+    await expect(titulo('Bóveda bloqueada')).toBeVisible();
+    const datos = path.join(carpeta, 'QAtlas');
+    expect(readdirSync(datos).some((n) => n.includes('.nueva') || n.includes('.tmp-'))).toBe(false);
+  },
+);
+
+test(
+  'desbloqueo: la contraseña escrita no se refleja, y se vacía aunque falle',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    await entrada('Contraseña maestra').fill(OTRA);
+    await verificarSinReflejo('Contraseña maestra', OTRA, 'current-password');
+    await page.getByRole('button', { name: 'Desbloquear' }).click();
     await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
     await expect(entrada('Contraseña maestra')).toHaveValue('');
-  }
-  await expect(
-    page.getByText(/Demasiados intentos\. Podés volver a probar en \d+ s\./),
-  ).toBeVisible();
-  await entrada('Contraseña maestra').fill(CONTRASENA);
-  await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeDisabled();
-});
+    expect(await page.content()).not.toContain(OTRA);
+  },
+);
+
+test(
+  'freno ante intentos repetidos: a los 5 fallos hay que esperar',
+  { tag: ['@interfaz', '@seguridad'] },
+  async () => {
+    // Un intento ya se hizo en el test anterior.
+    for (let i = 0; i < 4; i++) {
+      await desbloquear(OTRA);
+      await expect(page.getByText('La contraseña no es correcta.')).toBeVisible();
+      await expect(entrada('Contraseña maestra')).toHaveValue('');
+    }
+    await expect(
+      page.getByText(/Demasiados intentos\. Podés volver a probar en \d+ s\./),
+    ).toBeVisible();
+    await entrada('Contraseña maestra').fill(CONTRASENA);
+    await expect(page.getByRole('button', { name: 'Desbloquear' })).toBeDisabled();
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);

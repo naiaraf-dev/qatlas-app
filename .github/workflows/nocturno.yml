@@ -1,0 +1,109 @@
+name: E2E nocturno
+
+# La suite completa tres veces seguidas (--repeat-each=3), con failOnFlakyTests: un test que falla una
+# vez y pasa al reintentar hace fallar la corrida. Reemplaza las «3 corridas seguidas» locales
+# (ADR 044). Si falla, abre un issue (o comenta en el abierto), solo con el commit y el enlace a la
+# corrida: nada de la máquina.
+#
+# Las acciones están fijadas por hash de commit (especificación 3.11).
+
+on:
+  schedule:
+    # 06:00 UTC: de madrugada en Argentina.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      rama:
+        description: Rama a probar
+        type: choice
+        options: [develop, main]
+        default: develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-nocturno
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Nocturno ${{ matrix.numero }}/5 · ${{ matrix.nombre }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { numero: 1, nombre: 'rápidos' }
+          - { numero: 2, nombre: 'Bóveda: inactividad' }
+          - { numero: 3, nombre: 'contención: solo lectura' }
+          - { numero: 4, nombre: 'ejecuciones y escaneos' }
+          - { numero: 5, nombre: 'OCR y evidencias' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.rama || 'develop' }}
+      - uses: ./.github/actions/preparar-e2e
+      - name: Tests E2E de la parte, tres veces
+        env:
+          PARTE: ${{ matrix.numero }}
+        run: |
+          inicio=$SECONDS
+          set +e
+          xvfb-run -a npm run test:e2e:parte -- "$PARTE" --repeat-each=3
+          estado=$?
+          set -e
+          echo "Duración de la parte $PARTE (x3): $((SECONDS - inicio)) s" >> "$GITHUB_STEP_SUMMARY"
+          exit $estado
+      - run: npm run navegador:verificar
+      - name: Procesos y memoria de cada archivo
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat test-results/procesos-y-memoria.txt 2>/dev/null || echo 'sin registro'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # Datos ficticios solamente (ver ci.yml). Este job no recibe secretos del repositorio.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: nocturno-resultados-${{ matrix.numero }}
+          path: |
+            blob-report/
+            test-results/
+          retention-days: 14
+
+  aviso:
+    name: Aviso de falla
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: e2e
+    if: ${{ failure() }}
+    permissions:
+      issues: write
+    steps:
+      - name: Abrir o actualizar el issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RAMA: ${{ inputs.rama || 'develop' }}
+          COMMIT: ${{ github.sha }}
+          CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create e2e-nocturno --color B60205 \
+            --description 'Falla del E2E nocturno' 2>/dev/null || true
+          cuerpo="El E2E nocturno falló en \`$RAMA\` (commit $COMMIT).
+
+          Corrida: $CORRIDA
+
+          Puede ser un test que falla siempre o uno inestable (falló una vez y pasó al reintentar). El
+          resumen de cada parte y sus artifacts están en la corrida."
+          abierto=$(gh issue list --label e2e-nocturno --state open --json number --jq '.[0].number')
+          if [ -n "$abierto" ]; then
+            gh issue comment "$abierto" --body "$cuerpo"
+          else
+            gh issue create --title 'E2E nocturno: falla' --label e2e-nocturno --body "$cuerpo"
+          fi

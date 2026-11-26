@@ -158,62 +158,74 @@ function leerNetLog(
   return { intentados, conCredencial };
 }
 
-test('Playwright no apaga nada que la app no apague: un solo --disable-features efectivo', async () => {
-  const navegador = await chromium.launch(opcionesChromium());
-  try {
-    // La línea de comandos real del navegador, como la muestra Chromium. La CDP no la da sin
-    // `--enable-automation`, que Playwright ya no pasa.
-    const pagina = await (await navegador.newContext()).newPage();
-    await pagina.goto('chrome://version');
-    const linea = ((await pagina.locator('#command_line').textContent()) ?? '').split(/\s+/);
-    const listas = linea
-      .filter((a) => a.startsWith('--disable-features='))
-      .map((a) => a.slice('--disable-features='.length).split(','));
-    // Chromium usa el último. Debe incluir todo lo que pide Playwright (el primero) y lo de QAtlas.
-    const efectiva = listas.at(-1) ?? [];
-    const pedidas = new Set([...listas.flat(), ...FUNCIONES_APAGADAS_POR_QATLAS]);
-    expect([...pedidas].filter((f) => !efectiva.includes(f))).toEqual([]);
-    // Control: Playwright sí pone el suyo, así que la comparación prueba algo.
-    expect(listas.length).toBeGreaterThan(1);
-    expect(listas[0]).toContain('AimEnabled');
-  } finally {
-    await navegador.close();
-  }
-});
+test(
+  'Playwright no apaga nada que la app no apague: un solo --disable-features efectivo',
+  { tag: ['@seguridad'] },
+  async () => {
+    const navegador = await chromium.launch(opcionesChromium());
+    try {
+      // La línea de comandos real del navegador, como la muestra Chromium. La CDP no la da sin
+      // `--enable-automation`, que Playwright ya no pasa.
+      const pagina = await (await navegador.newContext()).newPage();
+      await pagina.goto('chrome://version');
+      const linea = ((await pagina.locator('#command_line').textContent()) ?? '').split(/\s+/);
+      const listas = linea
+        .filter((a) => a.startsWith('--disable-features='))
+        .map((a) => a.slice('--disable-features='.length).split(','));
+      // Chromium usa el último. Debe incluir todo lo que pide Playwright (el primero) y lo de QAtlas.
+      const efectiva = listas.at(-1) ?? [];
+      const pedidas = new Set([...listas.flat(), ...FUNCIONES_APAGADAS_POR_QATLAS]);
+      expect([...pedidas].filter((f) => !efectiva.includes(f))).toEqual([]);
+      // Control: Playwright sí pone el suyo, así que la comparación prueba algo.
+      expect(listas.length).toBeGreaterThan(1);
+      expect(listas[0]).toContain('AimEnabled');
+    } finally {
+      await navegador.close();
+    }
+  },
+);
 
-test('sin ruido: Chromium no intenta nada más que lo conocido, y el monitor lo muestra todo', async () => {
-  // ListAccounts reintenta a los 1, 4 y 12 segundos: la espera los cubre.
-  const { registradas, intentados, conCredencial } = await observar(15_000);
-  // El sitio, con su regla; nada de Google ni de nadie más con otra regla.
-  const internos = registradas.filter((r) => r.regla === 'servicio-interno-navegador');
-  expect([...new Set(delSitio(registradas).map((r) => r.destino))]).toEqual([
-    `${HOST_SITIO}:${sitio.puerto}`,
-  ]);
-  expect(internos.every((r) => !r.permitida)).toBe(true);
-  const hostsInternos = new Set(internos.map((r) => r.destino.replace(/:\d+$/, '')));
-  expect([...hostsInternos].filter((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toEqual([]);
-  // Transparencia: todo lo que Chromium intentó está en el monitor (lo del sitio o como interno).
-  const enElMonitor = new Set(registradas.map((r) => r.destino.replace(/:\d+$/, '')));
-  expect([...intentados].filter((h) => !enElMonitor.has(h))).toEqual([]);
-  // Lo que Chromium intentó: el sitio y, como mucho, los conocidos, siempre sin credencial.
-  const otros = [...intentados].filter((h) => h !== HOST_SITIO);
-  expect(otros.filter((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toEqual([]);
-  expect([...conCredencial].filter((h) => h !== HOST_SITIO)).toEqual([]);
-  // Control: el net-log ve los túneles al sitio con credencial (si no, la última aserción no prueba nada).
-  expect(intentados.has(HOST_SITIO)).toBe(true);
-});
+test(
+  'sin ruido: Chromium no intenta nada más que lo conocido, y el monitor lo muestra todo',
+  { tag: ['@seguridad'] },
+  async () => {
+    // ListAccounts reintenta a los 1, 4 y 12 segundos: la espera los cubre.
+    const { registradas, intentados, conCredencial } = await observar(15_000);
+    // El sitio, con su regla; nada de Google ni de nadie más con otra regla.
+    const internos = registradas.filter((r) => r.regla === 'servicio-interno-navegador');
+    expect([...new Set(delSitio(registradas).map((r) => r.destino))]).toEqual([
+      `${HOST_SITIO}:${sitio.puerto}`,
+    ]);
+    expect(internos.every((r) => !r.permitida)).toBe(true);
+    const hostsInternos = new Set(internos.map((r) => r.destino.replace(/:\d+$/, '')));
+    expect([...hostsInternos].filter((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toEqual([]);
+    // Transparencia: todo lo que Chromium intentó está en el monitor (lo del sitio o como interno).
+    const enElMonitor = new Set(registradas.map((r) => r.destino.replace(/:\d+$/, '')));
+    expect([...intentados].filter((h) => !enElMonitor.has(h))).toEqual([]);
+    // Lo que Chromium intentó: el sitio y, como mucho, los conocidos, siempre sin credencial.
+    const otros = [...intentados].filter((h) => h !== HOST_SITIO);
+    expect(otros.filter((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toEqual([]);
+    expect([...conCredencial].filter((h) => h !== HOST_SITIO)).toEqual([]);
+    // Control: el net-log ve los túneles al sitio con credencial (si no, la última aserción no prueba nada).
+    expect(intentados.has(HOST_SITIO)).toBe(true);
+  },
+);
 
-test('control: con los servicios que Playwright apaga encendidos, el net-log los ve', async () => {
-  const { intentados } = await observar(3_000, {
-    control: { funcionesEncendidas: ['AimEnabled', 'NetworkTimeServiceQuerying'] },
-  });
-  const deGoogle = [...intentados].filter((h) => DE_GOOGLE.test(h));
-  expect(deGoogle).toEqual(expect.arrayContaining([expect.stringMatching(/google\.com$/)]));
-  expect(deGoogle.some((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toBe(true);
-  // Control de la expresión: reconoce los dominios de Google y no el sitio.
-  expect(DE_GOOGLE.test('www.google.com')).toBe(true);
-  expect(DE_GOOGLE.test(HOST_SITIO)).toBe(false);
-});
+test(
+  'control: con los servicios que Playwright apaga encendidos, el net-log los ve',
+  { tag: ['@seguridad'] },
+  async () => {
+    const { intentados } = await observar(3_000, {
+      control: { funcionesEncendidas: ['AimEnabled', 'NetworkTimeServiceQuerying'] },
+    });
+    const deGoogle = [...intentados].filter((h) => DE_GOOGLE.test(h));
+    expect(deGoogle).toEqual(expect.arrayContaining([expect.stringMatching(/google\.com$/)]));
+    expect(deGoogle.some((h) => !CONOCIDOS_SIN_CREDENCIAL.has(h))).toBe(true);
+    // Control de la expresión: reconoce los dominios de Google y no el sitio.
+    expect(DE_GOOGLE.test('www.google.com')).toBe(true);
+    expect(DE_GOOGLE.test(HOST_SITIO)).toBe(false);
+  },
+);
 
 // Último: corre después de los afterAll del archivo (e2e/procesos.ts).
 vigilarProcesos(test, import.meta.filename);
