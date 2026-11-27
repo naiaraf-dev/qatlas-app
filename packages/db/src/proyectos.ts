@@ -66,7 +66,12 @@ export type AccionAuditoria =
   | 'hallazgo.reabrir'
   | 'hallazgo.severidad'
   | 'hallazgo.resolver-lote'
-  | 'hallazgo.fusionar';
+  | 'hallazgo.fusionar'
+  | 'hallazgo.reportar'
+  // Reportes (semana 9a, ADR 048): solo IDs, nombres de campos y cantidades; el formato es un nombre fijo.
+  | 'reporte.crear'
+  | 'reporte.editar'
+  | 'reporte.exportar';
 
 const orm = (base: BaseCifrada) => drizzle(base);
 
@@ -209,7 +214,7 @@ export function registrarAuditoria(
   base: BaseCifrada,
   entrada: {
     accion: AccionAuditoria;
-    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion' | 'hallazgo';
+    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion' | 'hallazgo' | 'reporte';
     entidadId: string;
     detalle?: DetalleAuditoria;
   },
