@@ -3,8 +3,11 @@
  * en un equipo sin GPU, una página que necesita WebGL falla. Esa falla no es del sitio: el escaneo la
  * informa como cobertura no alcanzada (`noRecorridosSinWebGL`), no como hallazgo.
  *
- * El equipo sin GPU se simula con `control: { sinWebGL: true }` (`--disable-3d-apis`), igual en Windows y
- * en Linux. El caso es `/webgl` del sandbox, que dibuja como una biblioteca de gráficos: canvas suelto y
+ * Los dos lados se fijan a propósito, para que el resultado no dependa de la máquina:
+ * - Sin WebGL: `control: { sinWebGL: true }` (`--disable-3d-apis`).
+ * - Con WebGL: `control: { conSwiftshader: true }`, WebGL por software. El runner de Linux del CI no tiene
+ *   GPU, y sin swiftshader no tiene WebGL; en Windows lo daba la placa de video. Solo en este test: la app
+ *   nunca lo usa (ADR 041). El caso es `/webgl` del sandbox, que dibuja como una biblioteca de gráficos: canvas suelto y
  * una excepción si no hay WebGL.
  *
  * Controles:
@@ -68,11 +71,12 @@ test.afterAll(async () => {
   await sitio.cerrar();
 });
 
+/** `sinWebGL`: el equipo sin GPU. Si no, WebGL por software, encendido a propósito. */
 const abrir = (sinWebGL: boolean): Promise<Browser> =>
   chromium.launch(
     opcionesChromium({
       proxy: { servidor: `http://127.0.0.1:${proxy.puerto}`, ...CREDENCIAL },
-      ...(sinWebGL ? { control: { sinWebGL: true } } : {}),
+      control: sinWebGL ? { sinWebGL: true } : { conSwiftshader: true },
     }),
   );
 

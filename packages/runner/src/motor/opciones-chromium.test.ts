@@ -84,7 +84,10 @@ describe('opcionesChromium', () => {
     expect(opcionesChromium({ headless: false }).ignoreDefaultArgs).toEqual([
       '--enable-unsafe-swiftshader',
     ]);
-    expect(opcionesChromium({ control: { conSwiftshader: true } }).ignoreDefaultArgs).toEqual([]);
+    const conSwiftshader = opcionesChromium({ control: { conSwiftshader: true } });
+    expect(conSwiftshader.ignoreDefaultArgs).toEqual([]);
+    expect(conSwiftshader.args).toContain('--use-angle=swiftshader');
+    expect(opcionesChromium().args).not.toContain('--use-angle=swiftshader');
   });
 
   it('lo que Playwright 1.65 dejó de apagar, lo apaga QAtlas', () => {

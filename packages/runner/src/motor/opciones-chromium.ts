@@ -110,7 +110,11 @@ export interface OpcionesChromium {
     funcionesEncendidas?: readonly string[];
     /** Sin WebGL en ningún equipo (`--disable-3d-apis`): un equipo sin GPU, para el caso del sandbox. */
     sinWebGL?: boolean;
-    /** Con los argumentos de `ARGUMENTOS_SACADOS`: muestra que Playwright los pasa. */
+    /**
+     * Con WebGL por software, encendido a propósito: los argumentos de `ARGUMENTOS_SACADOS` y
+     * `--use-angle=swiftshader`. Da WebGL igual con GPU y sin ella (el CI no tiene), para el control
+     * positivo de WebGL, y muestra que Playwright pasa el flag. Nunca en la app.
+     */
     conSwiftshader?: boolean;
   };
 }
@@ -165,6 +169,7 @@ export function opcionesChromium(opciones: OpcionesChromium = {}): OpcionesDeLan
       ...base,
       ...argumentos,
       ...(control.sinWebGL ? ['--disable-3d-apis'] : []),
+      ...(control.conSwiftshader ? ['--use-angle=swiftshader'] : []),
       `--disable-features=${funciones.join(',')}`,
     ],
     ignoreDefaultArgs: control.conSwiftshader ? [] : [...ARGUMENTOS_SACADOS],

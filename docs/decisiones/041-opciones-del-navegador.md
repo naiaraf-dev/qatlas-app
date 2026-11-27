@@ -85,9 +85,11 @@ Playwright 1.65 pasa `--enable-unsafe-swiftshader`, que habilita WebGL por softw
 Chromium lo considera inseguro con contenido no confiable, y el sitio probado lo es. **`opcionesChromium` lo
 saca con `ignoreDefaultArgs`** (`ARGUMENTOS_SACADOS`).
 
-- **Qué se pierde:** en un equipo sin GPU, una página que necesita WebGL puede fallar. Chromium 159 todavía
-  usa el respaldo por software sin el flag, con un aviso de que está obsoleto; cuando lo deje de usar, ese
-  equipo se queda sin WebGL. En Windows, sin GPU, usa el renderizador por software del sistema.
+- **Qué se pierde:** **en un equipo sin GPU, las páginas con WebGL quedan como cobertura no alcanzada.**
+  Así es el runner de Linux del CI: sin el flag no hay WebGL. En Windows con GPU, WebGL usa la placa de
+  video; con `--disable-gpu` usa el renderizador por software del sistema (WARP). Con
+  `--use-angle=swiftshader` y sin el flag, Chromium 159 todavía da WebGL con un aviso de que está obsoleto:
+  no hay que contar con eso.
 - **Cómo se informa:** si un error de la página nombra WebGL, el crawler averigua una vez si el navegador
   tiene WebGL, con un canvas en su mundo aislado que la página no ve (`EXPRESION_HAY_WEBGL`). Si no lo
   tiene, esas excepciones y `console.error` no son hallazgos: la página cuenta en `noRecorridosSinWebGL` y
@@ -95,9 +97,13 @@ saca con `ignoreDefaultArgs`** (`ARGUMENTOS_SACADOS`).
   navegador de pruebas». Con WebGL disponible, un error de WebGL es del sitio y se informa.
 - **Límite:** una página que se queda sin WebGL sin tirar un error que lo nombre no se cuenta. Detectar
   todo pedido de WebGL necesitaría código en el mundo de la página, que la página vería (ADR 021).
-- **Caso del sandbox:** `/webgl` dibuja como una biblioteca de gráficos y tira una excepción sin WebGL. El
-  equipo sin GPU se simula con `control: { sinWebGL: true }` (`--disable-3d-apis`), igual en los dos
-  sistemas.
+- **Caso del sandbox:** `/webgl` dibuja como una biblioteca de gráficos y tira una excepción sin WebGL. Los
+  dos lados del test se fijan a propósito, para que den lo mismo con GPU y sin ella:
+  - el equipo sin GPU, con `control: { sinWebGL: true }` (`--disable-3d-apis`);
+  - el control positivo, con `control: { conSwiftshader: true }`: devuelve `--enable-unsafe-swiftshader` y
+    agrega `--use-angle=swiftshader`. **El CI usa conSwiftshader solo para ese control:** su runner no
+    tiene GPU, y sin swiftshader el control «con WebGL» no podría pasar (pasaba en Windows por la placa de
+    video). La app nunca lo usa; `security-tests/navegador-verificado` lo verifica.
 
 ## Verificación
 
