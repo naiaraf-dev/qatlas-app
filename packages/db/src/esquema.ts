@@ -337,3 +337,48 @@ export interface DetalleAuditoria {
   /** Solo cantidades: cuántas evidencias se eliminaron o se conservaron. */
   cantidad?: number;
 }
+
+/** Un reporte de bug (semana 9a, ADR 048). Título, pasos, esperado, obtenido y entorno, cifrados. */
+export const reporteBug = sqliteTable('reporte_bug', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  severidad: text('severidad').notNull(),
+  estado: text('estado').$type<'borrador' | 'exportado'>().notNull(),
+  /** JSON con lo que se ve del reporte, cifrado con la clave del proyecto. */
+  contenidoCifrado: blob('contenido_cifrado', { mode: 'buffer' }).notNull(),
+  /** Cuántos secretos encontró el detector en el texto del reporte (EVI-04): la exportación lo avisa. */
+  alertasDetector: integer('alertas_detector').notNull().default(0),
+});
+
+export const reporteHallazgo = sqliteTable('reporte_hallazgo', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  reporteId: text('reporte_id')
+    .notNull()
+    .references(() => reporteBug.id),
+  hallazgoId: text('hallazgo_id')
+    .notNull()
+    .references(() => hallazgo.id),
+});
+
+/** Cada exportación: qué, cuándo y en qué formato (3.9, paso 6). Nunca la ruta del destino. */
+export const exportacion = sqliteTable('exportacion', {
+  ...comunes,
+  proyectoId: text('proyecto_id')
+    .notNull()
+    .references(() => proyecto.id),
+  reporteId: text('reporte_id')
+    .notNull()
+    .references(() => reporteBug.id),
+  formato: text('formato').notNull(),
+  nivel: text('nivel').notNull(),
+  evidenciasIncluidas: text('evidencias_incluidas', { mode: 'json' }).$type<string[]>().notNull(),
+  destinoSincronizado: integer('destino_sincronizado', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  alertasConfirmadas: integer('alertas_confirmadas', { mode: 'boolean' }).notNull().default(false),
+});

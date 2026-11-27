@@ -46,6 +46,10 @@ const CREDENCIAL = {
 
 /** Lo inverso de la migración 6, solo para fabricar la copia vieja. */
 const AL_ESQUEMA_5 = `
+  -- Lo de la versión 11 (semana 9a, reportes).
+  DROP TABLE exportacion;
+  DROP TABLE reporte_hallazgo;
+  DROP TABLE reporte_bug;
   -- Lo de la versión 10 (semana 8, huella y estados).
   DROP INDEX hallazgo_huella;
   DROP INDEX hallazgo_proyecto_estado;
