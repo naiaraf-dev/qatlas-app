@@ -194,6 +194,17 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Lógica de seguridad en funciones puras (sin importar `electron`) para poder probarla con Vitest.
 - Commits chicos y descriptivos.
 
+## Skills del proyecto
+
+El proceso está escrito en `.claude/skills/`. Ordenan en pasos las reglas de este archivo; si alguna
+contradice a `CLAUDE.md`, gana `CLAUDE.md`.
+
+- `semana-qatlas`: al empezar una semana, un módulo o una funcionalidad (rama `feat/`), hasta el resumen
+  del PR.
+- `diagnostico-ci`: cuando falla el CI, un test falla o pasa «a veces», o un error no se reproduce en local.
+- `revision-dependencias`: antes de agregar o actualizar un paquete, una acción de GitHub o el navegador,
+  con un PR de Dependabot o con una alerta de seguridad de dependencias.
+
 ## Antes de dar una tarea por terminada
 
 ```bash
