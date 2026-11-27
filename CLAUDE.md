@@ -85,6 +85,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Todo navegador de pruebas, de la app, de un test o de un script, se lanza con `opcionesChromium`
   (`opciones-chromium.ts`): un solo `--disable-features`, porque Chromium se queda con el último (ADR 041). Un
   test busca su conexión por destino, nunca «la última».
+- El navegador de pruebas no liga sockets fuera de loopback: `e2e/webrtc-sin-escucha.e2e.ts` lo mira por PID (ADR 045).
+  El aviso del firewall en un control positivo (`sinArgumentosDeRed`) es esperable: «Cancelar».
 - Sin `--enable-unsafe-swiftshader` (`ignoreDefaultArgs`): una página que falla por no tener WebGL es cobertura
   no alcanzada, no un hallazgo (ADR 041). Al subir Playwright, revisar qué apaga y qué pasa de nuevo, y registrar
   el hash de su Chromium (ADR 020).
@@ -97,12 +99,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   va) más el resto de las dependencias, y empaquetar Chromium en `resources/navegadores`, firmado
   (ADR 020). En Linux, el sandbox de Chromium necesita configuración (en CI se usa `sysctl`): si algún día
   se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
+  Como segunda capa de la superficie de entrada (ADR 045): una regla de firewall de entrada que bloquee
+  el Chromium empaquetado, creada por el instalador, y en Linux el network namespace sin salida de abajo.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a
   nivel del sistema operativo (ADR 017).
 - Pendiente (sin semana): confiar en el certificado de un sistema interno por su huella exacta, como opción por
   proyecto, explícita y auditada. Nunca «aceptar cualquier certificado».
 - Pendiente: correr el E2E del CI de Linux dentro de un network namespace sin salida, para probar a nivel
-  del sistema operativo que la app no abre conexiones no autorizadas (ADR 016).
+  del sistema operativo que la app no abre conexiones no autorizadas (ADR 016), ni acepta conexiones
+  entrantes (ADR 045).
 
 ## Stack (no cambiar sin consultar)
 

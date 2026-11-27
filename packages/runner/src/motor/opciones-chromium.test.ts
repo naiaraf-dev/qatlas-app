@@ -51,6 +51,9 @@ describe('opcionesChromium', () => {
     for (const argumento of ['--disable-features=Algo', '--enable-features=AimEnabled']) {
       expect(() => opcionesChromium({ argumentos: [argumento] })).toThrow('funcionesApagadas');
     }
+    expect(() =>
+      opcionesChromium({ argumentos: ['--force-fieldtrials=WebRTC-IPv6Default/Enabled/'] }),
+    ).toThrow('--force-fieldtrials');
     // Control: otros argumentos pasan.
     expect(opcionesChromium({ argumentos: ['--enable-quic'] }).args).toContain('--enable-quic');
   });
@@ -88,6 +91,18 @@ describe('opcionesChromium', () => {
     expect(conSwiftshader.ignoreDefaultArgs).toEqual([]);
     expect(conSwiftshader.args).toContain('--use-angle=swiftshader');
     expect(opcionesChromium().args).not.toContain('--use-angle=swiftshader');
+  });
+
+  it('WebRTC sin sockets en la red: sin el responder mDNS y sin el sondeo IPv6 (ADR 045)', () => {
+    const { args } = opcionesChromium();
+    expect(funcionesEfectivas(args)).toContain('WebRtcHideLocalIpsWithMdns');
+    expect(args.filter((a) => a.startsWith('--force-fieldtrials'))).toEqual([
+      '--force-fieldtrials=WebRTC-IPv6Default/Disabled/',
+    ]);
+    // Control: sin los argumentos de red, el sondeo vuelve.
+    expect(opcionesChromium({ control: { sinArgumentosDeRed: true } }).args).not.toContain(
+      '--force-fieldtrials=WebRTC-IPv6Default/Disabled/',
+    );
   });
 
   it('lo que Playwright 1.65 dejó de apagar, lo apaga QAtlas', () => {
