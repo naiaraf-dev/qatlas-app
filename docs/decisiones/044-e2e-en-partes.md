@@ -73,9 +73,56 @@ del sistema entero, con lo demás que estuviera abierto.
 En el CI, en paralelo, la duración la marca la parte 4, más la preparación de cada job (instalar, build y
 Chromium). La duración real de cada parte queda en el resumen de su job desde la primera corrida.
 
+## Caché de Electron y del navegador (agregado el 2026-11-27)
+
+Cada una de las cinco partes, y cada job del nocturno, descargaba el binario de Electron y el Chromium de
+Playwright; una descarga falló con un 504 de GitHub. La acción `preparar-e2e` usa `actions/cache` (fijada
+por SHA, con `restore` y `save` por separado) para:
+
+- la caché de `@electron/get` (`~/.cache/electron`, con `electron_config_cache`), con la clave
+  `electron-<sistema>-<arquitectura>-<versión exacta>`;
+- la carpeta de la revisión de Chromium (`~/.cache/ms-playwright/chromium-<revisión>`), con la clave
+  `chromium-<sistema>-<arquitectura>-playwright-<versión exacta>-<revisión>`. Solo esa carpeta: es la que
+  tiene el hash registrado (ADR 020).
+
+Las claves son exactas, sin `restore-keys`: una versión nueva no restaura la anterior.
+
+### Las verificaciones no cambian
+
+- **Electron:** antes del script de instalación, `scripts/verificar-cache-electron.mjs` compara cada archivo
+  de la caché que figura en `checksums.json` del paquete `electron` (que llega por el lockfile, con su
+  integridad) con su SHA-256. Si uno no coincide, falla y no se instala nada. `@electron/get` también lo
+  compara, pero ante una diferencia vuelve a descargar sin avisar; acá una caché alterada es un incidente y
+  frena el job.
+- **Chromium:** `npm run navegador:verificar` compara la carpeta con el hash registrado, venga de la
+  descarga o de la caché. Ya corría antes de los tests; ahora también inmediatamente después de instalar.
+- **Qué se guarda:** si la clave no estaba, se guarda inmediatamente después de verificar, antes del build y de
+  cualquier test. Así se guarda lo verificado, no lo que haya quedado al final del job.
+
+### Riesgo de envenenamiento de la caché, y por qué es aceptable
+
+Quien pueda escribir una entrada de la caché podría dejar un Electron o un Chromium alterados para los
+jobs siguientes.
+
+- **Quién puede escribir:** GitHub separa las cachés por rama. Un PR, aunque venga de un fork, escribe en el
+  ámbito de su propia rama y puede leer las de la rama base, pero no escribir en ellas. Una entrada de
+  `develop` o `main` solo la escribe un job de esa rama. Las entradas no se pisan: una clave existente
+  no se vuelve a guardar.
+- **Qué pasa si igual llega una alterada:** no se usa. El binario de Electron se compara con
+  `checksums.json`, que no viene de la caché sino del lockfile, y Chromium con el hash del repo. Para que
+  pase, habría que alterar a la vez la caché y lo versionado, y lo versionado se revisa en el PR.
+- **Lo que no cubre:** es la misma confianza en el primer uso de la ADR 020. Si la primera descarga ya
+  hubiera sido alterada, el hash registrado sería el alterado; la caché no cambia eso.
+- **Si falla una verificación:** el job se frena. Hay que borrar esa entrada (Actions → Caches) y averiguar
+  cómo llegó ahí antes de volver a correr.
+
 ## Verificación
 
 - `security-tests/e2e-etiquetas.test.ts`: etiquetas, cada test en una sola parte, y las partes del CI y
   del nocturno iguales a las de `scripts/e2e-partes.mjs`.
 - `security-tests/e2e-procesos.test.ts`: la vigilancia al final de cada archivo, con control positivo.
+- `security-tests/cache-ci.test.ts`: una caché de Electron o de Chromium alterada hace fallar la
+  verificación, con control positivo (sin alterar, pasa).
+- `security-tests/acciones-ci.test.ts`: toda acción de terceros fijada por SHA; la caché, con clave exacta,
+  verificada antes de usarse y guardada recién después de verificar.
 - Los workflows se validaron contra el esquema de GitHub Actions.

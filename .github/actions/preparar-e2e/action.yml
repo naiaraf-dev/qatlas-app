@@ -1,7 +1,8 @@
 name: Preparar los E2E
 description: >-
   Node, dependencias, el binario de Electron, el build y el Chromium verificado, con el sandbox de
-  Chromium habilitado. La comparten las partes del E2E del CI y del job nocturno (ADR 044).
+  Chromium habilitado. La comparten las partes del E2E del CI y del job nocturno. Electron y
+  Chromium vienen de la caché si están, y se verifican igual (ADR 044).
 
 runs:
   using: composite
@@ -13,15 +14,62 @@ runs:
     # .npmrc tiene ignore-scripts=true: ningún paquete ejecuta código al instalarse.
     - run: npm ci
       shell: bash
+    # Las claves de la caché, por versión exacta: las del lockfile, ya instaladas.
+    - name: Versiones de Electron y de Chromium
+      id: versiones
+      shell: bash
+      run: |
+        echo "electron=$(node -p "require('./node_modules/electron/package.json').version")" >> "$GITHUB_OUTPUT"
+        echo "playwright=$(node -p "require('./node_modules/playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+        echo "chromium=$(node -p "require('./node_modules/playwright-core/browsers.json').browsers.find((b) => b.name === 'chromium').revision")" >> "$GITHUB_OUTPUT"
+        echo "electron_config_cache=$HOME/.cache/electron" >> "$GITHUB_ENV"
+
+    # Electron: la caché de @electron/get. Se verifica contra checksums.json antes de instalar.
+    - name: Caché de Electron
+      id: cache-electron
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/electron
+        key: electron-${{ runner.os }}-${{ runner.arch }}-${{ steps.versiones.outputs.electron }}
+    - name: Verificar la caché de Electron
+      run: node scripts/verificar-cache-electron.mjs
+      shell: bash
     - name: Scripts de instalación permitidos (binario de Electron)
       run: npm run setup:native
       shell: bash
+    # Lo que se guarda es lo verificado, antes de correr nada: no lo que quede al final del job.
+    - name: Guardar la caché de Electron
+      if: steps.cache-electron.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/electron
+        key: ${{ steps.cache-electron.outputs.cache-primary-key }}
+
     - run: npm run build
       shell: bash
-    # Versión exacta de Playwright, y el hash se compara con la primera descarga (ADR 020).
+
+    # Chromium: solo la carpeta de la revisión, que tiene su hash registrado (ADR 020).
+    - name: Caché del navegador de pruebas
+      id: cache-chromium
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright/chromium-${{ steps.versiones.outputs.chromium }}
+        key: chromium-${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.versiones.outputs.playwright }}-${{ steps.versiones.outputs.chromium }}
+    # Versión exacta de Playwright. Con la caché, no descarga el navegador; las dependencias del sistema sí.
     - name: Navegador de pruebas
       run: npx playwright install --with-deps --no-shell chromium
       shell: bash
+    # El hash se compara con la primera descarga, venga de la descarga o de la caché (ADR 020 y 044).
+    - name: Verificar el navegador de pruebas
+      run: npm run navegador:verificar
+      shell: bash
+    - name: Guardar la caché del navegador de pruebas
+      if: steps.cache-chromium.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright/chromium-${{ steps.versiones.outputs.chromium }}
+        key: ${{ steps.cache-chromium.outputs.cache-primary-key }}
+
     # Ubuntu 24.04 restringe los espacios de nombres sin privilegios, y el sandbox de Chromium los
     # necesita. El navegador de pruebas nunca corre con --no-sandbox (ADR 017).
     - name: Sandbox de Chromium
