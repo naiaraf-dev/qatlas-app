@@ -144,6 +144,8 @@ test.describe('WebRTC', () => {
       const directo = await chromium.launch(
         opcionesChromium({
           funcionesApagadas: [FLAGS_SIN_MDNS],
+          // Sin los frenos, a propósito: en Windows puede aparecer el aviso del firewall; se
+          // responde «Cancelar» (CONTRIBUTING, ADR 045).
           control: { sinArgumentosDeRed: true },
         }),
       );
@@ -209,6 +211,8 @@ test.describe('QUIC / HTTP3', () => {
     const directo = await chromium.launch(
       opcionesChromium({
         argumentos: ['--enable-quic', forzar(), `--host-resolver-rules=MAP ${HOST_QUIC} 127.0.0.1`],
+        // Sin los frenos, a propósito: en Windows puede aparecer el aviso del firewall; se
+        // responde «Cancelar» (CONTRIBUTING, ADR 045).
         control: { sinArgumentosDeRed: true },
       }),
     );

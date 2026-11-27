@@ -47,6 +47,13 @@ git rm --cached -r -q . && git reset --hard
 
    La suite completa la corre el CI, en cinco partes paralelas, y el job nocturno la repite tres veces.
 
+   **Aviso del firewall de Windows:** durante el E2E puede aparecer «Google Chrome for Testing quiere
+   aceptar conexiones entrantes». Es esperable: lo provocan los controles positivos que lanzan Chromium sin
+   los argumentos de red a propósito (`control: { sinArgumentosDeRed: true }`, en `fugas-udp-tls` y
+   `webrtc-sin-escucha`), para mostrar que esos frenos hacen falta. **Se responde «Cancelar»**: los tests no
+   necesitan conexiones entrantes, y permitirlas dejaría una regla abierta en el equipo. Si el aviso
+   aparece con un test que no es un control, es un problema: anotar cuál y avisar (ADR 045).
+
 3. Abrir el PR **contra `develop`** y completar la
    [plantilla](.github/pull_request_template.md): el checklist ítem por ítem y la tabla de dependencias
    nuevas. Cada dependencia nueva requiere justificación (especificación, sección 3.11).
