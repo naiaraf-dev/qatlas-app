@@ -12,6 +12,6 @@
     "dev": "node src/iniciar.mjs"
   },
   "devDependencies": {
-    "@fontsource-variable/jetbrains-mono": "^5.3.0"
+    "@fontsource-variable/jetbrains-mono": "5.3.0"
   }
 }

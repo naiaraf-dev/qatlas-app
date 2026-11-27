@@ -12,6 +12,6 @@
     "@qatlas/shared": "*",
     "axe-core": "4.14.0",
     "playwright-core": "1.65.1",
-    "zod": "^4.6.7"
+    "zod": "4.6.7"
   }
 }
