@@ -51,8 +51,10 @@ git rm --cached -r -q . && git reset --hard
    aceptar conexiones entrantes». Es esperable: lo provocan los controles positivos que lanzan Chromium sin
    los argumentos de red a propósito (`control: { sinArgumentosDeRed: true }`, en `fugas-udp-tls` y
    `webrtc-sin-escucha`), para mostrar que esos frenos hacen falta. **Se responde «Cancelar»**: los tests no
-   necesitan conexiones entrantes, y permitirlas dejaría una regla abierta en el equipo. Si el aviso
-   aparece con un test que no es un control, es un problema: anotar cuál y avisar (ADR 045).
+   necesitan conexiones entrantes, y permitirlas dejaría una regla abierta en el equipo. Hasta la semana 10
+   también puede aparecer con un test que abre una página con WebRTC (`/webrtc` del sandbox): es la brecha
+   conocida de la ADR 045, y se responde igual. Si aparece con un test que no usa WebRTC ni es un control,
+   es un problema: anotar cuál y avisar.
 
 3. Abrir el PR **contra `develop`** y completar la
    [plantilla](.github/pull_request_template.md): el checklist ítem por ítem y la tabla de dependencias

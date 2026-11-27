@@ -8,6 +8,10 @@
  * el navegador (`e2e/arbol-procesos.ts`). Los sockets se miran varias veces mientras la página negocia,
  * porque los de WebRTC pueden durar poco.
  *
+ * Hoy queda una brecha conocida: un UDP sin conectar en 0.0.0.0 mientras la página usa WebRTC. El test de
+ * cierre la reproduce con `test.fail` (ver abajo), y otro test exige que no vuelva nada de lo que ya se
+ * cerró.
+ *
  * Control positivo: sin los argumentos de red (`sinArgumentosDeRed`), el mismo test sí los ve. Ese
  * control abre sockets a propósito: en Windows puede aparecer el aviso del firewall, que se responde
  * «Cancelar» (CONTRIBUTING).
@@ -98,10 +102,41 @@ async function observar(extra: Pick<OpcionesChromium, 'control'> = {}): Promise<
   return { sockets: [...vistos.values()], procesosVistos: pids.size };
 }
 
+/**
+ * Lo que ADR 045 ya cerró, si vuelve: todo socket fuera de loopback salvo un UDP en 0.0.0.0 en un puerto
+ * efímero, que es la brecha conocida.
+ */
+const yaCerrados = (sockets: readonly Socket[]): Socket[] =>
+  fueraDeLoopback(sockets).filter(
+    (s) => s.protocolo === 'TCP' || s.direccion !== '0.0.0.0' || s.puerto === 5353,
+  );
+
 test(
-  'el navegador de la app no escucha fuera de loopback mientras una página usa WebRTC',
+  'lo que se cerró sigue cerrado: ni TCP en escucha, ni el 5353, ni ::, ni una IP de la red',
   { tag: ['@seguridad'] },
   async () => {
+    const { sockets, procesosVistos } = await observar();
+    expect(procesosVistos).toBeGreaterThan(1);
+    expect(yaCerrados(sockets).map(detallar)).toEqual([]);
+    expect(sockets.filter((s) => s.protocolo === 'TCP').map(describir)).toEqual([]);
+  },
+);
+
+/*
+ * Brecha conocida (ADR 045, E-46). Mientras una página usa WebRTC, Chromium liga un UDP sin conectar en
+ * 0.0.0.0, en un puerto efímero. El CI de Linux lo mostró así en dos intentos: «UDP · local 0.0.0.0
+ * puerto 53086 / 38423 · remoto 0.0.0.0 puerto 0 · estado sin conectar». No es un sondeo conectado:
+ * acepta paquetes de cualquier interfaz mientras existe. No hay opción de Chromium que lo evite. La
+ * solución es la regla de firewall de entrada del instalador para el Chromium empaquetado (semana 10).
+ *
+ * Marcado con `test.fail`, como la fuga de la básica: lo de abajo es lo que debería pasar. Si un día deja
+ * de fallar, el test falla y avisa: hay que revisar el ADR 045 y sacar la marca.
+ */
+test(
+  'brecha conocida (semana 10): el navegador de la app no escucha fuera de loopback mientras una página usa WebRTC',
+  { tag: ['@seguridad'] },
+  async () => {
+    test.fail();
     const { sockets, procesosVistos } = await observar();
     // Control: se miraron los procesos de Chromium, no una lista vacía.
     expect(procesosVistos).toBeGreaterThan(1);
@@ -128,6 +163,8 @@ test(
     // Abre sockets a propósito: en Windows puede aparecer el aviso del firewall; se responde «Cancelar».
     const { sockets } = await observar({ control: { sinArgumentosDeRed: true } });
     expect(fueraDeLoopback(sockets).some((s) => s.protocolo === 'UDP')).toBe(true);
+    // Y el filtro de «lo que se cerró» los ve: el responder mDNS o el socket en ::.
+    expect(yaCerrados(sockets).length).toBeGreaterThan(0);
   },
 );
 

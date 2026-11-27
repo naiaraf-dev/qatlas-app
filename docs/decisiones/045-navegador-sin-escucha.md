@@ -1,6 +1,7 @@
 # 045 — El navegador de pruebas no acepta conexiones de la red
 
-- **Estado:** en curso: falta decidir qué hacer con el sondeo IPv4 de WebRTC
+- **Estado:** aceptada con brecha conocida (un UDP sin conectar mientras una página usa WebRTC; se cierra
+  en la semana 10)
 - **Fecha:** 2026-11-27
 
 ## Contexto
@@ -10,60 +11,77 @@ entrantes. Se midieron, por PID, los sockets de los procesos de Chromium (`Get-N
 `Get-NetUDPEndpoint` en Windows, `/proc/<pid>/net` en Linux):
 
 - Lo provocaba también el navegador **de la app** (`opcionesChromium`, sin controles), no solo los controles
-  positivos. Con una página que usa WebRTC liga, además de lo de loopback:
+  positivos. Con una página que usa WebRTC ligaba, además de lo de loopback:
   - UDP en el puerto 5353 (mDNS), en `0.0.0.0` o `::`: el responder de `WebRtcHideLocalIpsWithMdns`, que
     reemplaza las IP locales por un nombre `.local` y contesta por él en la red local;
   - UDP en `::`, en un puerto efímero;
-  - UDP en `0.0.0.0`, en un puerto efímero, durante menos de un segundo.
+  - UDP en `0.0.0.0`, en un puerto efímero.
 - Sin WebRTC en la página, nada fuera de loopback. TCP en escucha, nunca.
-- **No sale nada:** los tests de salida siguen igual (el receptor UDP del sandbox no recibe paquetes, y
-  WebRTC no da candidatos ni direcciones). Es superficie de **entrada**: un socket ligado a todas las
+- **No sale nada:** el receptor UDP del sandbox no recibe paquetes, y WebRTC no da candidatos ni
+  direcciones (`fugas-udp-tls.e2e.ts`). Es superficie de **entrada**: un socket ligado a todas las
   interfaces puede recibir paquetes de la red, si el firewall del equipo los deja pasar.
 
-## Decisión, hasta ahora
+## Lo que se cerró
 
-- **`WebRtcHideLocalIpsWithMdns` apagada** (`FUNCIONES_APAGADAS_POR_QATLAS`): desaparece el 5353. La
-  ocultación no hace falta: con `disable_non_proxied_udp`, WebRTC no da direcciones, y
-  `fugas-udp-tls.e2e.ts` ya lo probaba sin ella.
-- **`--force-fieldtrials=WebRTC-IPv6Default/Disabled/`** (`ARGUMENTOS_DE_RED`): desaparece el de `::`. Como
-  Chromium se queda con el último `--force-fieldtrials`, `opcionesChromium` no lo acepta como argumento suelto.
-- **El de `0.0.0.0` queda.** Se probaron, sin éxito: `--force-webrtc-ip-handling-policy`,
-  `--enforce-webrtc-ip-permission-check`, `--webrtc-udp-port-range` y apagar la función `WebRtc`. Todo
-  indica que es el sondeo con que WebRTC averigua su dirección IPv4 por defecto: «conecta» un socket UDP a
-  una dirección pública, sin mandar nada, y lo cierra.
-- **No se apaga WebRTC todavía:** ninguna opción de Chromium lo apaga sin código en el mundo de la página
-  (`--disable-blink-features=RTCPeerConnection` no tiene efecto; `RTCPeerConnection` sigue existiendo).
+- **El 5353:** `WebRtcHideLocalIpsWithMdns` apagada (`FUNCIONES_APAGADAS_POR_QATLAS`). La ocultación no hace
+  falta: con `disable_non_proxied_udp`, WebRTC no da direcciones, y `fugas-udp-tls.e2e.ts` ya lo probaba sin
+  ella.
+- **El de `::`:** `--force-fieldtrials=WebRTC-IPv6Default/Disabled/` (`ARGUMENTOS_DE_RED`). Como Chromium se
+  queda con el último `--force-fieldtrials`, `opcionesChromium` no lo acepta como argumento suelto.
 
-## Cómo se verifica
+## La brecha que queda
 
-- `e2e/webrtc-sin-escucha.e2e.ts`: con `opcionesChromium` sin controles, detrás del proxy real, abre
-  `/webrtc` y mira los sockets de los procesos de Chromium (por PID y hora de creación) cada 250 ms durante
-  4 s. Falla con cualquier TCP en escucha y con cualquier UDP fuera de loopback (0.0.0.0, `::` o una IP de
-  la red). Control positivo: con `sinArgumentosDeRed`, los ve. **Hoy falla** por el sondeo IPv4: es la
-  condición de cierre de esta ADR.
-- `security-tests/sockets-escucha.test.ts`: la clasificación de direcciones y la lectura de Windows y de
-  Linux.
-- `packages/runner/src/motor/opciones-chromium.test.ts`: la función apagada, la prueba de campo y que no se
-  la pueda pisar.
+**Un UDP sin conectar en `0.0.0.0`, en un puerto efímero, mientras una página usa WebRTC.** El CI de Linux
+lo mostró así en dos intentos: «local 0.0.0.0 · remoto 0.0.0.0 puerto 0 · estado sin conectar» (puertos
+53086 y 38423). No es un sondeo conectado a un destino, como se supuso primero: acepta paquetes de
+cualquier interfaz mientras existe.
 
-## Aviso del firewall
+- **Lo que se probó, sin éxito:** `--force-webrtc-ip-handling-policy`, `--enforce-webrtc-ip-permission-check`,
+  `--webrtc-udp-port-range`, apagar la función `WebRtc` y `--disable-blink-features=RTCPeerConnection` (no
+  tiene efecto: `RTCPeerConnection` sigue existiendo).
+- **Por qué no se apaga WebRTC:** ninguna opción de Chromium lo hace. La única forma desde la app es código
+  en el mundo de la página, que la página vería y podría esquivar (ADR 021).
 
-Los controles positivos (`sinArgumentosDeRed`) ligan sockets a propósito: en Windows puede aparecer el
-aviso. Se responde «Cancelar» (CONTRIBUTING).
+### Por qué el riesgo es acotado
 
-## Diagnóstico en el CI
+- **Nadie sabe a dónde mandar:** con `disable_non_proxied_udp`, WebRTC no da candidatos ICE, así que ni la
+  página ni un par remoto conocen la dirección y el puerto de ese socket.
+- **El puerto es al azar** y el socket vive solo mientras la página usa WebRTC.
+- **Lo que llegue tiene que pasar la sesión de WebRTC:** ICE descarta los mensajes STUN sin el usuario y la
+  contraseña de la sesión (`MESSAGE-INTEGRITY`), y los datos van después por DTLS. Un paquete cualquiera de
+  la red se descarta. Esto es lo que dice el protocolo, no algo que pruebe un test de QAtlas.
+- **El firewall del equipo** pregunta antes de dejar entrar (Windows) o no deja entrar por defecto en
+  muchos equipos. No se puede contar con eso: por eso la solución es de la app.
 
-Cuando el test de cierre falla, imprime cada socket que lo hace fallar (`[webrtc-sin-escucha]` en el log, y
-una anotación en el reporte): protocolo, dirección y puerto locales, dirección y puerto remotos y estado.
-En Linux sale de `/proc/<pid>/net`, con el estado (`01` conectado, `07` sin conectar). En Windows,
-`Get-NetUDPEndpoint` no da el destino de un UDP: sale «no lo informa el sistema». Las IP de la red del
-equipo van solo por su clase («IP de la red (local)», «IP privada»): los logs del CI son públicos.
+### La solución: semana 10
 
-## Pendientes de la semana 10 (segunda capa)
-
-Sea cual sea la decisión sobre el sondeo IPv4, los instaladores suman, a nivel del sistema operativo:
+Los instaladores suman, a nivel del sistema operativo:
 
 - una **regla de firewall de entrada** que bloquee el Chromium empaquetado (`resources/navegadores`, ADR
   020), creada por el instalador;
 - en Linux, el **network namespace sin salida** ya anotado para el CI (ADR 016), que también deja sin
   entrada.
+
+## Cómo se verifica
+
+`e2e/webrtc-sin-escucha.e2e.ts`, con `opcionesChromium` sin controles, detrás del proxy real. Abre `/webrtc`
+y mira los sockets de los procesos de Chromium (por PID y hora de creación) cada 250 ms durante 4 s.
+
+- **Lo que se cerró sigue cerrado:** falla con TCP en escucha, el 5353, `::` o una IP de la red. Todo lo que
+  no sea el UDP en `0.0.0.0` de la brecha.
+- **El test de cierre**, estricto (falla con cualquier socket fuera de loopback), marcado con `test.fail`
+  como la fuga de la básica. Si un día deja de fallar, avisa: hay que revisar esta ADR y sacar la marca.
+- **Control positivo:** con `sinArgumentosDeRed`, ve los sockets, y el filtro de «lo que se cerró» también.
+- **Diagnóstico:** cuando el test de cierre falla, imprime cada socket (`[webrtc-sin-escucha]` en el log y
+  una anotación en el reporte): protocolo, local, remoto y estado. En Linux sale de `/proc/<pid>/net`; en
+  Windows, `Get-NetUDPEndpoint` no da el destino de un UDP. Las IP de la red del equipo van solo por su
+  clase: los logs del CI son públicos.
+
+También `security-tests/sockets-escucha.test.ts` (la clasificación y la lectura de Windows y Linux) y
+`packages/runner/src/motor/opciones-chromium.test.ts` (la función apagada, la prueba de campo y que no se
+la pueda pisar).
+
+## Aviso del firewall
+
+Los controles positivos (`sinArgumentosDeRed`) ligan sockets a propósito, y hasta la semana 10 también la
+brecha: en Windows puede aparecer el aviso. Se responde «Cancelar» (CONTRIBUTING).
