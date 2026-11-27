@@ -19,3 +19,6 @@ fixtures/private/
 e2e-report/
 test-results/
 blob-report/
+
+# Configuración local de Claude Code: permisos y rutas de esta máquina. Nunca se versiona.
+.claude/settings.local.json

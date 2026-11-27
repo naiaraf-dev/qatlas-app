@@ -10,9 +10,10 @@
  *   hasta que se consulte y se registre.
  * - La lista permitida es exactamente la consultada: agregarle un paquete hace fallar el test.
  * - Ningún paquete con `binding.gyp` se compiló: no hay carpeta `build/` (la salida de node-gyp).
+ * - Versiones exactas: `save-exact=true`, y ningún `package.json` tiene un rango con `^` o `~`.
  */
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -223,5 +224,65 @@ describe('@react-aria/optimize-locales-plugin (ADR 042, solo desarrollo)', () =>
           : 'desconocida');
       expect(['MIT', 'Apache-2.0'], `${nombre}: ${licencia}`).toContain(licencia);
     }
+  });
+});
+
+/** Las dependencias declaradas en un package.json que no son una versión exacta. */
+export function rangosDe(paquete: Record<string, unknown>): string[] {
+  const salida: string[] = [];
+  for (const campo of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+    'overrides',
+  ]) {
+    const deps = (paquete[campo] ?? {}) as Record<string, unknown>;
+    for (const [nombre, valor] of Object.entries(deps)) {
+      if (typeof valor === 'string' && /[\^~]/.test(valor))
+        salida.push(`${campo}.${nombre}: ${valor}`);
+    }
+  }
+  return salida;
+}
+
+describe('versiones exactas', () => {
+  const carpetas = [
+    '.',
+    ...(['apps', 'packages'] as const).flatMap((grupo) =>
+      readdirSync(path.join(RAIZ, grupo))
+        .map((c) => path.join(grupo, c))
+        .filter((c) => existsSync(path.join(RAIZ, c, 'package.json'))),
+    ),
+  ];
+
+  it('.npmrc guarda versiones exactas (save-exact=true)', () => {
+    const lineas = readFileSync(path.join(RAIZ, '.npmrc'), 'utf8')
+      .split(/\r?\n/)
+      .map((l) => l.trim());
+    expect(lineas).toContain('save-exact=true');
+    expect(lineas).not.toContain('save-exact=false');
+  });
+
+  it('ningún package.json tiene un rango con ^ o ~', () => {
+    expect(carpetas.length).toBeGreaterThan(5);
+    const rangos = carpetas.flatMap((carpeta) =>
+      rangosDe(
+        JSON.parse(readFileSync(path.join(RAIZ, carpeta, 'package.json'), 'utf8')) as Record<
+          string,
+          unknown
+        >,
+      ).map((r) => `${carpeta}: ${r}`),
+    );
+    expect(rangos).toEqual([]);
+  });
+
+  it('control: reconoce ^ y ~, y deja pasar una versión exacta y un workspace', () => {
+    expect(
+      rangosDe({
+        dependencies: { a: '^1.0.0', b: '1.2.3', '@qatlas/shared': '*' },
+        devDependencies: { c: '~2.0.0' },
+      }),
+    ).toEqual(['dependencies.a: ^1.0.0', 'devDependencies.c: ~2.0.0']);
   });
 });

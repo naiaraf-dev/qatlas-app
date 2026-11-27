@@ -3,6 +3,9 @@
 QAtlas tiene una sola responsable, que revisa y mergea todo. Antes de cambiar código, leé la
 [sección 3 de la especificación](docs/especificacion-qatlas.md) (Seguridad y privacidad).
 
+El proceso de trabajo (funcionalidades nuevas, fallas del CI y dependencias) está documentado paso a paso
+en las skills de [`.claude/skills/`](.claude/skills/), que siguen este archivo y `CLAUDE.md`.
+
 ## Modelo de ramas
 
 | Rama             | Para qué                                          | Quién escribe            |

@@ -176,7 +176,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   vacía, que quede dentro del repo (resolviendo enlaces), que no sea la raíz ni la carpeta temporal misma,
   que git la ignore y que no tenga nada versionado. Si algo no cumple, falla sin borrar.
   `security-tests/borrar-temporal.test.ts` lo prueba.
-- Nunca borrar nada fuera del repo.
+- Nunca borrar nada fuera del repo. Lo temporal, solo con `borrar-temporal.mjs`; un archivo versionado se
+  borra con `git rm`, en un commit.
 
 ## Diseño
 
@@ -193,6 +194,17 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Interfaz, comentarios y documentación en español.
 - Lógica de seguridad en funciones puras (sin importar `electron`) para poder probarla con Vitest.
 - Commits chicos y descriptivos.
+
+## Skills del proyecto
+
+El proceso está escrito en `.claude/skills/`. Ordenan en pasos las reglas de este archivo; si alguna
+contradice a `CLAUDE.md`, gana `CLAUDE.md`.
+
+- `semana-qatlas`: al empezar una semana, un módulo o una funcionalidad (rama `feat/`), hasta el resumen
+  del PR.
+- `diagnostico-ci`: cuando falla el CI, un test falla o pasa «a veces», o un error no se reproduce en local.
+- `revision-dependencias`: antes de agregar o actualizar un paquete, una acción de GitHub o el navegador,
+  con un PR de Dependabot o con una alerta de seguridad de dependencias.
 
 ## Antes de dar una tarea por terminada
 
