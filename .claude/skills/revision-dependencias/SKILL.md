@@ -17,9 +17,9 @@ Ninguna actualización se mergea "porque es una actualización". Que el CI esté
 
 - **Módulo nativo** (`.node`, `binding.gyp`): comparar los binarios de cada plataforma registrada con los anteriores y registrar los hashes nuevos en `scripts/nativos-hashes.json` (ADR 007), con la comparación en el mensaje del commit.
 - **SQLCipher**: además, que abran las bóvedas de formatos anteriores (los fixtures nunca se regeneran ni se borran; ADR 006).
-- **Criptografía** (argon2 y similares): leer qué cambió y si afecta cómo la usamos.
+- **Criptografía** (argon2 y similares): leer qué cambió y si afecta cómo la usamos. argon2 tiene la versión fija a propósito: tiene que seguir pasando el vector de RFC 9106 dentro de Electron (`npm run test:crypto:electron`), y se actualiza la ADR 005.
 - **Playwright**: trae otro Chromium, cuyo hash se registra (`verificar-navegador --calcular`, ADR 020). Revisar el diff de su `--disable-features` y de sus argumentos por defecto (ADR 041) y correr el test de ruido. `playwright-core` y `@playwright/test` van siempre en la misma versión.
-- **Electron**: el último parche de su línea; revisar si cambia el ABI, utilityProcess, protocolos o valores por defecto de seguridad.
+- **Electron**: el último parche de su línea; revisar si cambia el ABI, utilityProcess, protocolos o valores por defecto de seguridad. Un parche de seguridad crítico se adopta en menos de 2 semanas (especificación 3.6). Puede cambiar la versión de Node o de BoringSSL: correr `npm run test:crypto:electron`.
 - **Listas de datos** (sufijos públicos, diccionarios de contraseñas, reglas de axe): las revisan sus tests (oráculo, medidor). Se pueden mergear por Dependabot si quedan en verde.
 - **Herramientas de desarrollo**: bajo riesgo, pero mirar avisos nuevos de lint y cambios de configuración.
 - **Acciones de GitHub**: siempre fijadas por SHA, verificado en dos fuentes.
@@ -40,6 +40,7 @@ Ninguna actualización se mergea "porque es una actualización". Que el CI esté
 - Grupos que mezclan riesgos: se separan.
 - Conflictos en el lockfile: `@dependabot rebase` (o `recreate`), de a un PR por vez. Nunca editar el lockfile a mano ni la rama de Dependabot.
 - Si fallan con `EBADENGINE`, es la versión de npm fijada: no se fuerza.
+- Una actualización incompatible con una decisión del proyecto se cierra sin mergear, aunque el CI pase (por ejemplo, `@types/node` de otra mayor que la versión mínima de Node, o `typescript` 7). Se agrega a `ignore` en `.github/dependabot.yml` con un comentario que explique el motivo, para que no vuelva. Si llegó en un grupo, se cierra el grupo: Dependabot lo recrea sin ese paquete (CONTRIBUTING).
 
 ## 5. Alertas de seguridad
 

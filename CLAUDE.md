@@ -176,7 +176,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   vacía, que quede dentro del repo (resolviendo enlaces), que no sea la raíz ni la carpeta temporal misma,
   que git la ignore y que no tenga nada versionado. Si algo no cumple, falla sin borrar.
   `security-tests/borrar-temporal.test.ts` lo prueba.
-- Nunca borrar nada fuera del repo.
+- Nunca borrar nada fuera del repo. Lo temporal, solo con `borrar-temporal.mjs`; un archivo versionado se
+  borra con `git rm`, en un commit.
 
 ## Diseño
 

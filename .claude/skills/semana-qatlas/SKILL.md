@@ -36,6 +36,11 @@ Este es el proceso con el que se construye QAtlas. Las reglas de `CLAUDE.md` sig
 - Datos 100 % ficticios (dominios `.test`/`example.com`, usuario `ana`). Nunca rutas, nombres ni datos de esta máquina o del trabajo de la autora.
 - Reutilizá lo que existe: `opcionesChromium` para todo navegador, `EntradaSensible` para campos sensibles, `TextoRedactado` y `registrar()` para lo que se guarda o se loguea, el contrato IPC con esquemas `.strict()` (y sus casos en TS-08), los componentes de `renderer/src/ui/` y los tokens del sistema Índigo.
 - Interfaz: accesible con teclado y lector de pantalla, en los dos modos, y lo que no existe todavía se muestra deshabilitado con "Llega en: …".
+- Base: toda tabla nueva con `proyecto_id` va en `TABLAS_DE_PROYECTO`. IPC: todo canal nuevo queda bloqueado con la bóveda bloqueada, salvo que se agregue a `CANALES_SIN_BOVEDA` (los dos los verifica un test).
+- Evidencias: nunca la grabación de Playwright (`recordVideo`, `tracing`, `recordHar`), que escribe en claro en disco. Las capturas y los fotogramas pasan por `grabacion.ts` y se cifran en el proceso principal.
+- `packages/runner/src/motor` no importa red, `child_process` ni `electron` (un test lo verifica).
+- Lo que dependa de `crypto` se prueba también dentro de Electron, que usa BoringSSL: `npm run test:crypto:electron`.
+- La auditoría guarda solo IDs y nombres de campos, nunca valores (ADR 015).
 
 ## 4. Higiene de los tests (errores que ya cometimos)
 
@@ -54,6 +59,8 @@ Revisá cada test nuevo contra esta lista:
 ## 5. Verificar
 
 - `npm run check` siempre (incluye formato, módulos nativos y la suite de seguridad).
+- Si Electronegativity (dentro de `check`) reporta algo nuevo, se corrige o se documenta con su justificación en `docs/seguridad/electronegativity.md`.
+- Si tocaste algo que dependa de `crypto`: `npm run test:crypto:electron`.
 - `npm run build`.
 - E2E local: `npm run test:e2e:smoke` y `npm run test:e2e:area -- <patrón>` del área que tocaste. La suite completa la confirma el CI; las corridas repetidas, el nocturno.
 - Si algo falla, diagnosticá antes de corregir (skill `diagnostico-ci`).
@@ -76,4 +83,4 @@ Revisá cada test nuevo contra esta lista:
 - `push`, `pull`, `fetch`, `merge` a ramas protegidas, `force push`, `git config`.
 - Cerrar procesos por nombre (solo por PID de los que lanzaste).
 - `rm -rf` o `Remove-Item -Recurse` con rutas armadas desde variables.
-- Borrar nada fuera de `.artefactos/`.
+- Borrar nada fuera del repo. Lo temporal, solo con `node scripts/borrar-temporal.mjs <ruta>`; un archivo versionado se borra con `git rm`, en un commit.
