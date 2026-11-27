@@ -32,7 +32,9 @@ function entorno() {
   return {
     copia: new CopiaSegura(portapapeles, reloj),
     leer: () => contenido,
-    escribir: portapapeles.escribir,
+    escribir: (texto: string) => {
+      portapapeles.escribir(texto);
+    },
     tareas,
     pasar,
   };
