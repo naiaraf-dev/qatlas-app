@@ -3,32 +3,13 @@ import { Button, Card, PageHeader } from '../ui/components';
 import { PAGES, type PageId } from '../layout/Shell';
 
 /** Lo que ya se puede hacer desde el detalle de cada proyecto, y lo que falta, con su semana real. */
-const DESDE_PROYECTOS: Partial<Record<PageId, { description: string; falta: string[] }>> = {
-  escaneos: {
-    description: 'Recorrer una aplicación autorizada y detectar problemas automáticamente.',
-    falta: [
-      'Escaneo con login: semana 6b.',
-      'Hallazgos de todos los proyectos, con huella y regresiones: semana 8.',
-    ],
-  },
-  ejecuciones: {
-    description: 'Lanzar escaneos y suites, seguirlos en vivo y comparar resultados.',
-    falta: [
-      'Comparar ejecuciones y detectar regresiones: semana 8.',
-      'Suites y casos: fase 2.',
-      'Una lista de las ejecuciones de todos los proyectos: sin semana asignada.',
-    ],
-  },
-};
+// Escaneos, Ejecuciones y Hallazgos tienen su página desde la semana 8.
+const DESDE_PROYECTOS: Partial<Record<PageId, { description: string; falta: string[] }>> = {};
 
 const ROADMAP: Partial<Record<PageId, { description: string; when: string }>> = {
   casos: {
     description: 'Importar casos desde Excel, crearlos sin código y agruparlos en suites.',
     when: 'Fase 2',
-  },
-  hallazgos: {
-    description: 'Revisar los problemas detectados, con evidencia y detección de regresiones.',
-    when: 'Fase 1 · semana 8',
   },
   reportes: {
     description: 'Generar reportes de bug y de ejecución, y exportarlos de forma segura.',
