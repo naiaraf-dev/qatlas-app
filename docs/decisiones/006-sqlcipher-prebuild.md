@@ -39,7 +39,7 @@ también abra con la forma estándar `PRAGMA key`.
 
 | Paquete                                  | Para qué                   | Alternativas                             | Script de instalación    | Mantenimiento                                     |
 | ---------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------ | ------------------------------------------------- |
-| `better-sqlite3-multiple-ciphers` 13.0.3 | SQLite con SQLCipher       | `@journeyapps/sqlcipher` (API asíncrona) | `binding.gyp`, ver abajo | Un mantenedor principal; publica procedencia SLSA |
+| `better-sqlite3-multiple-ciphers` 13.2.0 | SQLite con SQLCipher       | `@journeyapps/sqlcipher` (API asíncrona) | `binding.gyp`, ver abajo | Un mantenedor principal; publica procedencia SLSA |
 | `drizzle-orm` 0.45.4                     | Esquema y consultas        | SQL a mano; Kysely                       | No                       | Publicación frecuente                             |
 | `node-addon-api` (ya estaba)             | Dependencia de la anterior | —                                        | No                       | Proyecto de Node.js                               |
 
@@ -78,3 +78,38 @@ paquete con `binding.gyp` tiene salida de node-gyp (`build/`).
   corrigió el 2026-11-07.
 - Al actualizar el paquete hay que volver a correr TS-02 en Electron, revisar esta ADR y registrar los
   hashes nuevos después de revisarlos (ADR 007).
+
+## Bóvedas de formatos anteriores (agregado el 2026-11-26)
+
+**Regla:** toda actualización de `better-sqlite3-multiple-ciphers` tiene que abrir las bóvedas creadas
+con las versiones anteriores. `apps/desktop/src/main/boveda/formatos-anteriores.test.ts` lo verifica,
+en Node y dentro de Electron (`npm run test:crypto:electron`), con cada fixture de `boveda/fixtures/`:
+
+- `base-clave-cruda/`: una base abierta como la abre la app (`cipher='sqlcipher'`, `legacy=4`, clave
+  cruda `x'…'`), migrada y con una configuración conocida. La clave sale del SHA-256 de una frase
+  inventada.
+- `boveda-completa/`: una bóveda creada por `ServicioBoveda` con la contraseña inventada de los E2E.
+
+El test abre una copia, lee la configuración, escribe y vuelve a abrir, y comprueba que con otra clave u
+otra contraseña no abre. Los fixtures quedan para siempre: nunca se regeneran ni se borran. Antes de
+actualizar, con la versión vieja instalada, se crea el de esa versión si no existe
+(`QATLAS_GENERAR_FIXTURE_SQLCIPHER=1`, ver el test). El primero es `sqlcipher-13.0.3` (unos 400 KB).
+
+## Actualización a 13.2.0 (2026-11-26)
+
+- **Qué trae:** SQLite 3.53.4 → 3.54.1 y SQLite3 Multiple Ciphers 2.4.0 → 2.7.1. Sin scripts de
+  instalación, con `"gypfile": false` y la misma dependencia (`node-addon-api` ^8). Procedencia SLSA y
+  firmas del registro.
+- **Parámetros del cifrado:** iguales. Las constantes de SQLCipher del amalgamado son idénticas (formato 4,
+  256 000 iteraciones de KDF, 2 del KDF del HMAC, página de 4096, SHA-512, máscara de sal 0x3a), y
+  `legacy=4` las fija.
+- **Cambios del cifrador:** el HMAC se compara en tiempo constante y antes de descifrar; un error al poner
+  la clave ya no deja la base sin cifrar en silencio (2.7.0). Para bases SQLCipher, `legacy != 0` pasa a
+  ser obligatorio: ya lo usamos. La clave cruda `x'…'` de 64 hexadecimales sigue entrando por la misma
+  rama; las formas nuevas `raw:hex:` y `raw:bin:` no se usan. Se quitó el modo WAL «legacy» y cambió
+  `rekey`: no usamos ninguno de los dos. La clave se pone antes de `temp_store`, como pide 2.7.0.
+- **Binarios:** los 8 son nuevos, todos con SQLite 3.54.1 (fuente del 2026-10-16) y Multiple Ciphers
+  2.7.1. Crecen entre 70 y 112 KB, salvo `darwin-arm64`, que crece 336 bytes con la misma fuente: no es
+  una plataforma soportada (ADR 005), queda anotado. Registrados en `scripts/nativos-hashes.json`.
+- **Verificación:** las bóvedas de 13.0.3 abren con 13.2.0 en Node y en Electron; TS-02, TS-09 y TS-10
+  pasan.
