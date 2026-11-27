@@ -9,7 +9,7 @@
  * apellido o el nombre de una organización no se pueden detectar sin escribirlos acá, así que eso sigue
  * dependiendo de la revisión.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -340,5 +340,27 @@ describe('Datos personales · el detector funciona', () => {
     );
     expect(resultado).toHaveLength(5);
     expect(JSON.stringify(resultado)).not.toMatch(/zoe|FICTICIO|correo/i);
+  });
+});
+
+describe('Configuración local de Claude Code', () => {
+  const ARCHIVO = '.claude/settings.local.json';
+
+  it('.claude/settings.local.json está en .gitignore y no está en el repo', () => {
+    // Tiene permisos y rutas de la máquina de quien trabaja: nunca se versiona.
+    const ignorado = spawnSync('git', ['check-ignore', '-q', '--no-index', ARCHIVO], { cwd: RAIZ });
+    expect(ignorado.status).toBe(0);
+    expect(archivosDelRepo().filter((a) => a === ARCHIVO)).toEqual([]);
+  });
+
+  it('control: un archivo de .claude/ que no es ese no está ignorado', () => {
+    const otro = spawnSync(
+      'git',
+      ['check-ignore', '-q', '--no-index', '.claude/skills/x/SKILL.md'],
+      {
+        cwd: RAIZ,
+      },
+    );
+    expect(otro.status).toBe(1);
   });
 });
