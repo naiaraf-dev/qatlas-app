@@ -56,6 +56,16 @@ SOFTWARE.
 - Qué se usa: los datos de la lista, sin modificar, tal como los incluye el paquete `tldts` (licencia
   MIT), para validar los dominios de los proyectos (ADR 011).
 
+## SQLite, SQLite3 Multiple Ciphers y better-sqlite3-multiple-ciphers
+
+- Proyecto: https://github.com/m4heshd/better-sqlite3-multiple-ciphers, derivado de better-sqlite3
+  (https://github.com/WiseLibs/better-sqlite3).
+- Versión: better-sqlite3-multiple-ciphers 13.2.0, fija (ADR 006). Trae SQLite 3.54.1 y SQLite3 Multiple
+  Ciphers 2.7.1 (https://github.com/utelle/SQLite3MultipleCiphers).
+- Licencias: better-sqlite3-multiple-ciphers y SQLite3 Multiple Ciphers, MIT (Copyright (c) 2017 Joshua
+  Wise, 2019-2026 Ulrich Telle, 2021-2026 Mahesh Bandara Wijerathna); SQLite es de dominio público.
+- Qué se usa: el binario precompilado del paquete, sin modificar, verificado por su SHA-256 (ADR 007).
+
 ## react-aria-components y React Aria (Adobe)
 
 - Proyecto: https://github.com/adobe/react-spectrum (Adobe)

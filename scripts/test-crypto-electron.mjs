@@ -28,6 +28,8 @@ const { status, error } = spawnSync(
     'security-tests/ts-10',
     'security-tests/secreto-credenciales',
     'apps/desktop/src/main/proyectos',
+    // Las bóvedas de formatos anteriores también abren en Electron (ADR 006).
+    'apps/desktop/src/main/boveda/formatos-anteriores',
   ],
   {
     cwd: raiz,
