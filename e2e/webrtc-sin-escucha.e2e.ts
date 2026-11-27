@@ -28,7 +28,7 @@ import { iniciarProxy } from '../packages/runner/src/red/proxy';
 import { descendientes, procesos } from './arbol-procesos';
 import { vigilarEntorno } from './entorno';
 import { vigilarProcesos } from './procesos';
-import { describir, fueraDeLoopback, socketsDe, type Socket } from './sockets';
+import { describir, detallar, fueraDeLoopback, socketsDe, type Socket } from './sockets';
 
 test.describe.configure({ mode: 'serial', timeout: 120_000 });
 vigilarEntorno(test);
@@ -105,6 +105,16 @@ test(
     const { sockets, procesosVistos } = await observar();
     // Control: se miraron los procesos de Chromium, no una lista vacía.
     expect(procesosVistos).toBeGreaterThan(1);
+    // Si falla, el detalle de cada socket va al log y al reporte: local, remoto y estado (ADR 045).
+    const culpables = [
+      ...fueraDeLoopback(sockets),
+      ...sockets.filter((s) => s.protocolo === 'TCP' && !fueraDeLoopback([s]).length),
+    ];
+    for (const socket of culpables) {
+      const detalle = detallar(socket);
+      console.log(`[webrtc-sin-escucha] ${detalle}`);
+      test.info().annotations.push({ type: 'socket fuera de loopback', description: detalle });
+    }
     expect(fueraDeLoopback(sockets).map(describir)).toEqual([]);
     // Y TCP en escucha, ninguno: Playwright habla con Chromium por una tubería, no por un puerto.
     expect(sockets.filter((s) => s.protocolo === 'TCP').map(describir)).toEqual([]);

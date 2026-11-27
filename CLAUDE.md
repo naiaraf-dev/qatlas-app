@@ -99,12 +99,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   va) más el resto de las dependencias, y empaquetar Chromium en `resources/navegadores`, firmado
   (ADR 020). En Linux, el sandbox de Chromium necesita configuración (en CI se usa `sysctl`): si algún día
   se distribuye para Linux, resolverlo en el instalador sin relajar la seguridad del equipo del usuario.
+  Como segunda capa de la superficie de entrada (ADR 045): una regla de firewall de entrada que bloquee
+  el Chromium empaquetado, creada por el instalador, y en Linux el network namespace sin salida de abajo.
 - Pendientes de la fase 3: los `.spec.ts` importados son código de terceros y necesitan aislamiento a
   nivel del sistema operativo (ADR 017).
 - Pendiente (sin semana): confiar en el certificado de un sistema interno por su huella exacta, como opción por
   proyecto, explícita y auditada. Nunca «aceptar cualquier certificado».
 - Pendiente: correr el E2E del CI de Linux dentro de un network namespace sin salida, para probar a nivel
-  del sistema operativo que la app no abre conexiones no autorizadas (ADR 016).
+  del sistema operativo que la app no abre conexiones no autorizadas (ADR 016), ni acepta conexiones
+  entrantes (ADR 045).
 
 ## Stack (no cambiar sin consultar)
 

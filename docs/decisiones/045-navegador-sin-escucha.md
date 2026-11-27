@@ -50,3 +50,20 @@ entrantes. Se midieron, por PID, los sockets de los procesos de Chromium (`Get-N
 
 Los controles positivos (`sinArgumentosDeRed`) ligan sockets a propósito: en Windows puede aparecer el
 aviso. Se responde «Cancelar» (CONTRIBUTING).
+
+## Diagnóstico en el CI
+
+Cuando el test de cierre falla, imprime cada socket que lo hace fallar (`[webrtc-sin-escucha]` en el log, y
+una anotación en el reporte): protocolo, dirección y puerto locales, dirección y puerto remotos y estado.
+En Linux sale de `/proc/<pid>/net`, con el estado (`01` conectado, `07` sin conectar). En Windows,
+`Get-NetUDPEndpoint` no da el destino de un UDP: sale «no lo informa el sistema». Las IP de la red del
+equipo van solo por su clase («IP de la red (local)», «IP privada»): los logs del CI son públicos.
+
+## Pendientes de la semana 10 (segunda capa)
+
+Sea cual sea la decisión sobre el sondeo IPv4, los instaladores suman, a nivel del sistema operativo:
+
+- una **regla de firewall de entrada** que bloquee el Chromium empaquetado (`resources/navegadores`, ADR
+  020), creada por el instalador;
+- en Linux, el **network namespace sin salida** ya anotado para el CI (ADR 016), que también deja sin
+  entrada.

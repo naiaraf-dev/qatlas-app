@@ -21,6 +21,13 @@ export interface Socket {
   direccion: string;
   puerto: number;
   pid: number;
+  /**
+   * El destino, si el socket está conectado. `null`: el sistema no lo informa (UDP en Windows). Un UDP sin
+   * conectar tiene 0.0.0.0:0 o [::]:0.
+   */
+  remoto?: { direccion: string; puerto: number } | null;
+  /** Linux: el estado de `/proc/net` (`0A` en escucha, `01` conectado, `07` cerrado). Windows: el de TCP. */
+  estado?: string;
 }
 
 /** Loopback: 127.0.0.0/8, ::1 y las IPv4 de loopback escritas como IPv6 (::ffff:127.x.x.x). */
@@ -42,17 +49,67 @@ export const fueraDeLoopback = (sockets: readonly Socket[]): Socket[] =>
 export const describir = (s: Socket): string =>
   `${s.protocolo} ${claseDeDireccion(s.direccion)} puerto ${String(s.puerto)}`;
 
-/** Las líneas `TCP|dirección|puerto|pid` del script de Windows. */
+/** Privadas y de enlace local (RFC 1918, 169.254/16, fc00::/7, fe80::/10): son de la red del equipo. */
+function esPrivada(direccion: string): boolean {
+  const d = direccion.toLowerCase().replace(/^::ffff:/, '');
+  return (
+    /^10\./.test(d) ||
+    /^192\.168\./.test(d) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(d) ||
+    /^169\.254\./.test(d) ||
+    /^f[cd][0-9a-f]{2}:/.test(d) ||
+    /^fe[89ab][0-9a-f]:/.test(d)
+  );
+}
+
+/**
+ * Una dirección para el log público del CI: las IP de la red del equipo, solo por su clase; las públicas,
+ * las de comodín y las de loopback, tal cual (no son del equipo).
+ */
+export function direccionParaElLog(direccion: string, local: boolean): string {
+  if (claseDeDireccion(direccion) !== 'IP de la red') return direccion;
+  if (local) return 'IP de la red (local)';
+  return esPrivada(direccion) ? 'IP privada' : direccion;
+}
+
+const ESTADOS_PROC: Record<Protocolo, Record<string, string>> = {
+  TCP: { '01': 'conectado', '0A': 'en escucha', '06': 'TIME_WAIT', '07': 'cerrado' },
+  UDP: { '01': 'conectado', '07': 'sin conectar' },
+};
+
+/**
+ * Todo lo que se sabe de un socket, para el log cuando el test falla: protocolo, local, remoto y estado.
+ * Sin PID ni nada de la máquina.
+ */
+export function detallar(s: Socket): string {
+  const local = `${direccionParaElLog(s.direccion, true)} puerto ${String(s.puerto)}`;
+  const remoto =
+    s.remoto === undefined || s.remoto === null
+      ? 'no lo informa el sistema'
+      : `${direccionParaElLog(s.remoto.direccion, false)} puerto ${String(s.remoto.puerto)}`;
+  const estado = s.estado ? (ESTADOS_PROC[s.protocolo][s.estado] ?? s.estado) : 'sin dato';
+  return `${s.protocolo} · local ${local} · remoto ${remoto} · estado ${estado}`;
+}
+
+/**
+ * Las líneas del script de Windows: `TCP|dirección|puerto|pid|remota|puerto remoto|estado`, y
+ * `UDP|dirección|puerto|pid`: Get-NetUDPEndpoint no da el destino, así que en Windows no se sabe si un UDP
+ * está conectado.
+ */
 export function leerSalidaWindows(salida: string): Socket[] {
   return salida
     .split(/\r?\n/)
-    .map((linea) => /^(TCP|UDP)\|([^|]+)\|(\d+)\|(\d+)$/.exec(linea.trim()))
+    .map((linea) =>
+      /^(TCP|UDP)\|([^|]+)\|(\d+)\|(\d+)(?:\|([^|]*)\|(\d*)\|([^|]*))?$/.exec(linea.trim()),
+    )
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({
       protocolo: m[1] as Protocolo,
       direccion: m[2] ?? '',
       puerto: Number(m[3]),
       pid: Number(m[4]),
+      remoto: m[5] ? { direccion: m[5], puerto: Number(m[6] || 0) } : null,
+      ...(m[7] ? { estado: m[7] } : {}),
     }));
 }
 
@@ -89,15 +146,21 @@ export function leerTablaProc(
   const salida: Socket[] = [];
   for (const linea of tabla.split('\n').slice(1)) {
     const campos = linea.trim().split(/\s+/);
-    const [, local, , estado, , , , , , inodo] = campos;
+    const [, local, remota, estado, , , , , , inodo] = campos;
     if (!local || !inodo || !inodos.has(inodo)) continue;
     if (protocolo === 'TCP' && estado !== '0A') continue;
     const [hex, puerto] = local.split(':');
+    const [hexRemota, puertoRemoto] = (remota ?? '').split(':');
     salida.push({
       protocolo,
       direccion: direccionDeProc(hex ?? ''),
       puerto: parseInt(puerto ?? '0', 16),
       pid: inodos.get(inodo) ?? 0,
+      remoto: {
+        direccion: direccionDeProc(hexRemota ?? ''),
+        puerto: parseInt(puertoRemoto ?? '0', 16),
+      },
+      estado: estado ?? '',
     });
   }
   return salida;
@@ -106,7 +169,7 @@ export function leerTablaProc(
 function enWindows(pids: readonly number[]): Socket[] {
   const lista = pids.join(',');
   const script = `$ids = @(${lista})
-Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $ids -contains [int]$_.OwningProcess } | ForEach-Object { "TCP|$($_.LocalAddress)|$($_.LocalPort)|$($_.OwningProcess)" }
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $ids -contains [int]$_.OwningProcess } | ForEach-Object { "TCP|$($_.LocalAddress)|$($_.LocalPort)|$($_.OwningProcess)|$($_.RemoteAddress)|$($_.RemotePort)|$($_.State)" }
 Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $ids -contains [int]$_.OwningProcess } | ForEach-Object { "UDP|$($_.LocalAddress)|$($_.LocalPort)|$($_.OwningProcess)" }`;
   const resultado = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
     encoding: 'utf8',
