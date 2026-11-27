@@ -66,6 +66,16 @@ const campo = (etiqueta: string) =>
   page.getByLabel(etiqueta, { exact: true }).and(page.locator('input, textarea'));
 const estado = (texto: string | RegExp) => page.getByRole('status').filter({ hasText: texto });
 
+const FILTROS = {
+  proyectoId: null,
+  estados: [],
+  severidades: [],
+  tipos: [],
+  soloRegresiones: false,
+  incluirDescartados: false,
+  soloSinCobertura: false,
+};
+
 const entrada = (): ProyectoEntrada => ({
   ...PROYECTO_POR_DEFECTO,
   nombre: 'Reportes',
@@ -367,24 +377,45 @@ test(
 
 test(
   'la lista y el editor de reportes pasan axe en los dos modos',
-  { tag: ['@interfaz'] },
+  // @lento: necesita el escaneo del beforeAll, y así va a la misma parte que el resto del archivo.
+  { tag: ['@interfaz', '@lento'] },
   async () => {
-    await expect(titulo('Reporte de bug')).toBeVisible();
-    await transicionesTerminadas(page);
-    for (const tema of ['Claro', 'Oscuro'] as const) {
-      await ponerTema(page, tema);
-      expect(await revisarAccesibilidad(page, 'main'), `editor, ${tema}`).toEqual([]);
-    }
+    // Prepara su propio estado: no depende de que otro test haya dejado un reporte o el editor abierto.
+    const reporteId = await page.evaluate(async (filtros) => {
+      const { qatlas } = window as unknown as { qatlas: QatlasApi };
+      const lista = await qatlas.reportes.listar({ proyectoId: null });
+      const existente = lista.ok ? lista.data[0]?.id : undefined;
+      if (existente) return existente;
+      const hallazgos = await qatlas.hallazgos.listar(filtros);
+      const reportable = hallazgos.ok
+        ? hallazgos.data.find((h) => !['descartado', 'resuelto'].includes(h.estado))
+        : undefined;
+      if (!reportable) throw new Error('sin hallazgos para reportar');
+      const creado = await qatlas.reportes.crear({ hallazgoIds: [reportable.id] });
+      if (!creado.ok || creado.data.resultado !== 'creado') throw new Error('no se creó');
+      return creado.data.reporteId;
+    }, FILTROS);
+
     await nav().getByText('Reportes', { exact: true }).click();
     await expect(titulo('Reportes')).toBeVisible();
-    await expect(
-      page.getByRole('list', { name: 'Reportes de bug' }).getByRole('listitem'),
-    ).toHaveCount(1);
-    await expect(page.getByText(/exportado [1-9]\d* veces/)).toBeVisible();
+    const fila = page
+      .getByRole('list', { name: 'Reportes de bug' })
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('button', { name: /^Abrir «/ }) });
+    await expect(fila).toHaveCount(1);
     await transicionesTerminadas(page);
     for (const tema of ['Claro', 'Oscuro'] as const) {
       await ponerTema(page, tema);
       expect(await revisarAccesibilidad(page, 'main'), `lista, ${tema}`).toEqual([]);
+    }
+
+    await fila.getByRole('button', { name: /^Abrir «/ }).click();
+    await expect(titulo('Reporte de bug')).toBeVisible();
+    expect(reporteId).toMatch(/^[0-9a-f-]{36}$/);
+    await transicionesTerminadas(page);
+    for (const tema of ['Claro', 'Oscuro'] as const) {
+      await ponerTema(page, tema);
+      expect(await revisarAccesibilidad(page, 'main'), `editor, ${tema}`).toEqual([]);
     }
     await ponerTema(page, 'Claro');
   },

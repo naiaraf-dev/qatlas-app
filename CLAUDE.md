@@ -239,6 +239,9 @@ npm run build && npm run test:e2e:area -- <área> # E2E del área tocada, más e
   `test:e2e:smoke`. La suite completa (`test:e2e`) la confirma el CI, en cinco partes paralelas.
 - **Las «3 corridas seguidas»** son el job nocturno (`.github/workflows/nocturno.yml`): la suite completa
   con `--repeat-each=3` y `failOnFlakyTests`. Ya no se piden localmente.
+- **Un archivo E2E en modo serial cae entero en una parte** (un test lo exige): si un test suyo no es `@lento`
+  pero el resto sí, va con `@lento`. Un `describe` que prepara su propio estado puede ir aparte, declarado en
+  `GRUPOS_INDEPENDIENTES` (ADR 044). Cada test prepara lo que necesita y se puede correr solo con `--grep`.
 - **Cada test E2E lleva al menos una etiqueta** (`@seguridad`, `@lento`, `@ocr`, `@interfaz`, `@smoke`). Un
   test `@lento` u `@ocr` de un archivo nuevo necesita su parte en `scripts/e2e-partes.mjs` (un test lo
   exige). Cada archivo E2E termina con `vigilarProcesos(test, import.meta.filename)` (ADR 044).

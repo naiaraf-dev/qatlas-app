@@ -160,6 +160,20 @@ expande la matriz. Se puede evitar con cinco jobs explícitos, pero **se deja as
   **exitoso**. Se prefiere que un E2E que no corrió bloquee, antes que verlo como aprobado.
 - Sacar `needs: calidad` tampoco: el E2E correría paquetes antes de verificar sus firmas y sus binarios.
 
+## Estado compartido y partes (2026-11-27)
+
+El test de axe de `reportes.e2e.ts` era el único `@interfaz` sin `@lento`: fue a «rápidos», solo, mientras
+los otros cuatro del archivo iban a «OCR y evidencias», y fallaba porque esperaba el editor que dejaban
+abierto. Ya había pasado con la inactividad de la bóveda. Dos cambios:
+
+- **Un archivo en modo serial cae entero en una parte.** La excepción es un `describe` que prepara su propio
+  estado en su `beforeAll`: se declara en `GRUPOS_INDEPENDIENTES` (`scripts/e2e-partes.mjs`), con el
+  motivo, y cae entero en una. Hoy hay uno: el bloque TS-05 de `contencion.e2e.ts`. El test verifica la
+  regla, que cada grupo declarado existe, y tiene un control con el caso de los reportes.
+- **Cada test prepara lo que necesita**, aunque su archivo sea serial: así se puede correr solo con
+  `--grep`. Los archivos cuyos tests son pasos de una historia (`regresiones.e2e.ts`, numerados) son la
+  excepción documentada en su encabezado.
+
 ## Verificación
 
 - `security-tests/e2e-etiquetas.test.ts`: etiquetas, cada test en una sola parte, y las partes del CI y

@@ -8,3 +8,4 @@ export const PARTES: {
 }[];
 export function argumentosDeParte(numero: number): string[];
 export function playwright(args: string[]): number;
+export const GRUPOS_INDEPENDIENTES: { archivo: string; describe: string; motivo: string }[];
