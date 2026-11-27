@@ -20,6 +20,7 @@ export {
   crearClaveProyecto,
   derivarClaveSqlcipher,
   derivarSubclaveHallazgos,
+  derivarSubclaveHuellas,
   type ClaveProyectoNueva,
 } from './claves';
 export { cifrarCampo, descifrarCampo } from './campos';

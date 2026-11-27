@@ -393,6 +393,21 @@ export type TipoHallazgo = z.infer<typeof TipoHallazgo>;
 export const SeveridadHallazgo = z.enum(['critica', 'alta', 'media', 'baja', 'informativa']);
 export type SeveridadHallazgo = z.infer<typeof SeveridadHallazgo>;
 
+// Los siete estados de la especificación (5.2). «Recurrente» es la aparición de una ocurrencia (ADR 047).
+export const EstadoHallazgo = z.enum([
+  'nuevo',
+  'confirmado',
+  'descartado',
+  'reportado',
+  'posiblemente_resuelto',
+  'resuelto',
+  'regresion',
+]);
+export type EstadoHallazgo = z.infer<typeof EstadoHallazgo>;
+
+export const AparicionHallazgo = z.enum(['nueva', 'recurrente', 'regresion']);
+export type AparicionHallazgo = z.infer<typeof AparicionHallazgo>;
+
 export const HallazgoVista = z
   .object({
     id: IdEntidad,

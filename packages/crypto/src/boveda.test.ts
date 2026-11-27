@@ -12,6 +12,7 @@ import {
   derivarSubclaveArchivos,
   derivarSubclaveCampos,
   derivarSubclaveHallazgos,
+  derivarSubclaveHuellas,
 } from './claves';
 import { ErrorCripto } from './errores';
 import { PARAMETROS_POR_DEFECTO, type ImplementacionArgon2id } from './kdf';
@@ -161,6 +162,7 @@ describe('Subclaves', () => {
       derivarSubclaveArchivos(raiz),
       derivarSubclaveCampos(raiz),
       derivarSubclaveHallazgos(raiz),
+      derivarSubclaveHuellas(raiz),
     ].map((clave) => clave.toString('hex'));
     expect(new Set(claves).size).toBe(claves.length);
   });
