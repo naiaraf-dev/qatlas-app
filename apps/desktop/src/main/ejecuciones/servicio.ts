@@ -117,7 +117,8 @@ const MAX_CONEXIONES_GUARDADAS = 2000;
  */
 const TIEMPO_DE_SALIDA_MS = 10_000;
 
-const RESUMEN_VACIO: ResumenEjecucion = {
+/** Lo que falta en el resumen de una ejecución de semanas anteriores. */
+export const RESUMEN_VACIO: ResumenEjecucion = {
   paginasVisitadas: 0,
   linksExcluidos: 0,
   conexionesPermitidas: 0,

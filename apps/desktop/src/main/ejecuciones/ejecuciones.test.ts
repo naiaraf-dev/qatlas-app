@@ -14,6 +14,7 @@ import { leerAuditoria } from '@qatlas/db';
 import { conectarActividad, DetectorInactividad } from '../boveda/inactividad';
 import { ServicioBoveda } from '../boveda/servicio';
 import { ServicioProyectos } from '../proyectos/servicio';
+import { ServicioHallazgos } from '../hallazgos/servicio';
 import { ServicioEjecuciones, type LanzadorDeProcesos, type ProcesoRunner } from './servicio';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
@@ -873,6 +874,173 @@ describe('Huella, estados y regresiones entre ejecuciones (semana 8, ADR 046 y 0
     await corrida(proyecto, [de('3f9ac2be')]);
     await corrida(proyecto, [de('b7e01dfa')]);
     expect(hallazgos(proyecto)).toMatchObject([{ veces: 2 }]);
+  });
+
+  describe('Decisiones de la persona, bandeja y comparación', () => {
+    const MOTIVO = ['motivo', 'inventado', 'del', 'descarte', '4417'].join('-');
+    const servicio = () => new ServicioHallazgos(boveda, proyectos);
+    const FILTROS = {
+      proyectoId: null,
+      estados: [],
+      severidades: [],
+      tipos: [],
+      soloRegresiones: false,
+      incluirDescartados: false,
+      soloSinCobertura: false,
+    };
+    const auditoria = (accion: string) =>
+      boveda.conAcceso((b) => leerAuditoria(b)).filter((a) => a.accion === accion);
+    const todoEnClaro = () =>
+      boveda.conAcceso((b) =>
+        JSON.stringify([
+          b.prepare('SELECT * FROM hallazgo').all(),
+          b.prepare('SELECT * FROM auditoria').all(),
+        ]),
+      );
+
+    it('descartar: el motivo va cifrado, se muestra solo en el detalle, y la auditoría lleva IDs y campos', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const [h] = hallazgos(proyecto);
+      const id = h?.id ?? '';
+      expect(servicio().decidir({ accion: 'descartar', hallazgoId: id, motivo: MOTIVO })).toEqual({
+        resultado: 'hecho',
+        estado: 'descartado',
+      });
+      expect(todoEnClaro()).not.toContain(MOTIVO);
+      expect(servicio().detalle(id)?.motivoDescarte).toBe(MOTIVO);
+      const [registro] = auditoria('hallazgo.descartar');
+      expect(registro).toMatchObject({ entidad: 'hallazgo', entidadId: id });
+      expect(registro?.detalle).toEqual({ proyectoId: proyecto, campos: ['estado', 'motivo'] });
+    });
+
+    it('reabrir un descartado: vuelve a nuevo y queda en la auditoría; un abierto no se reabre', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      expect(servicio().decidir({ accion: 'reabrir', hallazgoId: id })).toEqual({
+        resultado: 'rechazada',
+        motivo: 'no-corresponde',
+      });
+      servicio().decidir({ accion: 'descartar', hallazgoId: id, motivo: MOTIVO });
+      expect(servicio().decidir({ accion: 'reabrir', hallazgoId: id })).toEqual({
+        resultado: 'hecho',
+        estado: 'nuevo',
+      });
+      expect(auditoria('hallazgo.reabrir')).toHaveLength(1);
+      // Al reabrir, el motivo se borra.
+      expect(servicio().detalle(id)?.motivoDescarte).toBeNull();
+      expect(
+        boveda.conAcceso((b) =>
+          b.prepare('SELECT motivo_descarte_cifrado AS m FROM hallazgo WHERE id = ?').get(id),
+        ),
+      ).toEqual({ m: null });
+    });
+
+    it('resolver a mano y que vuelva: regresión', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      servicio().decidir({ accion: 'resolver', hallazgoId: id });
+      const c = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      expect(hallazgos(proyecto)).toMatchObject([{ estado: 'regresion' }]);
+      expect(estado(proyecto, c)?.resumen.regresiones).toBe(1);
+    });
+
+    it('resolver en lote: solo los posiblemente resueltos', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [
+        { pagina: '/a', hallazgos: [{ clave: 'image-alt' }] },
+        { pagina: '/b', hallazgos: [{ clave: 'image-alt' }] },
+      ]);
+      // La segunda recorre /a y no /b: solo el de /a pasa a posiblemente resuelto.
+      await corrida(proyecto, [{ pagina: '/a', hallazgos: [] }]);
+      const ids = hallazgos(proyecto).map((f) => f.id);
+      expect(hallazgos(proyecto).map((f) => f.estado)).toEqual(['posiblemente_resuelto', 'nuevo']);
+      expect(servicio().resolverEnLote(ids)).toEqual({ resueltos: 1, rechazados: 1 });
+      expect(hallazgos(proyecto).map((f) => f.estado)).toEqual(['resuelto', 'nuevo']);
+      expect(auditoria('hallazgo.resolver-lote')).toHaveLength(1);
+    });
+
+    it('la severidad cambiada a mano no la pisa una aparición nueva', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      servicio().cambiarSeveridad({ hallazgoId: id, severidad: 'critica' });
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const [fila] = servicio().listar({ ...FILTROS, proyectoId: proyecto });
+      expect(fila).toMatchObject({ severidad: 'critica', severidadManual: true, ocurrencias: 2 });
+    });
+
+    it('bandeja: los descartados se ocultan salvo que se pidan; el mismo problema en varias páginas comparte grupo', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [
+        { pagina: '/producto/12', hallazgos: [{ clave: 'color-contrast' }] },
+        { pagina: '/carrito', hallazgos: [{ clave: 'color-contrast' }, { clave: 'image-alt' }] },
+      ]);
+      const filas = servicio().listar({ ...FILTROS, proyectoId: proyecto });
+      expect(filas).toHaveLength(3);
+      const grupos = new Map<string, number>();
+      for (const f of filas) grupos.set(f.grupo, (grupos.get(f.grupo) ?? 0) + 1);
+      // color-contrast en dos formas: el mismo grupo; image-alt, otro.
+      expect([...grupos.values()].sort()).toEqual([1, 2]);
+      const imagen = filas.find((f) => !filas.some((g) => g !== f && g.grupo === f.grupo));
+      servicio().decidir({ accion: 'descartar', hallazgoId: imagen?.id ?? '', motivo: MOTIVO });
+      expect(servicio().listar({ ...FILTROS, proyectoId: proyecto })).toHaveLength(2);
+      expect(
+        servicio().listar({ ...FILTROS, proyectoId: proyecto, incluirDescartados: true }),
+      ).toHaveLength(3);
+      // Ningún campo trae la clave ni la huella.
+      expect(JSON.stringify(filas)).not.toMatch(/h1:|color-contrast/);
+    });
+
+    it('comparar: nuevos, recurrentes, resueltos (cubiertos), no cubiertos y regresiones', async () => {
+      const proyecto = crearProyecto();
+      const a = await corrida(proyecto, [
+        {
+          pagina: '/a',
+          hallazgos: [{ clave: 'resuelto-en-b' }, { clave: 'sigue' }, { clave: 'vuelve' }],
+        },
+        { pagina: '/b', hallazgos: [{ clave: 'no-recorrida-en-b' }] },
+      ]);
+      const vuelve = hallazgos(proyecto).find((f) => f.clave === 'vuelve')?.id ?? '';
+      servicio().decidir({ accion: 'resolver', hallazgoId: vuelve });
+      const b = await corrida(proyecto, [
+        {
+          pagina: '/a',
+          hallazgos: [{ clave: 'sigue' }, { clave: 'vuelve' }, { clave: 'aparece-en-b' }],
+        },
+      ]);
+      const comparacion = servicio().comparar(b, a);
+      if (comparacion.resultado !== 'comparada') throw new Error(comparacion.motivo);
+      // En orden aunque se pidan al revés.
+      expect([comparacion.anteriorId, comparacion.posteriorId]).toEqual([a, b]);
+      const claves = (lista: { hallazgoId: string }[]) =>
+        lista.map((h) => hallazgos(proyecto).find((f) => f.id === h.hallazgoId)?.clave);
+      expect(claves(comparacion.nuevos)).toEqual(['aparece-en-b']);
+      expect(claves(comparacion.recurrentes)).toEqual(['sigue']);
+      expect(claves(comparacion.regresiones)).toEqual(['vuelve']);
+      expect(claves(comparacion.resueltos)).toEqual(['resuelto-en-b']);
+      expect(claves(comparacion.noCubiertos)).toEqual(['no-recorrida-en-b']);
+    });
+
+    it('comparar rechaza la misma ejecución, otro proyecto o una sin terminar', async () => {
+      const p1 = crearProyecto('Uno');
+      const p2 = crearProyecto('Dos');
+      const a = await corrida(p1, [{ pagina: '/a', hallazgos: [] }]);
+      const b = await corrida(p2, [{ pagina: '/a', hallazgos: [] }]);
+      expect(servicio().comparar(a, a)).toEqual({ resultado: 'rechazada', motivo: 'misma' });
+      expect(servicio().comparar(a, b)).toEqual({
+        resultado: 'rechazada',
+        motivo: 'otro-proyecto',
+      });
+      const enCurso = lanzar(p1);
+      await pausa();
+      expect(servicio().comparar(a, enCurso)).toEqual({
+        resultado: 'rechazada',
+        motivo: 'no-terminada',
+      });
+    });
   });
 });
 

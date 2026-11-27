@@ -57,6 +57,8 @@ const api: QatlasApi = {
     cancelar: (req) => invoke('ejecuciones:cancelar', req),
     listar: (req) => invoke('ejecuciones:listar', req),
     detalle: (req) => invoke('ejecuciones:detalle', req),
+    listarTodas: (req) => invoke('ejecuciones:listarTodas', req),
+    comparar: (req) => invoke('ejecuciones:comparar', req),
     reanudar: (req) => invoke('ejecuciones:reanudar', req),
     // Solo los datos: la interfaz nunca recibe el evento de IPC ni `ipcRenderer`.
     alProgreso: (oyente) => {
@@ -75,6 +77,13 @@ const api: QatlasApi = {
     obtenerFotograma: (req) => invoke('evidencias:obtenerFotograma', req),
     noCumplenModoSensible: (req) => invoke('evidencias:noCumplenModoSensible', req),
     resolverModoSensible: (req) => invoke('evidencias:resolverModoSensible', req),
+  },
+  hallazgos: {
+    listar: (req) => invoke('hallazgos:listar', req),
+    detalle: (req) => invoke('hallazgos:detalle', req),
+    decidir: (req) => invoke('hallazgos:decidir', req),
+    cambiarSeveridad: (req) => invoke('hallazgos:cambiarSeveridad', req),
+    resolverEnLote: (req) => invoke('hallazgos:resolverEnLote', req),
   },
 };
 
