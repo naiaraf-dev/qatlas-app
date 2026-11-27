@@ -31,10 +31,10 @@
     "@tailwindcss/vite": "4.3.5",
     "@types/react": "19.3.3",
     "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.2.1",
+    "@vitejs/plugin-react": "6.3.0",
     "electron": "45.5.0",
     "electron-vite": "6.0.0",
     "tailwindcss": "4.3.5",
-    "vite": "8.3.5"
+    "vite": "8.3.8"
   }
 }
