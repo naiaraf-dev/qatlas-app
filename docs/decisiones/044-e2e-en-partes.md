@@ -148,6 +148,18 @@ Si falla el job de calidad, las partes del E2E no corren. El reporte unificado l
 («No corrió ninguna parte del E2E porque falló el job…») en vez de caerse con «Directory does not exist».
 Si las partes corrieron pero ninguna subió su reporte, también lo dice.
 
+## El nombre de las partes salteadas (decidido el 2026-11-27)
+
+Si falla el job de calidad, las partes se saltean y GitHub las muestra como
+«E2E ${{ matrix.numero }}/5 · ${{ matrix.nombre }}»: un job con matriz que se saltea por su `needs` no
+expande la matriz. Se puede evitar con cinco jobs explícitos, pero **se deja así a propósito**:
+
+- Con la matriz salteada, los checks obligatorios «E2E 1/5 · rápidos», etc. no se reportan: quedan
+  **pendientes y bloquean** el merge.
+- Con jobs explícitos, un job salteado se reporta como «skipped», y la protección de ramas lo cuenta como
+  **exitoso**. Se prefiere que un E2E que no corrió bloquee, antes que verlo como aprobado.
+- Sacar `needs: calidad` tampoco: el E2E correría paquetes antes de verificar sus firmas y sus binarios.
+
 ## Verificación
 
 - `security-tests/e2e-etiquetas.test.ts`: etiquetas, cada test en una sola parte, y las partes del CI y
