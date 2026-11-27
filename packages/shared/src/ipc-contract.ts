@@ -329,6 +329,11 @@ export const ResumenEjecucion = z
     conexionesBloqueadas: Cantidad,
     motivo: MotivoFinEjecucion.nullable(),
     hallazgos: Cantidad,
+    // Semana 8 (ADR 047): cuántos hallazgos aparecieron por primera vez, cuántos volvieron estando resueltos
+    // (se destacan, CU-09) y cuántos pasaron a «posiblemente resuelto» porque la ejecución los cubrió.
+    hallazgosNuevos: Cantidad,
+    regresiones: Cantidad,
+    posiblementeResueltos: Cantidad,
     // RN-ESC-05: por qué se detuvo antes de recorrer todo. `null` si no quedó nada por recorrer.
     detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
     // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
@@ -393,6 +398,21 @@ export type TipoHallazgo = z.infer<typeof TipoHallazgo>;
 export const SeveridadHallazgo = z.enum(['critica', 'alta', 'media', 'baja', 'informativa']);
 export type SeveridadHallazgo = z.infer<typeof SeveridadHallazgo>;
 
+// Los siete estados de la especificación (5.2). «Recurrente» es la aparición de una ocurrencia (ADR 047).
+export const EstadoHallazgo = z.enum([
+  'nuevo',
+  'confirmado',
+  'descartado',
+  'reportado',
+  'posiblemente_resuelto',
+  'resuelto',
+  'regresion',
+]);
+export type EstadoHallazgo = z.infer<typeof EstadoHallazgo>;
+
+export const AparicionHallazgo = z.enum(['nueva', 'recurrente', 'regresion']);
+export type AparicionHallazgo = z.infer<typeof AparicionHallazgo>;
+
 export const HallazgoVista = z
   .object({
     id: IdEntidad,
@@ -410,6 +430,73 @@ export const HallazgoVista = z
   })
   .strict();
 export type HallazgoVista = z.infer<typeof HallazgoVista>;
+
+// --- Semana 8: bandeja de hallazgos y comparación (ADR 046 y 047) ---------------------------------------
+
+const Fecha = z.string().max(40);
+
+export const HallazgoBandeja = z
+  .object({
+    id: IdEntidad,
+    proyectoId: IdEntidad,
+    proyectoNombre: z.string().max(120),
+    tipo: TipoHallazgo,
+    severidad: SeveridadHallazgo,
+    severidadManual: z.boolean(),
+    titulo: z.string().max(300),
+    url: z.string().max(2048),
+    // Dónde está el problema: el origen, la URL rota o la forma de la página. Redactado.
+    alcance: z.string().max(2048),
+    // «El mismo problema en varias páginas»: igual tipo y clave. Un hash, nunca la clave.
+    grupo: z.string().regex(/^[0-9a-f]{16}$/),
+    estado: EstadoHallazgo,
+    primeraVezEn: Fecha,
+    ultimaVezEn: Fecha,
+    cubiertoEn: Fecha.nullable(),
+    ocurrencias: Cantidad,
+    paginas: Cantidad,
+    ultimaAparicion: AparicionHallazgo.nullable(),
+    sinCobertura: z.boolean(),
+  })
+  .strict();
+export type HallazgoBandeja = z.infer<typeof HallazgoBandeja>;
+
+export const FiltrosBandeja = z
+  .object({
+    proyectoId: IdEntidad.nullable(),
+    estados: z.array(EstadoHallazgo).max(7),
+    severidades: z.array(SeveridadHallazgo).max(5),
+    tipos: z.array(TipoHallazgo).max(13),
+    soloRegresiones: z.boolean(),
+    incluirDescartados: z.boolean(),
+    soloSinCobertura: z.boolean(),
+  })
+  .strict();
+export type FiltrosBandeja = z.infer<typeof FiltrosBandeja>;
+
+export const OcurrenciaHistorial = z
+  .object({
+    ejecucionId: IdEntidad,
+    fecha: Fecha,
+    url: z.string().max(2048),
+    aparicion: AparicionHallazgo,
+    secretosRedactados: Cantidad,
+  })
+  .strict();
+
+export const HallazgoComparado = z
+  .object({
+    hallazgoId: IdEntidad,
+    tipo: TipoHallazgo,
+    severidad: SeveridadHallazgo,
+    titulo: z.string().max(300),
+    alcance: z.string().max(2048),
+    estado: EstadoHallazgo,
+  })
+  .strict();
+export type HallazgoComparado = z.infer<typeof HallazgoComparado>;
+
+const ListaComparada = z.array(HallazgoComparado).max(1000);
 
 export const PaginaVista = z
   .object({
@@ -724,6 +811,88 @@ export const ipcContract = {
       .object({ proyectoId: IdEntidad, accion: z.enum(['eliminar', 'conservar']) })
       .strict(),
     response: z.object({ cantidad: Cantidad }).strict(),
+  },
+  // Semana 8: la bandeja, las decisiones de la persona y la comparación (ADR 047).
+  'hallazgos:listar': {
+    request: FiltrosBandeja,
+    response: z.array(HallazgoBandeja).max(1000),
+  },
+  // El motivo de un descarte se descifra solo para mostrarlo acá.
+  'hallazgos:detalle': {
+    request: z.object({ hallazgoId: IdEntidad }).strict(),
+    response: z
+      .object({
+        historial: z.array(OcurrenciaHistorial).max(200),
+        motivoDescarte: z.string().max(500).nullable(),
+      })
+      .strict()
+      .nullable(),
+  },
+  'hallazgos:decidir': {
+    request: z.discriminatedUnion('accion', [
+      z.object({ accion: z.literal('confirmar'), hallazgoId: IdEntidad }).strict(),
+      z
+        .object({
+          accion: z.literal('descartar'),
+          hallazgoId: IdEntidad,
+          motivo: z.string().trim().min(1).max(500),
+        })
+        .strict(),
+      z.object({ accion: z.literal('resolver'), hallazgoId: IdEntidad }).strict(),
+      z.object({ accion: z.literal('reabrir'), hallazgoId: IdEntidad }).strict(),
+    ]),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('hecho'), estado: EstadoHallazgo }).strict(),
+      z
+        .object({
+          resultado: z.literal('rechazada'),
+          motivo: z.enum(['no-existe', 'no-corresponde']),
+        })
+        .strict(),
+    ]),
+  },
+  'hallazgos:cambiarSeveridad': {
+    request: z.object({ hallazgoId: IdEntidad, severidad: SeveridadHallazgo }).strict(),
+    response: z.object({ resultado: z.enum(['hecho', 'no-existe']) }).strict(),
+  },
+  // Solo los «posiblemente resueltos»: los demás se rechazan.
+  'hallazgos:resolverEnLote': {
+    request: z.object({ hallazgoIds: z.array(IdEntidad).min(1).max(500) }).strict(),
+    response: z.object({ resueltos: Cantidad, rechazados: Cantidad }).strict(),
+  },
+  'ejecuciones:listarTodas': {
+    request: z.object({ proyectoId: IdEntidad.nullable() }).strict(),
+    response: z
+      .array(
+        EjecucionResumen.extend({
+          proyectoId: IdEntidad,
+          proyectoNombre: z.string().max(120),
+        }).strict(),
+      )
+      .max(500),
+  },
+  'ejecuciones:comparar': {
+    request: z.object({ anteriorId: IdEntidad, posteriorId: IdEntidad }).strict(),
+    response: z.discriminatedUnion('resultado', [
+      z
+        .object({
+          resultado: z.literal('comparada'),
+          anteriorId: IdEntidad,
+          posteriorId: IdEntidad,
+          nuevos: ListaComparada,
+          recurrentes: ListaComparada,
+          regresiones: ListaComparada,
+          resueltos: ListaComparada,
+          noCubiertos: ListaComparada,
+        })
+        .strict(),
+      z
+        .object({
+          resultado: z.literal('rechazada'),
+          motivo: z.enum(['misma', 'no-existe', 'otro-proyecto', 'no-terminada']),
+        })
+        .strict(),
+    ]),
   },
   'ejecuciones:detalle': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),

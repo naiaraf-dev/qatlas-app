@@ -4,7 +4,13 @@ import { ErrorCripto } from './errores';
 import { LONGITUD_CLAVE } from './kdf';
 import { borrar } from './memoria';
 
-type UsoSubclave = 'sqlcipher' | 'envoltura-proyectos' | 'archivos' | 'campos' | 'clave-hallazgo';
+type UsoSubclave =
+  | 'sqlcipher'
+  | 'envoltura-proyectos'
+  | 'archivos'
+  | 'campos'
+  | 'clave-hallazgo'
+  | 'huella-hallazgo';
 
 const SIN_SALT = Buffer.alloc(0);
 
@@ -38,6 +44,14 @@ export function derivarSubclaveCampos(claveProyecto: Buffer): Buffer {
  */
 export function derivarSubclaveHallazgos(claveProyecto: Buffer): Buffer {
   return subclave(claveProyecto, 'clave-hallazgo');
+}
+
+/**
+ * Para la huella de un hallazgo (ADR 046): un HMAC de tipo, alcance y clave. Reconoce el mismo problema
+ * entre ejecuciones del proyecto; sin la clave del proyecto no se pueden probar candidatos.
+ */
+export function derivarSubclaveHuellas(claveProyecto: Buffer): Buffer {
+  return subclave(claveProyecto, 'huella-hallazgo');
 }
 
 export interface ClaveProyectoNueva {

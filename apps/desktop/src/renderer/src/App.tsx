@@ -12,6 +12,9 @@ import { Boveda } from './pages/Boveda';
 import { Inicio } from './pages/Inicio';
 import { Privacidad } from './pages/Privacidad';
 import { Proximamente } from './pages/Proximamente';
+import { Bandeja } from './pages/hallazgos/Bandeja';
+import { EjecucionesTodas } from './pages/hallazgos/EjecucionesTodas';
+import { Escaneos } from './pages/hallazgos/Escaneos';
 import { Proyectos, type VistaProyectos } from './pages/proyectos/Proyectos';
 import { applyTheme } from './theme';
 
@@ -155,6 +158,12 @@ function Principal({
     setPage(destino);
   };
 
+  const abrirProyecto = (id: string) => {
+    setVistaInicial({ tipo: 'detalle', id });
+    setVisita((n) => n + 1);
+    setPage('proyectos');
+  };
+
   const protectionsOk =
     status === null
       ? null
@@ -186,7 +195,10 @@ function Principal({
         <Privacidad status={status} connections={connections} onRefresh={refreshConnections} />
       )}
       {page === 'boveda' && <Boveda />}
-      {page !== 'inicio' && page !== 'proyectos' && page !== 'privacidad' && page !== 'boveda' && (
+      {page === 'hallazgos' && <Bandeja key={visita} />}
+      {page === 'ejecuciones' && <EjecucionesTodas key={visita} onAbrirProyecto={abrirProyecto} />}
+      {page === 'escaneos' && <Escaneos key={visita} onAbrirProyecto={abrirProyecto} />}
+      {(page === 'casos' || page === 'reportes' || page === 'uat') && (
         <Proximamente
           page={page}
           onIrAProyectos={() => {

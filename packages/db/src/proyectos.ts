@@ -28,10 +28,10 @@ export type FilaHallazgo = typeof hallazgo.$inferSelect;
 export type FilaOcurrencia = typeof hallazgoOcurrencia.$inferSelect;
 
 type Comunes = 'createdAt' | 'updatedAt';
-export type NuevoProyecto = Omit<FilaProyecto, Comunes | 'redaccionVersion'>;
+export type NuevoProyecto = Omit<FilaProyecto, Comunes | 'redaccionVersion' | 'huellasVersion'>;
 type DatosProyecto = Omit<
   FilaProyecto,
-  Comunes | 'id' | 'claveProyectoCifrada' | 'redaccionVersion'
+  Comunes | 'id' | 'claveProyectoCifrada' | 'redaccionVersion' | 'huellasVersion'
 >;
 type NuevaAutorizacion = Omit<
   FilaAutorizacion,
@@ -58,7 +58,15 @@ export type AccionAuditoria =
   | 'evidencias.retencion'
   | 'evidencias.modo-sensible-eliminar'
   | 'evidencias.modo-sensible-conservar'
-  | 'configuracion.editar';
+  | 'configuracion.editar'
+  // Hallazgos (semana 8, ADR 047): solo IDs, nombres de campos y cantidades.
+  | 'hallazgo.confirmar'
+  | 'hallazgo.descartar'
+  | 'hallazgo.resolver'
+  | 'hallazgo.reabrir'
+  | 'hallazgo.severidad'
+  | 'hallazgo.resolver-lote'
+  | 'hallazgo.fusionar';
 
 const orm = (base: BaseCifrada) => drizzle(base);
 
@@ -201,7 +209,7 @@ export function registrarAuditoria(
   base: BaseCifrada,
   entrada: {
     accion: AccionAuditoria;
-    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion';
+    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion' | 'hallazgo';
     entidadId: string;
     detalle?: DetalleAuditoria;
   },
@@ -381,21 +389,25 @@ export function leerHallazgosDeEjecucion(
   secretosRedactados: number;
   paginaVisitadaId: string | null;
 })[] {
-  return orm(base)
-    .select({
-      ...getTableColumns(hallazgo),
-      ocurrenciaId: hallazgoOcurrencia.id,
-      urlOrigen: hallazgoOcurrencia.urlOrigen,
-      detalleCifrado: hallazgoOcurrencia.detalleCifrado,
-      secretosRedactados: hallazgoOcurrencia.secretosRedactados,
-      paginaVisitadaId: hallazgoOcurrencia.paginaVisitadaId,
-    })
-    .from(hallazgo)
-    .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
-    .where(eq(hallazgo.ejecucionId, ejecucionId))
-    .orderBy(asc(sql`hallazgo.rowid`))
-    .limit(1000)
-    .all();
+  return (
+    orm(base)
+      .select({
+        ...getTableColumns(hallazgo),
+        ocurrenciaId: hallazgoOcurrencia.id,
+        urlOrigen: hallazgoOcurrencia.urlOrigen,
+        detalleCifrado: hallazgoOcurrencia.detalleCifrado,
+        secretosRedactados: hallazgoOcurrencia.secretosRedactados,
+        paginaVisitadaId: hallazgoOcurrencia.paginaVisitadaId,
+      })
+      .from(hallazgo)
+      .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
+      // Por la ocurrencia: desde la semana 8 un hallazgo aparece en varias ejecuciones, y su
+      // `ejecucion_id` es la primera.
+      .where(eq(hallazgoOcurrencia.ejecucionId, ejecucionId))
+      .orderBy(asc(sql`hallazgo_ocurrencia.rowid`))
+      .limit(1000)
+      .all()
+  );
 }
 
 export function registrarIntentoLogin(

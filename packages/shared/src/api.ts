@@ -85,6 +85,12 @@ export interface QatlasApi {
     detalle(
       req: IpcRequest<'ejecuciones:detalle'>,
     ): Promise<IpcResult<IpcResponse<'ejecuciones:detalle'>>>;
+    listarTodas(
+      req: IpcRequest<'ejecuciones:listarTodas'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:listarTodas'>>>;
+    comparar(
+      req: IpcRequest<'ejecuciones:comparar'>,
+    ): Promise<IpcResult<IpcResponse<'ejecuciones:comparar'>>>;
     reanudar(
       req: IpcRequest<'ejecuciones:reanudar'>,
     ): Promise<IpcResult<IpcResponse<'ejecuciones:reanudar'>>>;
@@ -107,5 +113,22 @@ export interface QatlasApi {
     resolverModoSensible(
       req: IpcRequest<'evidencias:resolverModoSensible'>,
     ): Promise<IpcResult<IpcResponse<'evidencias:resolverModoSensible'>>>;
+  };
+  hallazgos: {
+    listar(
+      req: IpcRequest<'hallazgos:listar'>,
+    ): Promise<IpcResult<IpcResponse<'hallazgos:listar'>>>;
+    detalle(
+      req: IpcRequest<'hallazgos:detalle'>,
+    ): Promise<IpcResult<IpcResponse<'hallazgos:detalle'>>>;
+    decidir(
+      req: IpcRequest<'hallazgos:decidir'>,
+    ): Promise<IpcResult<IpcResponse<'hallazgos:decidir'>>>;
+    cambiarSeveridad(
+      req: IpcRequest<'hallazgos:cambiarSeveridad'>,
+    ): Promise<IpcResult<IpcResponse<'hallazgos:cambiarSeveridad'>>>;
+    resolverEnLote(
+      req: IpcRequest<'hallazgos:resolverEnLote'>,
+    ): Promise<IpcResult<IpcResponse<'hallazgos:resolverEnLote'>>>;
   };
 }

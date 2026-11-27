@@ -3,7 +3,12 @@ import { sinQuery } from '@qatlas/runner';
 import {
   actualizarEjecucion,
   agregarConexiones,
-  agregarHallazgo,
+  aplicarCobertura,
+  buscarPorHuella,
+  candidatosACobertura,
+  contextoDeEjecucion,
+  paginasAnalizadas,
+  registrarAparicion,
   agregarPaginaVisitada,
   agregarRedacciones,
   actualizarDetalleOcurrencia,
@@ -20,6 +25,7 @@ import {
   leerUltimasConexiones,
   type BaseCifrada,
   type FilaEjecucion,
+  type NuevaAparicion,
   type NuevaRedaccion,
 } from '@qatlas/db';
 import {
@@ -42,6 +48,7 @@ import {
   type MotivoFinEjecucion,
   type ProgresoEjecucion,
   type ResumenEjecucion,
+  type TipoHallazgo,
 } from '@qatlas/shared';
 import {
   EstadoSesion,
@@ -58,6 +65,9 @@ import {
   type EvidenciasDeEjecucion,
   type ServicioEvidencias,
 } from '../evidencias/servicio';
+import { decidirCobertura } from '../hallazgos/cobertura';
+import { alAparecer, ESTADOS_ABIERTOS } from '../hallazgos/estados';
+import { alcanceDe, huellaDe, VERSION_NORMALIZACION } from '../hallazgos/huella';
 import { registrar } from '../registro';
 import {
   claveDeMensaje,
@@ -65,6 +75,7 @@ import {
   filasDeRegistro,
   REDACTOR,
   subclaveDeHallazgos,
+  subclaveDeHuellas,
   TIPOS_DE_MENSAJE,
   type Redactor,
 } from './redaccion';
@@ -106,7 +117,8 @@ const MAX_CONEXIONES_GUARDADAS = 2000;
  */
 const TIEMPO_DE_SALIDA_MS = 10_000;
 
-const RESUMEN_VACIO: ResumenEjecucion = {
+/** Lo que falta en el resumen de una ejecución de semanas anteriores. */
+export const RESUMEN_VACIO: ResumenEjecucion = {
   paginasVisitadas: 0,
   linksExcluidos: 0,
   conexionesPermitidas: 0,
@@ -118,6 +130,9 @@ const RESUMEN_VACIO: ResumenEjecucion = {
   noRecorridosExclusiones: 0,
   noRecorridosSinWebGL: 0,
   urlsDescartadas: 0,
+  hallazgosNuevos: 0,
+  regresiones: 0,
+  posiblementeResueltos: 0,
   websocketDescartados: 0,
   logins: 0,
   loginsInesperados: 0,
@@ -192,6 +207,8 @@ interface EnCurso {
   comparador: ComparadorDeSecretos | null;
   /** Para la clave de los mensajes (ADR 032). Se borra al terminar. */
   subclaveHallazgos: Buffer | null;
+  /** Para la huella de cada hallazgo (ADR 046). Se borra al terminar. */
+  subclaveHuellas: Buffer | null;
   /**
    * El último mensaje de consola de cada página, sin redactar y solo en memoria: para un secreto
    * partido en dos mensajes consecutivos. Se vacía al terminar.
@@ -595,6 +612,7 @@ export class ServicioEjecuciones {
       evidencias: null,
       comparador: null,
       subclaveHallazgos: null,
+      subclaveHuellas: null,
       consolaPrevia: new Map(),
     };
     this.actual = enCurso;
@@ -604,6 +622,7 @@ export class ServicioEjecuciones {
       if (proyecto) {
         enCurso.comparador = comparadorDelProyecto(base, maestra, proyecto);
         enCurso.subclaveHallazgos = subclaveDeHallazgos(maestra, proyecto);
+        enCurso.subclaveHuellas = subclaveDeHuellas(maestra, proyecto);
       }
     });
     return enCurso;
@@ -1090,26 +1109,20 @@ export class ServicioEjecuciones {
           )
         : null;
       this.boveda.conAcceso((base) => {
-        agregarHallazgo(
-          base,
-          {
-            proyectoId: enCurso.proyectoId,
-            ejecucionId: enCurso.id,
-            tipo: hallazgo.tipo,
-            severidad: hallazgo.severidad,
-            titulo: titulo.texto,
-            descripcion: titulo.texto,
-            url: url.texto,
-            clave,
-          },
-          {
+        this.registrarPorHuella(base, enCurso, {
+          tipo: hallazgo.tipo,
+          severidad: hallazgo.severidad,
+          titulo: titulo.texto,
+          url: url.texto,
+          clave,
+          ocurrencia: {
             id: ocurrenciaId,
             urlOrigen: urlOrigen?.texto ?? null,
             detalleCifrado,
             secretosRedactados: secretos,
             paginaVisitadaId: enCurso.paginaId,
           },
-        );
+        });
         agregarRedacciones(
           base,
           porOrigen.flatMap(([origen, resultado]): NuevaRedaccion[] =>
@@ -1270,6 +1283,8 @@ export class ServicioEjecuciones {
     enCurso.espera = null;
     const guardar = (abierta: BaseCifrada): void => {
       this.volcarConexiones(abierta, enCurso);
+      // Solo un escaneo terminado mueve estados: lo que no se recorrió no se da por arreglado (ADR 047).
+      if (estado === 'finalizada') this.aplicarCobertura(abierta, enCurso);
       actualizarEjecucion(abierta, enCurso.id, {
         estado,
         fin: new Date().toISOString(),
@@ -1364,12 +1379,72 @@ export class ServicioEjecuciones {
     }
   }
 
+  /**
+   * Guarda la aparición por su huella (ADR 046 y 047): crea el hallazgo o actualiza el de su huella, con la
+   * transición de estado de `alAparecer`. Una regresión se cuenta en el resumen, que la destaca (CU-09). Sin
+   * subclave (no debería pasar), el hallazgo queda sin huella, como antes de la semana 8.
+   */
+  private registrarPorHuella(
+    base: BaseCifrada,
+    enCurso: EnCurso,
+    datos: Pick<NuevaAparicion, 'tipo' | 'severidad' | 'titulo' | 'url' | 'clave' | 'ocurrencia'>,
+  ): void {
+    const tipo = datos.tipo as TipoHallazgo;
+    const alcance = this.redactor.texto(alcanceDe(tipo, datos.url)).texto;
+    const huella = enCurso.subclaveHuellas
+      ? huellaDe(enCurso.subclaveHuellas, { tipo, url: datos.url, clave: datos.clave })
+      : null;
+    const existente = huella ? buscarPorHuella(base, enCurso.proyectoId, huella) : null;
+    const siguiente = alAparecer(existente);
+    if (siguiente.aparicion === 'nueva') enCurso.resumen.hallazgosNuevos += 1;
+    if (siguiente.aparicion === 'regresion') enCurso.resumen.regresiones += 1;
+    registrarAparicion(
+      base,
+      {
+        ...datos,
+        proyectoId: enCurso.proyectoId,
+        ejecucionId: enCurso.id,
+        huella: huella ?? '',
+        alcance,
+        versionNormalizacion: VERSION_NORMALIZACION,
+        estado: siguiente.estado,
+        estadoPrevio: siguiente.estadoPrevio,
+        aparicion: siguiente.aparicion,
+      },
+      existente?.id ?? null,
+    );
+  }
+
+  /**
+   * Al terminar un escaneo: los hallazgos que no aparecieron y que la ejecución cubrió (la misma forma de
+   * página, con el mismo contexto) pasan a «posiblemente resuelto» si estaban abiertos (ADR 047).
+   */
+  private aplicarCobertura(base: BaseCifrada, enCurso: EnCurso): void {
+    const contexto = contextoDeEjecucion(base, enCurso.id);
+    if (!contexto || contexto.tipo !== 'escaneo') return;
+    const candidatos = candidatosACobertura(base, enCurso.proyectoId, enCurso.id, [
+      ...ESTADOS_ABIERTOS,
+      'posiblemente_resuelto',
+      'resuelto',
+      'descartado',
+    ]);
+    const { cambios, cubiertos } = decidirCobertura(
+      candidatos,
+      contexto,
+      paginasAnalizadas(base, enCurso.id),
+    );
+    aplicarCobertura(base, cambios, cubiertos);
+    enCurso.resumen.posiblementeResueltos += cambios.length;
+  }
+
   /** El comparador, la subclave y los mensajes de consola de la ejecución se olvidan al terminar. */
   private olvidarSecretos(enCurso: EnCurso): void {
     enCurso.comparador?.descartar();
     enCurso.comparador = null;
     enCurso.subclaveHallazgos?.fill(0);
     enCurso.subclaveHallazgos = null;
+    enCurso.subclaveHuellas?.fill(0);
+    enCurso.subclaveHuellas = null;
     enCurso.consolaPrevia.clear();
   }
 

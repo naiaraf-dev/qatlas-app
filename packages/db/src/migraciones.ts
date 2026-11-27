@@ -296,6 +296,25 @@ export const MIGRACIONES: readonly Migracion[] = [
       ALTER TABLE configuracion ADD COLUMN barra_lateral TEXT NOT NULL DEFAULT 'expandida';
     `,
   },
+  {
+    version: 10,
+    // Huella, estados y regresiones (semana 8, ADR 046 y 047). La huella es única por proyecto: lo guardado
+    // antes se fusiona al desbloquear, y `huellas_version` dice hasta dónde llegó.
+    sql: `
+      ALTER TABLE hallazgo ADD COLUMN alcance TEXT;
+      ALTER TABLE hallazgo ADD COLUMN version_normalizacion INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE hallazgo ADD COLUMN estado_previo TEXT;
+      ALTER TABLE hallazgo ADD COLUMN severidad_manual INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE hallazgo ADD COLUMN motivo_descarte_cifrado BLOB;
+      ALTER TABLE hallazgo ADD COLUMN decision_en TEXT;
+      ALTER TABLE hallazgo ADD COLUMN cubierto_en TEXT;
+      ALTER TABLE hallazgo_ocurrencia ADD COLUMN aparicion TEXT NOT NULL DEFAULT 'nueva';
+      ALTER TABLE proyecto ADD COLUMN huellas_version INTEGER NOT NULL DEFAULT 0;
+      CREATE UNIQUE INDEX hallazgo_huella ON hallazgo(proyecto_id, huella) WHERE huella IS NOT NULL;
+      CREATE INDEX hallazgo_proyecto_estado ON hallazgo(proyecto_id, estado);
+      CREATE INDEX hallazgo_ocurrencia_ejecucion ON hallazgo_ocurrencia(ejecucion_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

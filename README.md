@@ -67,6 +67,9 @@ La seguridad no se agrega al final: es lo primero que se construye y se verifica
 | Capturas con contraseñas, selectores sensibles y secretos a la vista tapados                         | ✅         |
 | Borrado criptográfico por evidencia, retención y modo datos sensibles                                | ✅         |
 | Visor sin renderizar el sitio: imágenes en un canvas, CSP sin `data:` ni `blob:`                     | ✅         |
+| Huella de cada hallazgo con HMAC del proyecto, sin texto de la página en claro                       | ✅         |
+| «Posiblemente resuelto» solo si la ejecución recorrió su página, con el mismo contexto               | ✅         |
+| Motivo de descarte cifrado; decisiones auditadas solo con IDs y nombres de campos                    | ✅         |
 
 Detalle: [SECURITY.md](SECURITY.md) · [modelo de amenazas](docs/modelo-de-amenazas.md) ·
 [especificación, sección 3](docs/especificacion-qatlas.md).

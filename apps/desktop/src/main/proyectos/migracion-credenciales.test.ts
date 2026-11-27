@@ -46,6 +46,19 @@ const CREDENCIAL = {
 
 /** Lo inverso de la migración 6, solo para fabricar la copia vieja. */
 const AL_ESQUEMA_5 = `
+  -- Lo de la versión 10 (semana 8, huella y estados).
+  DROP INDEX hallazgo_huella;
+  DROP INDEX hallazgo_proyecto_estado;
+  DROP INDEX hallazgo_ocurrencia_ejecucion;
+  ALTER TABLE hallazgo DROP COLUMN alcance;
+  ALTER TABLE hallazgo DROP COLUMN version_normalizacion;
+  ALTER TABLE hallazgo DROP COLUMN estado_previo;
+  ALTER TABLE hallazgo DROP COLUMN severidad_manual;
+  ALTER TABLE hallazgo DROP COLUMN motivo_descarte_cifrado;
+  ALTER TABLE hallazgo DROP COLUMN decision_en;
+  ALTER TABLE hallazgo DROP COLUMN cubierto_en;
+  ALTER TABLE hallazgo_ocurrencia DROP COLUMN aparicion;
+  ALTER TABLE proyecto DROP COLUMN huellas_version;
   -- Lo de la versión 9 (la barra lateral).
   ALTER TABLE configuracion DROP COLUMN barra_lateral;
   -- Lo de la versión 8 (semana 7b, evidencias).

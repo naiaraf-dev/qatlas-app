@@ -5,6 +5,7 @@ import { elegirCopiaARestaurar, elegirDestinoDeCopia } from '../boveda/dialogos'
 import type { ServicioBoveda } from '../boveda/servicio';
 import type { ServicioEjecuciones } from '../ejecuciones/servicio';
 import type { ServicioEvidencias } from '../evidencias/servicio';
+import type { ServicioHallazgos } from '../hallazgos/servicio';
 import type { ServicioProyectos } from '../proyectos/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
@@ -20,13 +21,14 @@ export interface IpcDependencies {
   proyectos: ServicioProyectos;
   ejecuciones: ServicioEjecuciones;
   evidencias: ServicioEvidencias;
+  hallazgos: ServicioHallazgos;
   alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
-  const { boveda, proyectos, ejecuciones, evidencias } = deps;
+  const { boveda, proyectos, ejecuciones, evidencias, hallazgos } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -151,6 +153,14 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     'ejecuciones:cancelar': ({ ejecucionId }) => ejecuciones.cancelar(ejecucionId),
     'ejecuciones:listar': ({ proyectoId }) => ejecuciones.listar(proyectoId),
     'ejecuciones:detalle': ({ ejecucionId }) => ejecuciones.detalle(ejecucionId),
+    'ejecuciones:listarTodas': ({ proyectoId }) => hallazgos.listarEjecuciones(proyectoId),
+    'ejecuciones:comparar': ({ anteriorId, posteriorId }) =>
+      hallazgos.comparar(anteriorId, posteriorId),
+    'hallazgos:listar': (filtros) => hallazgos.listar(filtros),
+    'hallazgos:detalle': ({ hallazgoId }) => hallazgos.detalle(hallazgoId),
+    'hallazgos:decidir': (solicitud) => hallazgos.decidir(solicitud),
+    'hallazgos:cambiarSeveridad': (solicitud) => hallazgos.cambiarSeveridad(solicitud),
+    'hallazgos:resolverEnLote': ({ hallazgoIds }) => hallazgos.resolverEnLote(hallazgoIds),
     'evidencias:listar': ({ ejecucionId }) => evidencias.listar(ejecucionId),
     'evidencias:obtenerVista': ({ evidenciaId }) => evidencias.vista(evidenciaId),
     'evidencias:obtenerFotograma': ({ evidenciaId, indice }) =>

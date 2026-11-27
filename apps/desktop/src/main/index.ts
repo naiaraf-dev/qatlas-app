@@ -6,6 +6,7 @@ import { conectarActividad, DetectorInactividad } from './boveda/inactividad';
 import type { ServicioBoveda } from './boveda/servicio';
 import type { ServicioEjecuciones } from './ejecuciones/servicio';
 import type { ServicioEvidencias } from './evidencias/servicio';
+import type { ServicioHallazgos } from './hallazgos/servicio';
 import { limpiarPerfilesHuerfanos } from './ejecuciones/perfiles';
 import { crearLanzador } from './ejecuciones/procesos';
 import type { ServicioProyectos } from './proyectos/servicio';
@@ -187,6 +188,7 @@ async function cargarServicios(): Promise<{
   proyectos: ServicioProyectos;
   ejecuciones: ServicioEjecuciones;
   evidencias: ServicioEvidencias;
+  hallazgos: ServicioHallazgos;
 } | null> {
   const carpetaDelPaquete = (paquete: string): string =>
     path.dirname(requerir.resolve(`${paquete}/package.json`));
@@ -196,7 +198,9 @@ async function cargarServicios(): Promise<{
   const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
   const { ServicioEjecuciones: Ejecuciones } = await import('./ejecuciones/servicio');
   const { redactarLoGuardado } = await import('./ejecuciones/redaccion-guardada');
+  const { fusionarLoGuardado } = await import('./hallazgos/huellas-guardadas');
   const { ServicioEvidencias: Evidencias } = await import('./evidencias/servicio');
+  const { ServicioHallazgos: Hallazgos } = await import('./hallazgos/servicio');
   // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
   const dependientes: { ejecuciones?: ServicioEjecuciones; evidencias?: ServicioEvidencias } = {};
   const boveda = new Servicio({
@@ -204,6 +208,8 @@ async function cargarServicios(): Promise<{
     // Lo guardado antes de la redacción (semana 7) se redacta al abrir la base (ADR 033).
     alAbrir: (base, maestra) => {
       redactarLoGuardado(base, maestra);
+      // Después de redactar: la huella de lo guardado antes de la semana 8, y la fusión (ADR 047).
+      fusionarLoGuardado(base, maestra);
       // EVI-06: la retención, y los restos ilegibles de una ejecución cortada (ADR 038).
       dependientes.evidencias?.alAbrir(base);
     },
@@ -251,7 +257,8 @@ async function cargarServicios(): Promise<{
     evidencias,
   );
   dependientes.ejecuciones = ejecuciones;
-  return { boveda, proyectos, ejecuciones, evidencias };
+  const hallazgos = new Hallazgos(boveda, proyectos);
+  return { boveda, proyectos, ejecuciones, evidencias, hallazgos };
 }
 
 function vigilarBloqueo(boveda: ServicioBoveda): void {
@@ -286,7 +293,7 @@ void app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  const { boveda, proyectos, ejecuciones, evidencias } = servicios;
+  const { boveda, proyectos, ejecuciones, evidencias, hallazgos } = servicios;
   vigilarBloqueo(boveda);
   limpiarPerfilesHuerfanos(dataDirectory);
 
@@ -307,6 +314,7 @@ void app.whenReady().then(async () => {
       proyectos,
       ejecuciones,
       evidencias,
+      hallazgos,
       alCambiarBloqueoMinutos: (minutos) => {
         inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
       },

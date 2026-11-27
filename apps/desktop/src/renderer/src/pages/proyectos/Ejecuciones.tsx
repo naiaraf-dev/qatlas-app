@@ -76,6 +76,32 @@ const NOMBRE_SEVERIDAD: Record<SeveridadHallazgo, string> = {
   informativa: 'Informativa',
 };
 
+/** Las regresiones se destacan en el resumen de la ejecución que las detecta (CU-09). */
+function Regresiones({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
+  if (
+    resumen.regresiones === 0 &&
+    resumen.posiblementeResueltos === 0 &&
+    resumen.hallazgosNuevos === 0
+  ) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {resumen.regresiones > 0 && (
+        // Sin role="alert": la lista de ejecuciones se actualiza sola y lo repetiría en cada vuelta.
+        <p className="rounded-lg border-2 border-crit-text bg-crit-bg p-3 font-bold text-crit-text">
+          {resumen.regresiones === 1
+            ? 'Regresión: un hallazgo resuelto volvió a aparecer. Está en Hallazgos, marcado como «Regresión».'
+            : `${String(resumen.regresiones)} regresiones: hallazgos resueltos volvieron a aparecer. Están en Hallazgos, marcados como «Regresión».`}
+        </p>
+      )}
+      <p className="text-[13.5px] text-muted">
+        Nuevos: {resumen.hallazgosNuevos} · Posiblemente resueltos: {resumen.posiblementeResueltos}
+      </p>
+    </div>
+  );
+}
+
 /** Lo que el escaneo no cubrió: un reporte tiene que decirlo. */
 function Cobertura({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
   const lineas = [
@@ -361,6 +387,7 @@ export function Ejecuciones({ proyecto }: { proyecto: ProyectoDetalle }) {
                       {ejecucion.resumen.conexionesBloqueadas} · Hallazgos:{' '}
                       {ejecucion.resumen.hallazgos}
                     </p>
+                    <Regresiones resumen={ejecucion.resumen} />
                     <Cobertura resumen={ejecucion.resumen} />
                   </>
                 )}

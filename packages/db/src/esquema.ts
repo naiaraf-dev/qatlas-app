@@ -1,6 +1,16 @@
 import { blob, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { TextoRedactado } from '@qatlas/redaction';
 
+/** Los siete estados de la especificación (5.2). Igual que `EstadoHallazgo` de `@qatlas/shared`. */
+export type EstadoHallazgo =
+  | 'nuevo'
+  | 'confirmado'
+  | 'descartado'
+  | 'reportado'
+  | 'posiblemente_resuelto'
+  | 'resuelto'
+  | 'regresion';
+
 // Los campos comunes de la sección 5 de la especificación.
 const comunes = {
   id: text('id').primaryKey(),
@@ -59,6 +69,8 @@ export const proyecto = sqliteTable('proyecto', {
   sesionMaxMinutos: integer('sesion_max_minutos'),
   /** Hasta qué versión de la redacción se pasó lo guardado de este proyecto (ADR 033). */
   redaccionVersion: integer('redaccion_version').notNull().default(0),
+  /** Hasta qué versión de la huella se fusionó lo guardado de este proyecto (ADR 047). */
+  huellasVersion: integer('huellas_version').notNull().default(0),
   permitirLoginHttp: integer('permitir_login_http', { mode: 'boolean' }).notNull(),
   claveProyectoCifrada: blob('clave_proyecto_cifrada', { mode: 'buffer' }).notNull(),
 });
@@ -139,12 +151,27 @@ export const hallazgo = sqliteTable('hallazgo', {
   descripcion: text('descripcion').$type<TextoRedactado>().notNull(),
   url: text('url').$type<TextoRedactado>().notNull(),
   clave: text('clave').$type<TextoRedactado>().notNull(),
+  /** HMAC de tipo, alcance y clave con la subclave de huellas del proyecto (ADR 046). Única por proyecto. */
   huella: text('huella'),
-  estado: text('estado').notNull(),
+  estado: text('estado').$type<EstadoHallazgo>().notNull(),
   primeraVezEn: text('primera_vez_en').notNull(),
   ultimaVezEn: text('ultima_vez_en').notNull(),
   casoId: text('caso_id'),
   pasoIndice: integer('paso_indice'),
+  /** Dónde está el problema: el origen, la URL rota o la forma de la página (ADR 046). Redactado. */
+  alcance: text('alcance').$type<TextoRedactado>(),
+  /** Con qué normalización se calculó la clave de un mensaje: si cambia, se recalcula. */
+  versionNormalizacion: integer('version_normalizacion').notNull().default(1),
+  /** El estado antes de «posiblemente resuelto», para volver a él si reaparece (ADR 047). */
+  estadoPrevio: text('estado_previo').$type<EstadoHallazgo>(),
+  /** La severidad la cambió una persona: una aparición nueva no la pisa. */
+  severidadManual: integer('severidad_manual', { mode: 'boolean' }).notNull().default(false),
+  /** El motivo de un descarte: texto de la persona, cifrado con la clave del proyecto. */
+  motivoDescarteCifrado: blob('motivo_descarte_cifrado', { mode: 'buffer' }),
+  /** La última decisión de una persona (confirmar, descartar, resolver, reabrir). */
+  decisionEn: text('decision_en'),
+  /** La última ejecución que lo cubrió, apareciera o no. */
+  cubiertoEn: text('cubierto_en'),
 });
 
 /** Cada aparición de un hallazgo en una ejecución. Lo que puede traer contenido de la página, cifrado. */
@@ -169,6 +196,11 @@ export const hallazgoOcurrencia = sqliteTable('hallazgo_ocurrencia', {
   revisionPendiente: integer('revision_pendiente', { mode: 'boolean' }).notNull().default(false),
   /** La página donde apareció: sus capturas, su tramo de video y su snapshot (semana 7b). */
   paginaVisitadaId: text('pagina_visitada_id'),
+  /** Cómo apareció en esa ejecución: nueva, recurrente o regresión (ADR 047). */
+  aparicion: text('aparicion')
+    .$type<'nueva' | 'recurrente' | 'regresion'>()
+    .notNull()
+    .default('nueva'),
 });
 
 export const TIPOS_EVIDENCIA = ['captura', 'video', 'traza', 'har', 'snapshot-dom'] as const;

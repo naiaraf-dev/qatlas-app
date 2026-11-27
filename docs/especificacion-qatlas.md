@@ -836,9 +836,13 @@ campo. Los campos JSON se guardan como texto.
 
 ## 5.1 Huella de un hallazgo y detección de regresiones
 
-Cada hallazgo tiene una **huella** (hash) calculada a partir de su tipo,
+Cada hallazgo tiene una **huella** calculada a partir de su tipo,
 la URL normalizada y el mensaje normalizado (sin números de línea, IDs
-ni timestamps). Al guardar un hallazgo:
+ni timestamps). **Implementado en la semana 8 (ADR 046):** es un HMAC con
+una subclave del proyecto, no un hash sin clave; la URL entra como
+**alcance** según el tipo (el origen, la URL rota o la forma de la página),
+y los mensajes se normalizan con la v2 (también hashes de bundle e IDs
+hexadecimales). Al guardar un hallazgo:
 
 - Si no existe otro con la misma huella en el proyecto → se crea como
   **nuevo**.
@@ -850,7 +854,14 @@ ni timestamps). Al guardar un hallazgo:
   alerta destacada.
 
 - Si un hallazgo abierto no aparece en una ejecución que cubrió su URL o
-  caso → pasa a **posiblemente resuelto**.
+  caso → pasa a **posiblemente resuelto**. Cubrir es analizar una página
+  de la misma forma, **con el mismo contexto** (sin login, o la misma
+  credencial y rol); lo que no se recorrió no se da por arreglado (ADR 047).
+
+«Recurrente» no es un estado sino la **aparición** de cada ocurrencia
+(nueva, recurrente o regresión), para no pisar la decisión de una persona.
+Un posiblemente resuelto que vuelve recupera su estado anterior; solo uno
+**resuelto** que vuelve es una regresión (ADR 047).
 
 ## 5.2 Estados de un hallazgo
 
@@ -861,7 +872,7 @@ ni timestamps). Al guardar un hallazgo:
 | descartado            | Falso positivo; no se vuelve a alertar con la misma huella |
 | reportado             | Incluido en un reporte de bug                              |
 | posiblemente_resuelto | No apareció en la última ejecución que lo cubría           |
-| resuelto              | Confirmado como corregido                                  |
+| resuelto              | Confirmado como corregido por una persona (también en lote desde «posiblemente resuelto») |
 | regresion             | Estaba resuelto y volvió a aparecer                        |
 
 # 6. Módulos funcionales
@@ -2614,12 +2625,12 @@ sin marcar.
 | CU-01 Crear proyecto  | PRY         | RN-PRY-01 a 05, SEG-01, SEG-02        | —                      | 1        |
 | CU-02 Credenciales    | PRY         | RN-PRY-04, EVI-01                     | TS-01, TS-06           | 1        |
 | CU-03 Escaneo         | ESC, EJE    | RN-ESC-01 a 05, SEG-03 a 05, 3.5, 3.7 | TS-03, TS-04, TS-05    | 1        |
-| CU-04 Hallazgos       | REP         | Sección 5                             | —                      | 1        |
+| CU-04 Hallazgos       | REP         | Sección 5, ADR 047                    | TS-08 (hallazgos); motivo de descarte cifrado y auditoría con IDs | 1        |
 | CU-05 Exportar        | REP         | RN-REP-01 a 03, 3.9                   | TS-01                  | 1        |
 | CU-06 Conexiones      | PRV         | 3.5                                   | TS-03                  | 1        |
 | CU-07 Editor          | CAS         | RN-CAS-01, 02                         | TS-01                  | 2        |
 | CU-08 Grabar          | GRA         | RN-GRA-01, 02                         | TS-03, TS-06           | 3        |
-| CU-09 Regresión       | EJE, REP    | Sección 5.1                           | —                      | 1        |
+| CU-09 Regresión       | EJE, REP    | Sección 5.1, ADR 046 y 047            | Huella (pares que se unen y que no), cobertura por forma y contexto, regresión de punta a punta (`e2e/regresiones.e2e.ts`) | 1        |
 | CU-10 Importar Excel  | XLS         | RN-XLS-01 a 04, ENT-01 a 06           | TS-12                  | 2        |
 | CU-11 Ronda de UAT    | MAN, REP    | RN-MAN-01 a 04, EXP-01                | TS-01, TS-11           | 2        |
 | CU-12 Monitor de logs | MON         | RN-MON-01 a 03, ENT-07                | TS-13                  | 3        |

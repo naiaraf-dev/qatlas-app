@@ -94,6 +94,7 @@ test(
         'credenciales',
         'ejecuciones',
         'evidencias',
+        'hallazgos',
         'privacy',
         'proyectos',
         'security',
@@ -224,19 +225,14 @@ test(
 );
 
 test(
-  'Escaneos y Ejecuciones dicen que hoy se lanzan desde cada proyecto, y llevan ahí',
+  'Escaneos, Ejecuciones y Hallazgos tienen su página, sin «Llega en» (semana 8)',
   { tag: ['@smoke', '@seguridad'] },
   async () => {
-    for (const seccion of ['Escaneos', 'Ejecuciones']) {
+    for (const seccion of ['Escaneos', 'Ejecuciones', 'Hallazgos']) {
       await nav().getByText(seccion, { exact: true }).click();
-      await expect(
-        page.getByText('Hoy los escaneos se lanzan y se siguen desde el detalle'),
-      ).toBeVisible();
-      await expect(page.getByText('Llega en: Fase 1 · semana 6')).toHaveCount(0);
-      await expect(page.getByText(/: semana 8\./).first()).toBeVisible();
+      await expect(page.getByRole('heading', { name: seccion, level: 1 })).toBeVisible();
+      await expect(page.getByText(/Llega en/)).toHaveCount(0);
     }
-    await page.getByRole('button', { name: 'Ir a Proyectos' }).click();
-    await expect(page.getByRole('heading', { name: 'Proyectos', level: 1 })).toBeVisible();
   },
 );
 

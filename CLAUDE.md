@@ -54,7 +54,15 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   snapshot del DOM como texto), formato de archivo v2 con semilla por evidencia, visor con canvas y CSP sin
   `data:` ni `blob:`, modo datos sensibles, retención, TS-06 completo con OCR, TS-01 sobre las evidencias y
   TS-10 parcial. Ver las ADR 035 a 039.
-- Próximo: semana 8, hallazgos, huella y regresiones.
+- Fase 1, semana 8 terminada: huella de cada hallazgo (HMAC con subclave del proyecto, alcance según el tipo,
+  normalización v2 con versión guardada), los siete estados con la aparición en cada ocurrencia, cobertura por
+  forma y contexto, decisiones de la persona (motivo de descarte cifrado, auditoría con IDs), fusión de lo
+  guardado al desbloquear, bandeja, comparar ejecuciones, las páginas Hallazgos, Ejecuciones y Escaneos, y el
+  sandbox con bugs arreglables. Ver las ADR 046 y 047.
+- Próximo: semana 9, reportes y exportación.
+- Un hallazgo se guarda por su huella (`registrarPorHuella` en el servicio de ejecuciones): nunca se inserta
+  directo. Si cambia cómo se calcula la huella o la normalización, subir `VERSION_NORMALIZACION` (si es la
+  normalización) y siempre `VERSION_HUELLAS`: esa es la que hace recalcular lo guardado al desbloquear (ADR 047).
 - Nunca usar la grabación de Playwright (`recordVideo`, `tracing`, `recordHar`): escribe en claro en disco.
   El runner manda fotogramas, capturas y eventos en memoria (`grabacion.ts`); el principal los redacta y los
   cifra (`main/evidencias/`). Solo `grabacion.ts` captura la pantalla, y el login nunca la conoce: un test

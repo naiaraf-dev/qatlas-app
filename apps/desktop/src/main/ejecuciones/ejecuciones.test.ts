@@ -14,6 +14,7 @@ import { leerAuditoria } from '@qatlas/db';
 import { conectarActividad, DetectorInactividad } from '../boveda/inactividad';
 import { ServicioBoveda } from '../boveda/servicio';
 import { ServicioProyectos } from '../proyectos/servicio';
+import { ServicioHallazgos } from '../hallazgos/servicio';
 import { ServicioEjecuciones, type LanzadorDeProcesos, type ProcesoRunner } from './servicio';
 
 const CONTRASENA = 'tigre-morado-bajo-la-lluvia-73';
@@ -612,17 +613,22 @@ describe('Resultados del escaneo', () => {
     ]);
   });
 
-  it('la estructura de la semana 8 queda lista: clave guardada, huella vacía, estado nuevo', async () => {
+  it('cada hallazgo se guarda con su huella (un HMAC), su alcance y estado nuevo (ADR 046)', async () => {
     const proyecto = crearProyecto();
     lanzar(proyecto);
     await pausa();
     runnerActual?.emitir(hallazgo({ tipo: 'accesibilidad', clave: 'image-alt', detalle: '' }));
     boveda.conAcceso((base) => {
-      expect(
-        base
-          .prepare('SELECT clave, huella, estado, primera_vez_en IS NOT NULL AS f FROM hallazgo')
-          .get(),
-      ).toEqual({ clave: 'image-alt', huella: null, estado: 'nuevo', f: 1 });
+      const fila = base
+        .prepare(
+          'SELECT clave, huella, estado, alcance, version_normalizacion AS v, primera_vez_en IS NOT NULL AS f FROM hallazgo',
+        )
+        .get() as Record<string, unknown>;
+      expect(fila).toMatchObject({ clave: 'image-alt', estado: 'nuevo', v: 2, f: 1 });
+      expect(fila.huella).toMatch(/^h1:[0-9a-f]{64}$/);
+      expect(base.prepare('SELECT aparicion FROM hallazgo_ocurrencia').get()).toEqual({
+        aparicion: 'nueva',
+      });
       expect(base.prepare('SELECT detalle_cifrado FROM hallazgo_ocurrencia').get()).toEqual({
         detalle_cifrado: null,
       });
@@ -704,6 +710,343 @@ describe('Resultados del escaneo', () => {
           0,
         );
       }
+    });
+  });
+});
+
+describe('Huella, estados y regresiones entre ejecuciones (semana 8, ADR 046 y 047)', () => {
+  const base = 'http://localhost:5173';
+  type Visto = {
+    pagina: string;
+    hallazgos: { tipo?: 'console-error' | 'accesibilidad'; clave: string; detalle?: string }[];
+  };
+
+  /** Una ejecución completa: cada página y lo que se encontró en ella, y el final. */
+  async function corrida(proyecto: string, vistos: Visto[]): Promise<string> {
+    const id = lanzar(proyecto);
+    await pausa();
+    for (const { pagina, hallazgos } of vistos) {
+      runnerActual?.emitir({
+        tipo: 'pagina',
+        url: base + pagina,
+        status: 200,
+        tiempoCargaMs: 100,
+        profundidad: 1,
+      });
+      for (const h of hallazgos) {
+        runnerActual?.emitir({
+          tipo: 'hallazgo',
+          hallazgo: {
+            tipo: h.tipo ?? 'accesibilidad',
+            severidad: 'baja',
+            url: base + pagina,
+            urlOrigen: null,
+            clave: h.clave,
+            titulo: 'Un problema',
+            detalle: h.detalle ?? '',
+          },
+        });
+      }
+    }
+    runnerActual?.emitir(terminado(vistos.length, 0));
+    await pausa();
+    return id;
+  }
+
+  const hallazgos = (proyecto: string) =>
+    boveda.conAcceso(
+      (b) =>
+        b
+          .prepare(
+            `SELECT h.id, h.clave, h.estado, h.estado_previo AS previo,
+               (SELECT COUNT(*) FROM hallazgo_ocurrencia o WHERE o.hallazgo_id = h.id) AS veces
+             FROM hallazgo h WHERE h.proyecto_id = ? ORDER BY h.rowid`,
+          )
+          .all(proyecto) as {
+          id: string;
+          clave: string;
+          estado: string;
+          previo: string | null;
+          veces: number;
+        }[],
+    );
+  const apariciones = (ejecucionId: string) =>
+    boveda.conAcceso((b) =>
+      (
+        b
+          .prepare(
+            'SELECT aparicion FROM hallazgo_ocurrencia WHERE ejecucion_id = ? ORDER BY rowid',
+          )
+          .all(ejecucionId) as { aparicion: string }[]
+      ).map((f) => f.aparicion),
+    );
+  const marcar = (id: string, estado: string) =>
+    boveda.conAcceso((b) =>
+      b.prepare('UPDATE hallazgo SET estado = ? WHERE id = ?').run(estado, id),
+    );
+
+  it('el mismo problema en dos ejecuciones es un hallazgo: nueva y después recurrente', async () => {
+    const proyecto = crearProyecto();
+    const a = await corrida(proyecto, [
+      { pagina: '/producto/12', hallazgos: [{ clave: 'image-alt' }] },
+    ]);
+    const b = await corrida(proyecto, [
+      { pagina: '/producto/98', hallazgos: [{ clave: 'image-alt' }] },
+    ]);
+    expect(hallazgos(proyecto)).toMatchObject([{ clave: 'image-alt', estado: 'nuevo', veces: 2 }]);
+    expect(apariciones(a)).toEqual(['nueva']);
+    expect(apariciones(b)).toEqual(['recurrente']);
+    expect(estado(proyecto, a)?.resumen).toMatchObject({ hallazgosNuevos: 1, regresiones: 0 });
+    expect(estado(proyecto, b)?.resumen).toMatchObject({ hallazgosNuevos: 0, regresiones: 0 });
+  });
+
+  it('el detalle de cada ejecución muestra lo que apareció en ella, también lo recurrente', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    const b = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    expect(ejecuciones.detalle(b)?.hallazgos).toHaveLength(1);
+  });
+
+  it('control: otra clave u otra forma de página es otro hallazgo', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [
+      { pagina: '/producto/12', hallazgos: [{ clave: 'image-alt' }, { clave: 'color-contrast' }] },
+      { pagina: '/carrito', hallazgos: [{ clave: 'image-alt' }] },
+    ]);
+    expect(hallazgos(proyecto)).toHaveLength(3);
+  });
+
+  it('no aparece en una ejecución que recorrió su página: posiblemente resuelto', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/producto/12', hallazgos: [{ clave: 'image-alt' }] }]);
+    const b = await corrida(proyecto, [{ pagina: '/producto/12', hallazgos: [] }]);
+    expect(hallazgos(proyecto)).toMatchObject([
+      { estado: 'posiblemente_resuelto', previo: 'nuevo' },
+    ]);
+    expect(estado(proyecto, b)?.resumen.posiblementeResueltos).toBe(1);
+  });
+
+  it('control: si la ejecución no recorrió su página, no se da por arreglado', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/producto/12', hallazgos: [{ clave: 'image-alt' }] }]);
+    await corrida(proyecto, [{ pagina: '/carrito', hallazgos: [] }]);
+    expect(hallazgos(proyecto)).toMatchObject([{ estado: 'nuevo' }]);
+  });
+
+  it('un posiblemente resuelto que vuelve recupera su estado: recurrente, sin regresión', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    const [h] = hallazgos(proyecto);
+    marcar(h?.id ?? '', 'confirmado');
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [] }]);
+    const c = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    expect(hallazgos(proyecto)).toMatchObject([{ estado: 'confirmado', veces: 2 }]);
+    expect(apariciones(c)).toEqual(['recurrente']);
+    expect(estado(proyecto, c)?.resumen.regresiones).toBe(0);
+  });
+
+  it('un resuelto que vuelve es una regresión, y el resumen la cuenta', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    const [h] = hallazgos(proyecto);
+    marcar(h?.id ?? '', 'resuelto');
+    const c = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    expect(hallazgos(proyecto)).toMatchObject([{ estado: 'regresion' }]);
+    expect(apariciones(c)).toEqual(['regresion']);
+    expect(estado(proyecto, c)?.resumen.regresiones).toBe(1);
+  });
+
+  it('un descartado que vuelve registra la ocurrencia, sin alerta, y sigue descartado', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    const [h] = hallazgos(proyecto);
+    marcar(h?.id ?? '', 'descartado');
+    const c = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    expect(hallazgos(proyecto)).toMatchObject([{ estado: 'descartado', veces: 2 }]);
+    expect(estado(proyecto, c)?.resumen).toMatchObject({ regresiones: 0, hallazgosNuevos: 0 });
+  });
+
+  it('un mensaje con otro hash de bundle es el mismo hallazgo (normalización v2)', async () => {
+    const proyecto = crearProyecto();
+    const de = (hash: string) => ({
+      pagina: '/x',
+      hallazgos: [
+        {
+          tipo: 'console-error' as const,
+          clave: 'msj',
+          detalle: `TypeError: x is undefined at main.${hash}.js:1:2`,
+        },
+      ],
+    });
+    await corrida(proyecto, [de('3f9ac2be')]);
+    await corrida(proyecto, [de('b7e01dfa')]);
+    expect(hallazgos(proyecto)).toMatchObject([{ veces: 2 }]);
+  });
+
+  describe('Decisiones de la persona, bandeja y comparación', () => {
+    const MOTIVO = ['motivo', 'inventado', 'del', 'descarte', '4417'].join('-');
+    const servicio = () => new ServicioHallazgos(boveda, proyectos);
+    const FILTROS = {
+      proyectoId: null,
+      estados: [],
+      severidades: [],
+      tipos: [],
+      soloRegresiones: false,
+      incluirDescartados: false,
+      soloSinCobertura: false,
+    };
+    const auditoria = (accion: string) =>
+      boveda.conAcceso((b) => leerAuditoria(b)).filter((a) => a.accion === accion);
+    const todoEnClaro = () =>
+      boveda.conAcceso((b) =>
+        JSON.stringify([
+          b.prepare('SELECT * FROM hallazgo').all(),
+          b.prepare('SELECT * FROM auditoria').all(),
+        ]),
+      );
+
+    it('descartar: el motivo va cifrado, se muestra solo en el detalle, y la auditoría lleva IDs y campos', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const [h] = hallazgos(proyecto);
+      const id = h?.id ?? '';
+      expect(servicio().decidir({ accion: 'descartar', hallazgoId: id, motivo: MOTIVO })).toEqual({
+        resultado: 'hecho',
+        estado: 'descartado',
+      });
+      expect(todoEnClaro()).not.toContain(MOTIVO);
+      expect(servicio().detalle(id)?.motivoDescarte).toBe(MOTIVO);
+      const [registro] = auditoria('hallazgo.descartar');
+      expect(registro).toMatchObject({ entidad: 'hallazgo', entidadId: id });
+      expect(registro?.detalle).toEqual({ proyectoId: proyecto, campos: ['estado', 'motivo'] });
+    });
+
+    it('reabrir un descartado: vuelve a nuevo y queda en la auditoría; un abierto no se reabre', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      expect(servicio().decidir({ accion: 'reabrir', hallazgoId: id })).toEqual({
+        resultado: 'rechazada',
+        motivo: 'no-corresponde',
+      });
+      servicio().decidir({ accion: 'descartar', hallazgoId: id, motivo: MOTIVO });
+      expect(servicio().decidir({ accion: 'reabrir', hallazgoId: id })).toEqual({
+        resultado: 'hecho',
+        estado: 'nuevo',
+      });
+      expect(auditoria('hallazgo.reabrir')).toHaveLength(1);
+      // Al reabrir, el motivo se borra.
+      expect(servicio().detalle(id)?.motivoDescarte).toBeNull();
+      expect(
+        boveda.conAcceso((b) =>
+          b.prepare('SELECT motivo_descarte_cifrado AS m FROM hallazgo WHERE id = ?').get(id),
+        ),
+      ).toEqual({ m: null });
+    });
+
+    it('resolver a mano y que vuelva: regresión', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      servicio().decidir({ accion: 'resolver', hallazgoId: id });
+      const c = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      expect(hallazgos(proyecto)).toMatchObject([{ estado: 'regresion' }]);
+      expect(estado(proyecto, c)?.resumen.regresiones).toBe(1);
+    });
+
+    it('resolver en lote: solo los posiblemente resueltos', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [
+        { pagina: '/a', hallazgos: [{ clave: 'image-alt' }] },
+        { pagina: '/b', hallazgos: [{ clave: 'image-alt' }] },
+      ]);
+      // La segunda recorre /a y no /b: solo el de /a pasa a posiblemente resuelto.
+      await corrida(proyecto, [{ pagina: '/a', hallazgos: [] }]);
+      const ids = hallazgos(proyecto).map((f) => f.id);
+      expect(hallazgos(proyecto).map((f) => f.estado)).toEqual(['posiblemente_resuelto', 'nuevo']);
+      expect(servicio().resolverEnLote(ids)).toEqual({ resueltos: 1, rechazados: 1 });
+      expect(hallazgos(proyecto).map((f) => f.estado)).toEqual(['resuelto', 'nuevo']);
+      expect(auditoria('hallazgo.resolver-lote')).toHaveLength(1);
+    });
+
+    it('la severidad cambiada a mano no la pisa una aparición nueva', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const id = hallazgos(proyecto)[0]?.id ?? '';
+      servicio().cambiarSeveridad({ hallazgoId: id, severidad: 'critica' });
+      await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+      const [fila] = servicio().listar({ ...FILTROS, proyectoId: proyecto });
+      expect(fila).toMatchObject({ severidad: 'critica', severidadManual: true, ocurrencias: 2 });
+    });
+
+    it('bandeja: los descartados se ocultan salvo que se pidan; el mismo problema en varias páginas comparte grupo', async () => {
+      const proyecto = crearProyecto();
+      await corrida(proyecto, [
+        { pagina: '/producto/12', hallazgos: [{ clave: 'color-contrast' }] },
+        { pagina: '/carrito', hallazgos: [{ clave: 'color-contrast' }, { clave: 'image-alt' }] },
+      ]);
+      const filas = servicio().listar({ ...FILTROS, proyectoId: proyecto });
+      expect(filas).toHaveLength(3);
+      const grupos = new Map<string, number>();
+      for (const f of filas) grupos.set(f.grupo, (grupos.get(f.grupo) ?? 0) + 1);
+      // color-contrast en dos formas: el mismo grupo; image-alt, otro.
+      expect([...grupos.values()].sort()).toEqual([1, 2]);
+      const imagen = filas.find((f) => !filas.some((g) => g !== f && g.grupo === f.grupo));
+      servicio().decidir({ accion: 'descartar', hallazgoId: imagen?.id ?? '', motivo: MOTIVO });
+      expect(servicio().listar({ ...FILTROS, proyectoId: proyecto })).toHaveLength(2);
+      expect(
+        servicio().listar({ ...FILTROS, proyectoId: proyecto, incluirDescartados: true }),
+      ).toHaveLength(3);
+      // Ningún campo trae la clave ni la huella.
+      expect(JSON.stringify(filas)).not.toMatch(/h1:|color-contrast/);
+    });
+
+    it('comparar: nuevos, recurrentes, resueltos (cubiertos), no cubiertos y regresiones', async () => {
+      const proyecto = crearProyecto();
+      const a = await corrida(proyecto, [
+        {
+          pagina: '/a',
+          hallazgos: [{ clave: 'resuelto-en-b' }, { clave: 'sigue' }, { clave: 'vuelve' }],
+        },
+        { pagina: '/b', hallazgos: [{ clave: 'no-recorrida-en-b' }] },
+      ]);
+      const vuelve = hallazgos(proyecto).find((f) => f.clave === 'vuelve')?.id ?? '';
+      servicio().decidir({ accion: 'resolver', hallazgoId: vuelve });
+      const b = await corrida(proyecto, [
+        {
+          pagina: '/a',
+          hallazgos: [{ clave: 'sigue' }, { clave: 'vuelve' }, { clave: 'aparece-en-b' }],
+        },
+      ]);
+      const comparacion = servicio().comparar(b, a);
+      if (comparacion.resultado !== 'comparada') throw new Error(comparacion.motivo);
+      // En orden aunque se pidan al revés.
+      expect([comparacion.anteriorId, comparacion.posteriorId]).toEqual([a, b]);
+      const claves = (lista: { hallazgoId: string }[]) =>
+        lista.map((h) => hallazgos(proyecto).find((f) => f.id === h.hallazgoId)?.clave);
+      expect(claves(comparacion.nuevos)).toEqual(['aparece-en-b']);
+      expect(claves(comparacion.recurrentes)).toEqual(['sigue']);
+      expect(claves(comparacion.regresiones)).toEqual(['vuelve']);
+      expect(claves(comparacion.resueltos)).toEqual(['resuelto-en-b']);
+      expect(claves(comparacion.noCubiertos)).toEqual(['no-recorrida-en-b']);
+    });
+
+    it('comparar rechaza la misma ejecución, otro proyecto o una sin terminar', async () => {
+      const p1 = crearProyecto('Uno');
+      const p2 = crearProyecto('Dos');
+      const a = await corrida(p1, [{ pagina: '/a', hallazgos: [] }]);
+      const b = await corrida(p2, [{ pagina: '/a', hallazgos: [] }]);
+      expect(servicio().comparar(a, a)).toEqual({ resultado: 'rechazada', motivo: 'misma' });
+      expect(servicio().comparar(a, b)).toEqual({
+        resultado: 'rechazada',
+        motivo: 'otro-proyecto',
+      });
+      const enCurso = lanzar(p1);
+      await pausa();
+      expect(servicio().comparar(a, enCurso)).toEqual({
+        resultado: 'rechazada',
+        motivo: 'no-terminada',
+      });
     });
   });
 });

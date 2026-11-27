@@ -62,8 +62,26 @@ export interface SandboxActivo {
   autenticacion: ZonaAutenticada;
   /** El log del backend de prueba (TS-13): lo que imprimió el servidor. */
   registroBackend: string[];
+  /** Arregla un bug plantado, por su ID del oráculo (`ARREGLABLES`). Uno que no se puede arreglar falla. */
+  arreglar(id: Arreglable): void;
+  /** Lo vuelve a plantar: la regresión que el escáner tiene que detectar (ADR 047). */
+  reintroducir(id: Arreglable): void;
+  arreglados(): Arreglable[];
   cerrar(): Promise<void>;
 }
+
+/** Los bugs plantados que un test puede arreglar y reintroducir entre ejecuciones. */
+export const ARREGLABLES: readonly Arreglable[];
+export type Arreglable =
+  | 'http-500'
+  | 'js-excepcion'
+  | 'consola-error'
+  | 'link-roto-1'
+  | 'link-roto-2'
+  | 'a11y-imagen-sin-alt'
+  | 'a11y-boton-sin-nombre'
+  | 'a11y-campo-sin-etiqueta'
+  | 'a11y-contraste';
 
 /** El canario de las páginas de /fugas cuando no se pasa uno (el del oráculo). */
 export const CANARIO_POR_DEFECTO: string;

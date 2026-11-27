@@ -140,32 +140,65 @@ const PANEL = pagina(
 <p><a href="/eliminar-cuenta">Eliminar cuenta</a></p>`,
 );
 
-const EXCEPCION = pagina(
-  'Excepción de JavaScript',
-  `<script>throw new Error('Excepción plantada en el sandbox');</script>`,
-);
+const excepcion = (arreglados) =>
+  pagina(
+    'Excepción de JavaScript',
+    arreglados.has('js-excepcion')
+      ? '<p>Sin excepciones.</p>'
+      : `<script>throw new Error('Excepción plantada en el sandbox');</script>`,
+  );
 
-const LINKS_ROTOS = pagina(
-  'Links rotos',
-  `<ul>
-  <li><a href="/no-existe-1">Roto 1</a></li>
-  <li><a href="/carpeta/no-existe-2">Roto 2</a></li>
+/**
+ * Los bugs plantados que un test puede «arreglar» y «reintroducir» entre ejecuciones (semana 8, ADR 047), por
+ * su ID del oráculo. Solo desde el proceso del test (`sitio.arreglar`): no hay endpoint que el crawler pueda
+ * encontrar ni tocar.
+ */
+export const ARREGLABLES = Object.freeze([
+  'http-500',
+  'js-excepcion',
+  'consola-error',
+  'link-roto-1',
+  'link-roto-2',
+  'a11y-imagen-sin-alt',
+  'a11y-boton-sin-nombre',
+  'a11y-campo-sin-etiqueta',
+  'a11y-contraste',
+]);
+
+const linksRotos = (arreglados) =>
+  pagina(
+    'Links rotos',
+    `<ul>
+  ${arreglados.has('link-roto-1') ? '<li><a href="/">Al inicio</a></li>' : '<li><a href="/no-existe-1">Roto 1</a></li>'}
+  ${arreglados.has('link-roto-2') ? '<li><a href="/sana">Página sana</a></li>' : '<li><a href="/carpeta/no-existe-2">Roto 2</a></li>'}
 </ul>`,
-);
+  );
 
-const CONSOLA = pagina(
-  'Error en la consola',
-  `<script>console.error('Error plantado en el sandbox');</script>`,
-);
+const consola = (arreglados) =>
+  pagina(
+    'Error en la consola',
+    arreglados.has('consola-error')
+      ? '<p>Sin errores.</p>'
+      : `<script>console.error('Error plantado en el sandbox');</script>`,
+  );
 
-// El contraste de #bbbbbb sobre blanco es de 1,9:1.
-const ACCESIBILIDAD = pagina(
-  'Accesibilidad',
-  `<img src="/imagen.svg">
-<button type="button"></button>
-<input type="text">
-<p style="color:#bbbbbb;background:#ffffff">Texto con poco contraste.</p>`,
-);
+// El contraste de #bbbbbb sobre blanco es de 1,9:1; el de #333333, de 12,6:1.
+const accesibilidad = (arreglados) =>
+  pagina(
+    'Accesibilidad',
+    [
+      arreglados.has('a11y-imagen-sin-alt')
+        ? '<img src="/imagen.svg" alt="Un cuadrado de ejemplo">'
+        : '<img src="/imagen.svg">',
+      arreglados.has('a11y-boton-sin-nombre')
+        ? '<button type="button">Aceptar</button>'
+        : '<button type="button"></button>',
+      arreglados.has('a11y-campo-sin-etiqueta')
+        ? '<label>Nombre <input type="text"></label>'
+        : '<input type="text">',
+      `<p style="color:${arreglados.has('a11y-contraste') ? '#333333' : '#bbbbbb'};background:#ffffff">Texto con poco contraste.</p>`,
+    ].join('\n'),
+  );
 
 const FORMULARIO = pagina(
   'Formulario',
@@ -421,6 +454,8 @@ export function iniciarSandbox({
 } = {}) {
   const fugas = crearFugas({ canario: canario ?? CANARIO_POR_DEFECTO });
   const evidencias = crearPaginasDeEvidencias({ canario: canario ?? CANARIO_POR_DEFECTO });
+  /** Los bugs plantados que el test arregló: `arreglar` y `reintroducir` (ADR 047). */
+  const arreglados = new Set();
   const registro = {
     fugas: [],
     trampas: [],
@@ -528,19 +563,21 @@ export function iniciarSandbox({
         else responder(res, 302, '', { location: '/login' });
         return;
       case 'GET /error-500':
-        responder(res, 500, pagina('Error del servidor', '<p>Falla plantada.</p>'));
+        if (arreglados.has('http-500'))
+          responder(res, 200, pagina('Error del servidor', '<p>Arreglado.</p>'));
+        else responder(res, 500, pagina('Error del servidor', '<p>Falla plantada.</p>'));
         return;
       case 'GET /excepcion-js':
-        responder(res, 200, EXCEPCION);
+        responder(res, 200, excepcion(arreglados));
         return;
       case 'GET /links-rotos':
-        responder(res, 200, LINKS_ROTOS);
+        responder(res, 200, linksRotos(arreglados));
         return;
       case 'GET /consola':
-        responder(res, 200, CONSOLA);
+        responder(res, 200, consola(arreglados));
         return;
       case 'GET /accesibilidad':
-        responder(res, 200, ACCESIBILIDAD);
+        responder(res, 200, accesibilidad(arreglados));
         return;
       case 'GET /imagen.svg':
         responder(res, 200, IMAGEN, { 'content-type': 'image/svg+xml' });
@@ -770,6 +807,17 @@ export function iniciarSandbox({
       autenticacion: zona.api,
       /** El log del backend de prueba (TS-13): lo que imprimió el servidor. */
       registroBackend: fugas.registroBackend,
+      /** Arregla un bug plantado, por su ID del oráculo. Un ID que no se puede arreglar falla. */
+      arreglar: (id) => {
+        if (!ARREGLABLES.includes(id)) throw new Error(`No se puede arreglar: ${id}`);
+        arreglados.add(id);
+      },
+      /** Lo vuelve a plantar: la regresión que el escáner tiene que detectar. */
+      reintroducir: (id) => {
+        if (!ARREGLABLES.includes(id)) throw new Error(`No se puede reintroducir: ${id}`);
+        arreglados.delete(id);
+      },
+      arreglados: () => [...arreglados],
       cerrar: () => {
         for (const socket of websocketsAbiertos) socket.destroy();
         return Promise.all([

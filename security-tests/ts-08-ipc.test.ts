@@ -736,6 +736,9 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         noRecorridosExclusiones: 0,
         noRecorridosSinWebGL: 0,
         urlsDescartadas: 0,
+        hallazgosNuevos: 0,
+        regresiones: 0,
+        posiblementeResueltos: 0,
         websocketDescartados: 0,
         logins: 0,
         loginsInesperados: 0,
@@ -973,6 +976,133 @@ describe('TS-08 · Evidencias (semana 7b)', () => {
       'evidencias:obtenerFotograma',
       'evidencias:noCumplenModoSensible',
       'evidencias:resolverModoSensible',
+    ]) {
+      expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
+    }
+  });
+});
+
+describe('TS-08 · Hallazgos y comparación (semana 8)', () => {
+  const entrada = (canal: IpcChannel) => ipcContract[canal].request;
+  const salida = (canal: IpcChannel) => ipcContract[canal].response;
+  const ID = '00000000-0000-4000-8000-000000000008';
+  const OTRO = '00000000-0000-4000-8000-000000000007';
+  const FILTROS = {
+    proyectoId: null,
+    estados: [],
+    severidades: [],
+    tipos: [],
+    soloRegresiones: false,
+    incluirDescartados: false,
+    soloSinCobertura: false,
+  };
+  const FILA = {
+    id: ID,
+    proyectoId: OTRO,
+    proyectoNombre: 'Lexora',
+    tipo: 'accesibilidad',
+    severidad: 'baja',
+    severidadManual: false,
+    titulo: 'Un problema',
+    url: 'https://example.test/a',
+    alcance: 'https://example.test/a',
+    grupo: '0123456789abcdef',
+    estado: 'nuevo',
+    primeraVezEn: '2026-11-27T00:00:00.000Z',
+    ultimaVezEn: '2026-11-27T00:00:00.000Z',
+    cubiertoEn: null,
+    ocurrencias: 1,
+    paginas: 1,
+    ultimaAparicion: 'nueva',
+    sinCobertura: false,
+  };
+
+  it('los filtros de la bandeja son una lista cerrada: nada de SQL ni de campos de más', () => {
+    const canal = entrada('hallazgos:listar');
+    expect(canal.safeParse(FILTROS).success).toBe(true);
+    expect(canal.safeParse({ ...FILTROS, estados: ['nuevo', 'regresion'] }).success).toBe(true);
+    expect(canal.safeParse({ ...FILTROS, estados: ["nuevo' OR 1=1 --"] }).success).toBe(false);
+    expect(canal.safeParse({ ...FILTROS, orden: 'rowid' }).success).toBe(false);
+    expect(canal.safeParse({ ...FILTROS, proyectoId: '../x' }).success).toBe(false);
+  });
+
+  it('la bandeja nunca devuelve la huella, la clave, el detalle ni el motivo', () => {
+    const canal = salida('hallazgos:listar');
+    expect(canal.safeParse([FILA]).success).toBe(true);
+    for (const campo of ['huella', 'clave', 'detalle', 'motivoDescarte']) {
+      expect(canal.safeParse([{ ...FILA, [campo]: 'x' }]).success, campo).toBe(false);
+    }
+    // El grupo es un hash corto, nunca la clave.
+    expect(canal.safeParse([{ ...FILA, grupo: 'msj:abc' }]).success).toBe(false);
+  });
+
+  it('descartar exige un motivo acotado; las demás acciones no aceptan uno', () => {
+    const canal = entrada('hallazgos:decidir');
+    expect(
+      canal.safeParse({ accion: 'descartar', hallazgoId: ID, motivo: 'Falso positivo' }).success,
+    ).toBe(true);
+    expect(canal.safeParse({ accion: 'descartar', hallazgoId: ID }).success).toBe(false);
+    expect(canal.safeParse({ accion: 'descartar', hallazgoId: ID, motivo: '   ' }).success).toBe(
+      false,
+    );
+    expect(
+      canal.safeParse({ accion: 'descartar', hallazgoId: ID, motivo: 'x'.repeat(501) }).success,
+    ).toBe(false);
+    expect(canal.safeParse({ accion: 'confirmar', hallazgoId: ID, motivo: 'x' }).success).toBe(
+      false,
+    );
+    // Un estado no se elige libremente: solo acciones.
+    expect(canal.safeParse({ accion: 'regresion', hallazgoId: ID }).success).toBe(false);
+    expect(canal.safeParse({ estado: 'resuelto', hallazgoId: ID }).success).toBe(false);
+  });
+
+  it('resolver en lote: entre 1 y 500 IDs', () => {
+    const canal = entrada('hallazgos:resolverEnLote');
+    expect(canal.safeParse({ hallazgoIds: [ID] }).success).toBe(true);
+    expect(canal.safeParse({ hallazgoIds: [] }).success).toBe(false);
+    expect(canal.safeParse({ hallazgoIds: Array.from({ length: 501 }, () => ID) }).success).toBe(
+      false,
+    );
+  });
+
+  it('comparar recibe dos IDs y nada más', () => {
+    const canal = entrada('ejecuciones:comparar');
+    expect(canal.safeParse({ anteriorId: ID, posteriorId: OTRO }).success).toBe(true);
+    expect(canal.safeParse({ anteriorId: ID, posteriorId: OTRO, proyectoId: ID }).success).toBe(
+      false,
+    );
+  });
+
+  it('el detalle devuelve historial y motivo, sin el detalle de la página ni rutas', () => {
+    const canal = salida('hallazgos:detalle');
+    const historial = [
+      {
+        ejecucionId: ID,
+        fecha: '2026-11-27T00:00:00.000Z',
+        url: 'https://example.test/a',
+        aparicion: 'regresion',
+        secretosRedactados: 0,
+      },
+    ];
+    expect(canal.safeParse({ historial, motivoDescarte: null }).success).toBe(true);
+    expect(
+      canal.safeParse({ historial: [{ ...historial[0], detalle: 'x' }], motivoDescarte: null })
+        .success,
+    ).toBe(false);
+    expect(
+      canal.safeParse({ historial, motivoDescarte: null, ruta: 'C:/Users/ana/x' }).success,
+    ).toBe(false);
+  });
+
+  it('con la bóveda bloqueada, los canales de hallazgos y comparación se rechazan', () => {
+    for (const canal of [
+      'hallazgos:listar',
+      'hallazgos:detalle',
+      'hallazgos:decidir',
+      'hallazgos:cambiarSeveridad',
+      'hallazgos:resolverEnLote',
+      'ejecuciones:listarTodas',
+      'ejecuciones:comparar',
     ]) {
       expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
     }
