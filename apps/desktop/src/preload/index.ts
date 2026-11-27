@@ -85,6 +85,18 @@ const api: QatlasApi = {
     cambiarSeveridad: (req) => invoke('hallazgos:cambiarSeveridad', req),
     resolverEnLote: (req) => invoke('hallazgos:resolverEnLote', req),
   },
+  reportes: {
+    crear: (req) => invoke('reportes:crear', req),
+    obtener: (req) => invoke('reportes:obtener', req),
+    listar: (req) => invoke('reportes:listar', req),
+    guardar: (req) => invoke('reportes:guardar', req),
+    vistaPrevia: (req) => invoke('reportes:vistaPrevia', req),
+    exportar: (req) => invoke('reportes:exportar', req),
+    exportarCaptura: (req) => invoke('reportes:exportarCaptura', req),
+  },
+  portapapeles: {
+    copiar: (req) => invoke('portapapeles:copiar', req),
+  },
 };
 
 contextBridge.exposeInMainWorld('qatlas', Object.freeze(api));

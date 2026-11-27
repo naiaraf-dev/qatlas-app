@@ -337,9 +337,11 @@ describe('Exportar (3.9)', () => {
       'leeme.txt',
       `evidencias/${capturaId}.png`,
     ]);
-    expect(entradas[1]?.datos.toString('utf8')).toContain('no está cifrado');
+    expect(Buffer.from(entradas[1]?.datos ?? []).toString('utf8')).toContain('no está cifrado');
     expect(chunksDePng(entradas[2]?.datos ?? Buffer.alloc(0))).toEqual(['IHDR', 'IDAT', 'IEND']);
-    expect(entradas[0]?.datos.toString('utf8')).toContain(`](evidencias/${capturaId}.png)`);
+    expect(Buffer.from(entradas[0]?.datos ?? []).toString('utf8')).toContain(
+      `](evidencias/${capturaId}.png)`,
+    );
   });
 
   it('PDF: el documento tiene CSP, título genérico, nada de afuera, y las imágenes y fuentes adentro', async () => {

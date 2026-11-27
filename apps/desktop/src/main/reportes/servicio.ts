@@ -31,7 +31,7 @@ import {
   type OcurrenciaParaReporte,
 } from '@qatlas/db';
 import { contarRedacciones } from '@qatlas/redaction';
-import type { SeveridadHallazgo, TipoHallazgo } from '@qatlas/shared';
+import type { EstadoHallazgo, SeveridadHallazgo, TipoHallazgo } from '@qatlas/shared';
 import type { ServicioBoveda } from '../boveda/servicio';
 import { comparadorDelProyecto, REDACTOR, type Redactor } from '../ejecuciones/redaccion';
 import { contextoDetalle } from '../ejecuciones/servicio';
@@ -261,7 +261,7 @@ export class ServicioReportes {
           formato === 'zip'
             ? ['reporte.md', ...incluidas.filter((e) => e.archivo).map((e) => e.archivo ?? '')]
             : [`reporte.${EXTENSION[formato]}`],
-        cifrado: false,
+        cifrado: false as const,
         capturas: incluidas.filter((e) => e.clase === 'captura').length,
         alertasSinRevisar: this.alertasSinRevisar(base, fila, incluidas),
       };
@@ -513,7 +513,7 @@ export class ServicioReportes {
                 severidad: SeveridadHallazgo;
                 titulo: string;
                 url: string;
-                estado: string;
+                estado: EstadoHallazgo;
               }
             | undefined,
       )

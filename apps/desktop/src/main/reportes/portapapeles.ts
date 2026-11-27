@@ -4,14 +4,16 @@
  *
  * Lo sensible (lo que pide la interfaz como tal, o un texto donde el detector encontró algo) se limpia a los
  * 30 segundos, **solo si el portapapeles todavía tiene ese texto**: si la persona copió otra cosa, no se toca.
- * Sin `electron`: el portapapeles y el reloj se inyectan, para probarlo con Vitest.
+ * Si no se puede leer el portapapeles, se limpia igual (falla cerrado). Sin `electron`: el portapapeles y el
+ * reloj se inyectan, para probarlo con Vitest.
  */
 
 export const LIMPIEZA_MS = 30_000;
 
 export interface Portapapeles {
-  escribir(texto: string): void;
-  leer(): string;
+  escribir(texto: string): Promise<void>;
+  /** En Electron 45, `clipboard.readText` es asíncrona. */
+  leer(): Promise<string>;
   limpiar(): void;
 }
 
@@ -37,8 +39,8 @@ export class CopiaSegura {
   ) {}
 
   /** Copia el texto ya redactado. Si es sensible, programa su limpieza. */
-  copiar(texto: string, sensible: boolean): { limpiaEnMs: number | null } {
-    this.portapapeles.escribir(texto);
+  async copiar(texto: string, sensible: boolean): Promise<{ limpiaEnMs: number | null }> {
+    await this.portapapeles.escribir(texto);
     if (this.pendiente !== null) this.reloj.cancelar(this.pendiente);
     this.pendiente = null;
     this.sensible = null;
@@ -47,18 +49,28 @@ export class CopiaSegura {
     this.pendiente = this.reloj.programar(() => {
       this.pendiente = null;
       this.sensible = null;
-      if (this.portapapeles.leer() === texto) this.portapapeles.limpiar();
+      void this.limpiarSiSigue(texto);
     }, LIMPIEZA_MS);
     return { limpiaEnMs: LIMPIEZA_MS };
   }
 
   /** Al bloquear o salir: lo sensible que quede se limpia ya, si sigue en el portapapeles. */
-  limpiarPendiente(): void {
+  async limpiarPendiente(): Promise<void> {
     if (this.pendiente === null) return;
     this.reloj.cancelar(this.pendiente);
     this.pendiente = null;
-    if (this.sensible !== null && this.portapapeles.leer() === this.sensible)
-      this.portapapeles.limpiar();
+    const texto = this.sensible;
     this.sensible = null;
+    if (texto !== null) await this.limpiarSiSigue(texto);
+  }
+
+  private async limpiarSiSigue(texto: string): Promise<void> {
+    let actual: string | null;
+    try {
+      actual = await this.portapapeles.leer();
+    } catch {
+      actual = null;
+    }
+    if (actual === null || actual === texto) this.portapapeles.limpiar();
   }
 }

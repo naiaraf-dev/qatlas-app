@@ -6,12 +6,15 @@ import { CopiaSegura, LIMPIEZA_MS, type Portapapeles, type Reloj } from './porta
 
 function entorno() {
   let contenido = '';
+  let fallaLectura = false;
   const tareas: { accion: () => void; ms: number; cancelada: boolean }[] = [];
   const portapapeles: Portapapeles = {
     escribir: (texto) => {
       contenido = texto;
+      return Promise.resolve();
     },
-    leer: () => contenido,
+    leer: () =>
+      fallaLectura ? Promise.reject(new Error('sin acceso')) : Promise.resolve(contenido),
     limpiar: () => {
       contenido = '';
     },
@@ -26,49 +29,64 @@ function entorno() {
       (id as { cancelada: boolean }).cancelada = true;
     },
   };
-  const pasar = () => {
+  /** Corre lo programado y espera a que terminen sus lecturas del portapapeles. */
+  const pasar = async () => {
     for (const tarea of tareas.splice(0)) if (!tarea.cancelada) tarea.accion();
+    await new Promise((listo) => setImmediate(listo));
   };
   return {
     copia: new CopiaSegura(portapapeles, reloj),
     leer: () => contenido,
     escribir: (texto: string) => {
-      portapapeles.escribir(texto);
+      contenido = texto;
     },
     tareas,
     pasar,
+    fallarLectura: () => {
+      fallaLectura = true;
+    },
   };
 }
 
 describe('Portapapeles', () => {
-  it('lo sensible se limpia a los 30 segundos', () => {
+  it('si no se puede leer el portapapeles, lo sensible se limpia igual (falla cerrado)', async () => {
     const e = entorno();
-    expect(e.copia.copiar('contraseña-de-un-solo-uso', true)).toEqual({ limpiaEnMs: LIMPIEZA_MS });
-    expect(e.tareas[0]?.ms).toBe(30_000);
-    expect(e.leer()).toBe('contraseña-de-un-solo-uso');
-    e.pasar();
+    await e.copia.copiar('contraseña-de-un-solo-uso', true);
+    e.fallarLectura();
+    await e.pasar();
     expect(e.leer()).toBe('');
   });
 
-  it('control: lo que no es sensible se queda', () => {
+  it('lo sensible se limpia a los 30 segundos', async () => {
     const e = entorno();
-    expect(e.copia.copiar('# Un reporte', false)).toEqual({ limpiaEnMs: null });
-    e.pasar();
+    expect(await e.copia.copiar('contraseña-de-un-solo-uso', true)).toEqual({
+      limpiaEnMs: LIMPIEZA_MS,
+    });
+    expect(e.tareas[0]?.ms).toBe(30_000);
+    expect(e.leer()).toBe('contraseña-de-un-solo-uso');
+    await e.pasar();
+    expect(e.leer()).toBe('');
+  });
+
+  it('control: lo que no es sensible se queda', async () => {
+    const e = entorno();
+    expect(await e.copia.copiar('# Un reporte', false)).toEqual({ limpiaEnMs: null });
+    await e.pasar();
     expect(e.leer()).toBe('# Un reporte');
   });
 
-  it('si la persona copió otra cosa después, no se la borra', () => {
+  it('si la persona copió otra cosa después, no se la borra', async () => {
     const e = entorno();
-    e.copia.copiar('contraseña-de-un-solo-uso', true);
+    await e.copia.copiar('contraseña-de-un-solo-uso', true);
     e.escribir('algo que copió la persona');
-    e.pasar();
+    await e.pasar();
     expect(e.leer()).toBe('algo que copió la persona');
   });
 
-  it('al bloquear, lo sensible pendiente se limpia ya', () => {
+  it('al bloquear, lo sensible pendiente se limpia ya', async () => {
     const e = entorno();
-    e.copia.copiar('contraseña-de-un-solo-uso', true);
-    e.copia.limpiarPendiente();
+    await e.copia.copiar('contraseña-de-un-solo-uso', true);
+    await e.copia.limpiarPendiente();
     expect(e.leer()).toBe('');
     expect(e.tareas.every((t) => t.cancelada)).toBe(true);
   });

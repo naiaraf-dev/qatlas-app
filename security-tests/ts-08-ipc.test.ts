@@ -1108,3 +1108,134 @@ describe('TS-08 · Hallazgos y comparación (semana 8)', () => {
     }
   });
 });
+
+describe('TS-08 · Reportes y portapapeles (semana 9a)', () => {
+  const entrada = (canal: IpcChannel) => ipcContract[canal].request;
+  const salida = (canal: IpcChannel) => ipcContract[canal].response;
+  const ID = '00000000-0000-4000-8000-000000000009';
+  const CONTENIDO = {
+    titulo: 'Un bug',
+    pasos: ['Abrir https://example.test/a'],
+    esperado: 'Que cargue',
+    obtenido: 'No carga',
+    entorno: {
+      url: 'https://example.test/a',
+      navegador: 'Chromium',
+      viewport: '1280 × 720',
+      fecha: '2026-11-27',
+      ejecucionId: ID,
+    },
+  };
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+  it('ningún canal de reportes acepta una ruta, un nombre de archivo ni un destino', () => {
+    const exportar = entrada('reportes:exportar');
+    const base = { reporteId: ID, formato: 'pdf', evidenciaIds: [ID], confirmaAlertas: false };
+    expect(exportar.safeParse(base).success).toBe(true);
+    for (const campo of ['ruta', 'destino', 'archivo', 'nombre', 'carpeta']) {
+      expect(
+        exportar.safeParse({
+          ...base,
+          [campo]: ['C:', 'Users', 'ana', 'Desktop', 'reporte.pdf'].join(String.fromCharCode(92)),
+        }).success,
+        campo,
+      ).toBe(false);
+    }
+    const captura = entrada('reportes:exportarCaptura');
+    const conImagen = { reporteId: ID, evidenciaId: ID, imagen: PNG, tapados: [] };
+    expect(captura.safeParse(conImagen).success).toBe(true);
+    expect(captura.safeParse({ ...conImagen, ruta: 'captura.png' }).success).toBe(false);
+  });
+
+  it('el formato es una lista cerrada; el paquete cifrado todavía no existe', () => {
+    const vista = entrada('reportes:vistaPrevia');
+    for (const formato of ['pdf', 'markdown', 'zip']) {
+      expect(vista.safeParse({ reporteId: ID, formato, evidenciaIds: [] }).success).toBe(true);
+    }
+    for (const formato of ['qatlas-paquete', 'html', 'mp4', '../../x']) {
+      expect(vista.safeParse({ reporteId: ID, formato, evidenciaIds: [] }).success, formato).toBe(
+        false,
+      );
+    }
+  });
+
+  it('la vista previa de un ZIP nunca dice que está cifrado', () => {
+    const lista = {
+      resultado: 'lista',
+      texto: '# Un bug',
+      archivos: ['reporte.md'],
+      cifrado: false,
+      capturas: 0,
+      alertasSinRevisar: 0,
+    };
+    expect(salida('reportes:vistaPrevia').safeParse(lista).success).toBe(true);
+    expect(salida('reportes:vistaPrevia').safeParse({ ...lista, cifrado: true }).success).toBe(
+      false,
+    );
+  });
+
+  it('la imagen anotada viaja en bytes, nunca como URL; los recuadros son enteros acotados', () => {
+    const captura = entrada('reportes:exportarCaptura');
+    const base = { reporteId: ID, evidenciaId: ID, tapados: [] };
+    expect(captura.safeParse({ ...base, imagen: 'data:image/png;base64,AAAA' }).success).toBe(
+      false,
+    );
+    expect(captura.safeParse({ ...base, imagen: new Uint8Array(0) }).success).toBe(false);
+    const recuadro = { x: 0, y: 0, ancho: 10, alto: 10 };
+    expect(captura.safeParse({ ...base, imagen: PNG, tapados: [recuadro] }).success).toBe(true);
+    for (const malo of [
+      { ...recuadro, x: -1 },
+      { ...recuadro, ancho: 0 },
+      { ...recuadro, alto: 1.5 },
+      { ...recuadro, color: 'red' },
+    ]) {
+      expect(captura.safeParse({ ...base, imagen: PNG, tapados: [malo] }).success).toBe(false);
+    }
+  });
+
+  it('guardar acepta solo el contenido del reporte, sin campos de más', () => {
+    const guardar = entrada('reportes:guardar');
+    const base = { reporteId: ID, severidad: 'alta', contenido: CONTENIDO };
+    expect(guardar.safeParse(base).success).toBe(true);
+    expect(guardar.safeParse({ ...base, estado: 'exportado' }).success).toBe(false);
+    expect(
+      guardar.safeParse({ ...base, contenido: { ...CONTENIDO, html: '<script></script>' } })
+        .success,
+    ).toBe(false);
+    expect(
+      guardar.safeParse({ ...base, contenido: { ...CONTENIDO, titulo: 'x'.repeat(301) } }).success,
+    ).toBe(false);
+  });
+
+  it('crear recibe solo IDs de hallazgos, de 1 a 50', () => {
+    const crear = entrada('reportes:crear');
+    expect(crear.safeParse({ hallazgoIds: [ID] }).success).toBe(true);
+    expect(crear.safeParse({ hallazgoIds: [] }).success).toBe(false);
+    expect(crear.safeParse({ hallazgoIds: Array.from({ length: 51 }, () => ID) }).success).toBe(
+      false,
+    );
+    expect(crear.safeParse({ hallazgoIds: [ID], contenido: CONTENIDO }).success).toBe(false);
+  });
+
+  it('el portapapeles no devuelve lo copiado: solo cuándo se limpia', () => {
+    expect(salida('portapapeles:copiar').safeParse({ limpiaEnMs: 30_000 }).success).toBe(true);
+    expect(
+      salida('portapapeles:copiar').safeParse({ limpiaEnMs: null, texto: 'secreto' }).success,
+    ).toBe(false);
+  });
+
+  it('con la bóveda bloqueada, los canales de reportes y el portapapeles se rechazan', () => {
+    for (const canal of [
+      'reportes:crear',
+      'reportes:obtener',
+      'reportes:listar',
+      'reportes:guardar',
+      'reportes:vistaPrevia',
+      'reportes:exportar',
+      'reportes:exportarCaptura',
+      'portapapeles:copiar',
+    ]) {
+      expect(CANALES_SIN_BOVEDA.has(canal)).toBe(false);
+    }
+  });
+});

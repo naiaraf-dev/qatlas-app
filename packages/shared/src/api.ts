@@ -131,4 +131,28 @@ export interface QatlasApi {
       req: IpcRequest<'hallazgos:resolverEnLote'>,
     ): Promise<IpcResult<IpcResponse<'hallazgos:resolverEnLote'>>>;
   };
+  reportes: {
+    crear(req: IpcRequest<'reportes:crear'>): Promise<IpcResult<IpcResponse<'reportes:crear'>>>;
+    obtener(
+      req: IpcRequest<'reportes:obtener'>,
+    ): Promise<IpcResult<IpcResponse<'reportes:obtener'>>>;
+    listar(req: IpcRequest<'reportes:listar'>): Promise<IpcResult<IpcResponse<'reportes:listar'>>>;
+    guardar(
+      req: IpcRequest<'reportes:guardar'>,
+    ): Promise<IpcResult<IpcResponse<'reportes:guardar'>>>;
+    vistaPrevia(
+      req: IpcRequest<'reportes:vistaPrevia'>,
+    ): Promise<IpcResult<IpcResponse<'reportes:vistaPrevia'>>>;
+    exportar(
+      req: IpcRequest<'reportes:exportar'>,
+    ): Promise<IpcResult<IpcResponse<'reportes:exportar'>>>;
+    exportarCaptura(
+      req: IpcRequest<'reportes:exportarCaptura'>,
+    ): Promise<IpcResult<IpcResponse<'reportes:exportarCaptura'>>>;
+  };
+  portapapeles: {
+    copiar(
+      req: IpcRequest<'portapapeles:copiar'>,
+    ): Promise<IpcResult<IpcResponse<'portapapeles:copiar'>>>;
+  };
 }
