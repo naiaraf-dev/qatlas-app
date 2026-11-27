@@ -1,6 +1,7 @@
 # 023 — Cómo se guardan los hallazgos hasta la semana 8
 
-- **Estado:** aceptada
+- **Estado:** aceptada; la huella, los estados y la fusión de la semana 8 están en las
+  [ADR 046](046-huella-de-un-hallazgo.md) y [047](047-estados-cobertura-y-regresiones.md)
 - **Fecha:** 2026-11-05
 
 ## Contexto

@@ -94,6 +94,7 @@ test(
         'credenciales',
         'ejecuciones',
         'evidencias',
+        'hallazgos',
         'privacy',
         'proyectos',
         'security',
