@@ -8,6 +8,9 @@
  *
  *   node scripts/verificar-navegador.mjs            verifica
  *   node scripts/verificar-navegador.mjs --calcular imprime el hash de esta plataforma, para registrarlo
+ *
+ * Mira la carpeta que usa Playwright (`PLAYWRIGHT_BROWSERS_PATH`), venga de una descarga o de la caché
+ * del CI: lo restaurado de la caché se verifica igual (ADR 044).
  */
 import { createHash } from 'node:crypto';
 import { createReadStream, lstatSync, readdirSync, readFileSync } from 'node:fs';
@@ -18,7 +21,12 @@ const raiz = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(raiz, 'packages/runner/package.json'));
 const { chromium } = require('playwright-core');
 
-const REGISTRO = path.join(raiz, 'scripts/navegador-hashes.json');
+// `--registro <archivo>`: otro registro, solo para los tests (security-tests/cache-ci.test.ts).
+const indiceRegistro = process.argv.indexOf('--registro');
+const REGISTRO =
+  indiceRegistro >= 0
+    ? path.resolve(process.argv[indiceRegistro + 1] ?? '')
+    : path.join(raiz, 'scripts/navegador-hashes.json');
 // Los escribe Playwright al instalar: cambian en cada equipo.
 const SIN_CONTENIDO_PROPIO = new Set(['INSTALLATION_COMPLETE', 'DEPENDENCIES_VALIDATED']);
 
