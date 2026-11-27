@@ -243,6 +243,7 @@ export function crearRunner({
       linksExcluidos: 0,
       noRecorridosSoloLectura: 0,
       noRecorridosExclusiones: 0,
+      noRecorridosSinWebGL: 0,
       urlsDescartadas: 0,
       websocketDescartados: 0,
     };

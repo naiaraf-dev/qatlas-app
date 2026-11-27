@@ -75,5 +75,26 @@ describe('opcionesChromium', () => {
     const encendida = opcionesChromium({ control: { funcionesEncendidas: ['AimEnabled'] } });
     expect(funcionesEfectivas(encendida.args)).not.toContain('AimEnabled');
     expect(funcionesEfectivas(encendida.args)).toContain('NetworkTimeServiceQuerying');
+    expect(base.args).not.toContain('--disable-3d-apis');
+    expect(opcionesChromium({ control: { sinWebGL: true } }).args).toContain('--disable-3d-apis');
+  });
+
+  it('sin WebGL por software: saca el --enable-unsafe-swiftshader de Playwright', () => {
+    expect(opcionesChromium().ignoreDefaultArgs).toEqual(['--enable-unsafe-swiftshader']);
+    expect(opcionesChromium({ headless: false }).ignoreDefaultArgs).toEqual([
+      '--enable-unsafe-swiftshader',
+    ]);
+    const conSwiftshader = opcionesChromium({ control: { conSwiftshader: true } });
+    expect(conSwiftshader.ignoreDefaultArgs).toEqual([]);
+    expect(conSwiftshader.args).toContain('--use-angle=swiftshader');
+    expect(opcionesChromium().args).not.toContain('--use-angle=swiftshader');
+  });
+
+  it('lo que Playwright 1.65 dejó de apagar, lo apaga QAtlas', () => {
+    const { args } = opcionesChromium();
+    expect(funcionesEfectivas(args)).toEqual(
+      expect.arrayContaining(['Translate', 'DialMediaRouteProvider']),
+    );
+    expect(args).toContain('--disable-client-side-phishing-detection');
   });
 });

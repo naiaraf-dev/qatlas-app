@@ -283,6 +283,7 @@ describe('Lo que llega del runner se redacta antes de guardarse (ADR 032)', () =
         detenido: null,
         noRecorridosSoloLectura: 0,
         noRecorridosExclusiones: 0,
+        noRecorridosSinWebGL: 0,
         urlsDescartadas: 0,
         websocketDescartados: 0,
       });
@@ -334,6 +335,7 @@ describe('Lo guardado antes de la semana 7 se redacta al abrir la base (ADR 033)
       detenido: null,
       noRecorridosSoloLectura: 0,
       noRecorridosExclusiones: 0,
+      noRecorridosSinWebGL: 0,
       urlsDescartadas: 0,
       websocketDescartados: 0,
     });

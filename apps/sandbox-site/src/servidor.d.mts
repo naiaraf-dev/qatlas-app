@@ -1,6 +1,8 @@
 export const HOST_ESCUCHA: string;
 export const PUERTO_POR_DEFECTO: number;
 export const HOST_SITIO: string;
+/** Lo que tira `/webgl` cuando el navegador no tiene WebGL. */
+export const MENSAJE_SIN_WEBGL: string;
 export const CREDENCIALES_DE_PRUEBA: { usuario: string; clave: string };
 export const HOSTS_DE_FUGA: string[];
 export const HOSTS_UDP_DE_FUGA: string[];

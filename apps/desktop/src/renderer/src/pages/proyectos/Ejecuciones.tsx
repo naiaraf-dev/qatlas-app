@@ -87,6 +87,8 @@ function Cobertura({ resumen }: { resumen: EjecucionResumen['resumen'] }) {
       `Cobertura no alcanzada: ${resumen.noRecorridosSoloLectura} botones sin tocar por el modo solo lectura.`,
     resumen.noRecorridosExclusiones > 0 &&
       `Cobertura no alcanzada: ${resumen.noRecorridosExclusiones} links o botones excluidos.`,
+    resumen.noRecorridosSinWebGL > 0 &&
+      `Cobertura no alcanzada: ${resumen.noRecorridosSinWebGL} páginas fallaron porque WebGL no está disponible en el navegador de pruebas. No se informan como hallazgos.`,
     resumen.urlsDescartadas > 0 &&
       `${resumen.urlsDescartadas} URLs descartadas por parecer infinitas, como un calendario.`,
     resumen.websocketDescartados > 0 &&

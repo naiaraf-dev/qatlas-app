@@ -6,7 +6,7 @@
 ## Contexto
 
 Playwright descarga sus navegadores desde internet, y eso choca con «nada se descarga sin acción explícita». Además,
-**Playwright 1.64.1 solo compara el tamaño de la descarga con `content-length`:** no verifica un hash.
+**Playwright (1.64.1, y sigue igual en 1.65.1) solo compara el tamaño de la descarga con `content-length`:** no verifica un hash.
 
 ## Opciones
 
@@ -37,7 +37,7 @@ y el log del proceso principal dice la causa: `ruta`, `perfil-ruta-larga`, `sand
 
 | Paquete                  | Para qué               | Script de instalación | Tamaño instalado | Licencia   | Mantenimiento |
 | ------------------------ | ---------------------- | --------------------- | ---------------- | ---------- | ------------- |
-| `playwright-core` 1.64.1 | Controlar el navegador | No                    | 14 MB            | Apache-2.0 | Microsoft     |
+| `playwright-core` 1.65.1 | Controlar el navegador | No                    | 14 MB            | Apache-2.0 | Microsoft     |
 
 Ya estaba como transitiva de `@playwright/test`, que también pasa a versión exacta. Alternativa: hablar CDP a mano, que
 es peor. No trae navegadores ni los descarga al instalarse.
@@ -50,3 +50,11 @@ es peor. No trae navegadores ni los descarga al instalarse.
   `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE`. Si difiere, el CI falla e imprime el hash que encontró. Antes de registrarlo hay
   que entender por qué difiere.
 - Subir Playwright cambia la revisión de Chromium: hay que registrar el hash nuevo a propósito.
+
+## Actualizaciones
+
+- **2026-11-26, Playwright 1.64.1 → 1.65.1:** Chromium 156.0.8078.4 (revisión 1248) → 159.0.8154.6
+  (revisión 1255). Los hashes de Windows y de Linux se registraron como la primera vez; el de Linux se
+  calculó con la misma función sobre la descarga de `ubuntu24.04-x64`, y el de Windows coincide con el del
+  script. Se sacó la revisión 1248, que esta versión ya no usa. Los cambios en lo que Playwright pasa a
+  Chromium están en la [ADR 041](041-opciones-del-navegador.md).

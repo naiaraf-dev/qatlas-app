@@ -7,7 +7,7 @@
  */
 
 /**
- * Las funciones de Chromium que Playwright 1.64.1 apaga con su propio `--disable-features`
+ * Las funciones de Chromium que Playwright 1.65.1 apaga con su propio `--disable-features`
  * (`chromiumSwitches.ts`). Chromium se queda solo con el **último** `--disable-features` de la línea de
  * comando: si QAtlas pasa el suyo, el de Playwright deja de valer. Hasta el 2026-11-25 pasaba eso, y se
  * volvían a encender la elegibilidad de AI Mode (`www.google.com/async/folae`), la hora de red
@@ -18,20 +18,18 @@
 export const FUNCIONES_APAGADAS_POR_PLAYWRIGHT = [
   'AvoidUnnecessaryBeforeUnloadCheckSync',
   'DestroyProfileOnBrowserClose',
-  'DialMediaRouteProvider',
-  'GlobalMediaControls',
   'HttpsUpgrades',
+  'HttpsFirstBalancedModeAutoEnable',
   'LensOverlay',
   'MediaRouter',
   'PaintHolding',
   'ThirdPartyStoragePartitioning',
-  'BlockOriginHeaderModificationOnRedirect',
   'AvoidCorsURLLoaderRestartOnRedirect',
-  'Translate',
-  'AutoDeElevate',
+  'TcpPortRandomizationWin',
   'OptimizationHints',
   'NetworkTimeServiceQuerying',
   'AimEnabled',
+  'PreconnectToSearch',
   'msForceBrowserSignIn',
   'msEdgeUpdateLaunchServicesPreferredVersion',
 ] as const;
@@ -39,12 +37,18 @@ export const FUNCIONES_APAGADAS_POR_PLAYWRIGHT = [
 /**
  * Las que QAtlas apaga además. Chromium se conecta solo a estos servicios: el proxy los bloquea igual,
  * pero llenarían el monitor con destinos que el sitio nunca pidió.
- * - `PreconnectToSearch`: su buscador por defecto.
+ * - `PreconnectToSearch`: su buscador por defecto. Playwright 1.65 también la apaga; queda acá por si
+ *   la vuelve a sacar.
  * - `AutofillServerCommunication`: el servicio de autocompletar, al ver un formulario.
+ * - `Translate`: el servicio de traducción. Playwright la apagaba hasta 1.64.
+ * - `DialMediaRouteProvider`: busca televisores y parlantes en la red local, por UDP, que el proxy no
+ *   ve. Playwright la apagaba hasta 1.64; `MediaRouter`, que la contiene, sigue apagada.
  */
 export const FUNCIONES_APAGADAS_POR_QATLAS = [
   'PreconnectToSearch',
   'AutofillServerCommunication',
+  'Translate',
+  'DialMediaRouteProvider',
 ] as const;
 
 export const FUNCIONES_APAGADAS: readonly string[] = [
@@ -69,8 +73,18 @@ export const ARGUMENTOS_CHROMIUM: readonly string[] = [
   '--disable-background-networking',
   '--disable-sync',
   '--no-first-run',
+  // La detección de phishing del navegador baja modelos de Google. Playwright lo pasaba hasta 1.64.
+  '--disable-client-side-phishing-detection',
   `--disable-features=${FUNCIONES_APAGADAS.join(',')}`,
 ];
+
+/**
+ * Lo que Playwright pasa y QAtlas saca (ADR 041):
+ * - `--enable-unsafe-swiftshader`: WebGL por software. Chromium lo considera inseguro con contenido no
+ *   confiable, y el sitio probado lo es. Sin él, una página que necesita WebGL en un equipo sin GPU
+ *   falla, y el resumen lo informa como cobertura no alcanzada, no como hallazgo.
+ */
+export const ARGUMENTOS_SACADOS: readonly string[] = ['--enable-unsafe-swiftshader'];
 
 export interface ProxyDelNavegador {
   servidor: string;
@@ -94,6 +108,14 @@ export interface OpcionesChromium {
     sinSandbox?: boolean;
     sinArgumentosDeRed?: boolean;
     funcionesEncendidas?: readonly string[];
+    /** Sin WebGL en ningún equipo (`--disable-3d-apis`): un equipo sin GPU, para el caso del sandbox. */
+    sinWebGL?: boolean;
+    /**
+     * Con WebGL por software, encendido a propósito: los argumentos de `ARGUMENTOS_SACADOS` y
+     * `--use-angle=swiftshader`. Da WebGL igual con GPU y sin ella (el CI no tiene), para el control
+     * positivo de WebGL, y muestra que Playwright pasa el flag. Nunca en la app.
+     */
+    conSwiftshader?: boolean;
   };
 }
 
@@ -102,6 +124,7 @@ export interface OpcionesDeLanzamiento {
   headless: boolean;
   chromiumSandbox: boolean;
   args: string[];
+  ignoreDefaultArgs: string[];
   proxy?: { server: string; username: string; password: string };
 }
 
@@ -112,6 +135,7 @@ const PISA_FUNCIONES = /^--(disable|enable)-features(=|$)/;
  * - `channel: 'chromium'`: el Chromium completo, verificado por su hash (ADR 020); nunca el headless shell.
  * - `chromiumSandbox`: Playwright lo trae apagado, y el sitio probado es hostil por defecto.
  * - Un solo `--disable-features`, con lo de Playwright y lo de QAtlas.
+ * - Sin los argumentos de Playwright de `ARGUMENTOS_SACADOS`.
  */
 export function opcionesChromium(opciones: OpcionesChromium = {}): OpcionesDeLanzamiento {
   const {
@@ -141,7 +165,14 @@ export function opcionesChromium(opciones: OpcionesChromium = {}): OpcionesDeLan
     channel: 'chromium',
     headless,
     chromiumSandbox: control.sinSandbox !== true,
-    args: [...base, ...argumentos, `--disable-features=${funciones.join(',')}`],
+    args: [
+      ...base,
+      ...argumentos,
+      ...(control.sinWebGL ? ['--disable-3d-apis'] : []),
+      ...(control.conSwiftshader ? ['--use-angle=swiftshader'] : []),
+      `--disable-features=${funciones.join(',')}`,
+    ],
+    ignoreDefaultArgs: control.conSwiftshader ? [] : [...ARGUMENTOS_SACADOS],
     ...(proxy
       ? { proxy: { server: proxy.servidor, username: proxy.usuario, password: proxy.clave } }
       : {}),
