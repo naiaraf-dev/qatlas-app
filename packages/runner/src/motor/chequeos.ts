@@ -119,6 +119,36 @@ export function consoleErrorRelevante(texto: string, bloqueados: readonly string
   return !bloqueados.some((bloqueado) => texto.includes(bloqueado));
 }
 
+/**
+ * Si el navegador de pruebas tiene WebGL. Se evalúa en el mundo aislado, con un canvas que la página no
+ * ve: el resultado es del navegador, no del sitio. El contexto se suelta enseguida.
+ */
+export const EXPRESION_HAY_WEBGL = `(() => {
+  const lienzo = document.createElement('canvas');
+  const gl = lienzo.getContext('webgl2') || lienzo.getContext('webgl');
+  if (!gl) return false;
+  const perder = gl.getExtension('WEBGL_lose_context');
+  if (perder) perder.loseContext();
+  return true;
+})()`;
+
+/** Los mensajes con que una página o su biblioteca de gráficos dicen que no pudieron crear WebGL. */
+const FALLA_DE_WEBGL = /webgl/i;
+
+/**
+ * Una excepción o un console.error que se debe a que el navegador de pruebas no tiene WebGL: no es un
+ * hallazgo de la página sino cobertura no alcanzada (ADR 041). Solo cuando el navegador no lo tiene: con
+ * WebGL disponible, un error de WebGL es del sitio y se informa.
+ */
+export function esFaltaDeWebGL(texto: string, hayWebGL: boolean | null): boolean {
+  return hayWebGL === false && mencionaWebGL(texto);
+}
+
+/** Si hace falta averiguar si el navegador tiene WebGL: solo cuando un error lo nombra. */
+export function mencionaWebGL(texto: string): boolean {
+  return FALLA_DE_WEBGL.test(texto);
+}
+
 export interface CookieAnalizada {
   nombre: string;
   /** Con indicio de sesión en el nombre, o anti-CSRF: alta. Sin indicio y sin vencimiento: informativa. */

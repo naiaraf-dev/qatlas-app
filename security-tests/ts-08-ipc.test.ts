@@ -734,6 +734,7 @@ describe('TS-08 · Ejecuciones y prueba de login', () => {
         detenido: null,
         noRecorridosSoloLectura: 0,
         noRecorridosExclusiones: 0,
+        noRecorridosSinWebGL: 0,
         urlsDescartadas: 0,
         websocketDescartados: 0,
         logins: 0,

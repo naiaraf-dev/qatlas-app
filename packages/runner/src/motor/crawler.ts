@@ -6,10 +6,13 @@ import {
   analizarCookie,
   coincideExclusion,
   consoleErrorRelevante,
+  esFaltaDeWebGL,
+  EXPRESION_HAY_WEBGL,
   hallazgoDeEstado,
   hallazgosDeRendimiento,
   claveDeMensaje,
   hostDe,
+  mencionaWebGL,
   parametrosSensibles,
   SEVERIDAD,
   severidadDeAccesibilidad,
@@ -61,6 +64,11 @@ export interface ResultadoRastreo {
   noRecorridosSoloLectura: number;
   /** Cobertura no alcanzada: links y botones que coinciden con una exclusión. */
   noRecorridosExclusiones: number;
+  /**
+   * Cobertura no alcanzada: páginas que fallaron porque el navegador de pruebas no tiene WebGL. Se lanza
+   * sin `--enable-unsafe-swiftshader` (ADR 041): esos errores no son hallazgos de la página.
+   */
+  noRecorridosSinWebGL: number;
   urlsDescartadas: number;
 }
 
@@ -281,8 +289,11 @@ export async function rastrear(
     detenido: null,
     noRecorridosSoloLectura: 0,
     noRecorridosExclusiones: 0,
+    noRecorridosSinWebGL: 0,
     urlsDescartadas: 0,
   };
+  // Si el navegador tiene WebGL: es del navegador, no de la página, y se averigua una sola vez.
+  let hayWebGL: boolean | null = null;
 
   let datos = datosVacios();
   let fuente = sesion
@@ -516,7 +527,19 @@ export async function rastrear(
         });
       }
 
+      const erroresDeLaPagina = [
+        ...datos.excepciones,
+        ...datos.consola.filter((m) => m.tipo === 'error').map((m) => m.texto),
+      ];
+      if (hayWebGL === null && erroresDeLaPagina.some(mencionaWebGL)) {
+        hayWebGL = await enMundoAislado<boolean>(cdp, EXPRESION_HAY_WEBGL);
+      }
+      let faltoWebGL = false;
       for (const excepcion of datos.excepciones) {
+        if (esFaltaDeWebGL(excepcion, hayWebGL)) {
+          faltoWebGL = true;
+          continue;
+        }
         reportar({
           tipo: 'error-javascript',
           severidad: SEVERIDAD['error-javascript'],
@@ -530,6 +553,10 @@ export async function rastrear(
       const hostsBloqueados = [...new Set(bloqueadosPorNosotros.map(hostDe))];
       for (const mensaje of datos.consola) {
         if (mensaje.tipo !== 'error') continue;
+        if (esFaltaDeWebGL(mensaje.texto, hayWebGL)) {
+          faltoWebGL = true;
+          continue;
+        }
         if (!consoleErrorRelevante(mensaje.texto, [...bloqueadosPorNosotros, ...hostsBloqueados])) {
           continue;
         }
@@ -543,6 +570,7 @@ export async function rastrear(
           detalle: mensaje.texto.slice(0, 1000),
         });
       }
+      if (faltoWebGL) resultado.noRecorridosSinWebGL += 1;
       if (datos.consola.some((m) => m.texto.includes('Mixed Content'))) {
         reportar({
           tipo: 'contenido-mixto',

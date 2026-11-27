@@ -8,6 +8,7 @@ import {
   segmentosDeNombre,
   coincideExclusion,
   consoleErrorRelevante,
+  esFaltaDeWebGL,
   hallazgoDeEstado,
   hallazgosDeRendimiento,
   hostDe,
@@ -270,5 +271,26 @@ describe('parametrosSensibles (semana 6b)', () => {
     ['no es una url', []],
   ])('%s', (url, esperado) => {
     expect(parametrosSensibles(url).map((p) => `${p.nombre}:${p.severidad}`)).toEqual(esperado);
+  });
+});
+
+describe('Falta de WebGL en el navegador de pruebas', () => {
+  const mensaje = 'Error: Error creating WebGL context.';
+
+  it('sin WebGL, un error de WebGL es cobertura no alcanzada', () => {
+    expect(esFaltaDeWebGL(mensaje, false)).toBe(true);
+    expect(
+      esFaltaDeWebGL('THREE.WebGLRenderer: A WebGL context could not be created.', false),
+    ).toBe(true);
+  });
+
+  it('control: con WebGL, o sin saberlo, es un hallazgo de la página', () => {
+    expect(esFaltaDeWebGL(mensaje, true)).toBe(false);
+    expect(esFaltaDeWebGL(mensaje, null)).toBe(false);
+  });
+
+  it('sin WebGL, los demás errores siguen siendo hallazgos', () => {
+    expect(esFaltaDeWebGL('TypeError: x is undefined', false)).toBe(false);
+    expect(esFaltaDeWebGL('Excepción plantada en el sandbox', false)).toBe(false);
   });
 });

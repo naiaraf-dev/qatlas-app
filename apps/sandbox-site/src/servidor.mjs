@@ -119,6 +119,7 @@ const inicio = (puertoHttps) =>
   <li><a href="/spa">Aplicación de una página</a></li>
   <li><a href="/ws-escritura">WebSocket que escribe</a></li>
   <li><a href="/fugas">Fugas de secretos</a></li>
+  <li><a href="/webgl">Dibujo con WebGL</a></li>
   ${puertoHttps ? `<li><a href="https://${HOST_SITIO}:${puertoHttps}/mixto">Contenido mixto</a></li>` : ''}
 </ul>`,
   );
@@ -276,6 +277,32 @@ const SANA_OTRA = pagina(
   'Otra página sana',
   `<p>También sin problemas.</p>
 <img src="/imagen.svg" alt="Un cuadrado de ejemplo" width="40" height="40">`,
+);
+
+// Dibuja con WebGL como una biblioteca de gráficos (three.js, por ejemplo): crea el canvas suelto y, si
+// el navegador no tiene WebGL, tira una excepción. Con WebGL no tiene ningún problema: no está en el
+// oráculo. Sin WebGL, el escáner lo informa como cobertura no alcanzada (ADR 041).
+export const MENSAJE_SIN_WEBGL = 'Error creating WebGL context.';
+const WEBGL = pagina(
+  'Dibujo con WebGL',
+  `<p id="estado-webgl">Dibujando…</p>
+<script>
+(() => {
+  const lienzo = document.createElement('canvas');
+  lienzo.width = 64;
+  lienzo.height = 64;
+  const gl = lienzo.getContext('webgl2') || lienzo.getContext('webgl');
+  if (!gl) throw new Error('${MENSAJE_SIN_WEBGL}');
+  gl.clearColor(0.2, 0.3, 0.8, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  lienzo.setAttribute('role', 'img');
+  lienzo.setAttribute('aria-label', 'Un cuadrado azul dibujado con WebGL');
+  const estado = document.getElementById('estado-webgl');
+  estado.textContent = 'Dibujado con WebGL.';
+  estado.dataset.dibujado = 'si';
+  estado.after(lienzo);
+})();
+</script>`,
 );
 
 // La imagen principal tarda: el LCP pasa los 4 segundos.
@@ -571,6 +598,9 @@ export function iniciarSandbox({
         return;
       case 'GET /favicon.ico':
         responder(res, 204, '');
+        return;
+      case 'GET /webgl':
+        responder(res, 200, WEBGL);
         return;
       case 'GET /sana':
         responder(res, 200, SANA);

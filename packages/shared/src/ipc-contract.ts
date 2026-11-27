@@ -334,6 +334,8 @@ export const ResumenEjecucion = z
     // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
     noRecorridosSoloLectura: Cantidad,
     noRecorridosExclusiones: Cantidad,
+    // Páginas que fallaron porque el navegador de pruebas no tiene WebGL (ADR 041).
+    noRecorridosSinWebGL: Cantidad,
     urlsDescartadas: Cantidad,
     websocketDescartados: Cantidad,
     // Escaneo autenticado: todos los logins, los que se hicieron porque la sesión venció y las

@@ -61,6 +61,44 @@ reintento al mismo destino. Si no llega, lo registra como **bloqueado, con la re
 El test de ruido las admite solo así: bloqueadas, sin credencial y con esa regla. Si alguna mandara la
 credencial, o apareciera otra, falla.
 
+## Playwright 1.65.1 y Chromium 159 (agregado el 2026-11-26)
+
+- **La lista de Playwright cambió.** Agrega `HttpsFirstBalancedModeAutoEnable`, `TcpPortRandomizationWin` y
+  `PreconnectToSearch`, y saca `Translate`, `DialMediaRouteProvider`, `GlobalMediaControls`,
+  `BlockOriginHeaderModificationOnRedirect` y `AutoDeElevate` (ahora usa `--do-not-de-elevate`).
+  `FUNCIONES_APAGADAS_POR_PLAYWRIGHT` es la de 1.65.1.
+- **Lo que dejó de apagar y se conecta, lo apaga QAtlas:** `Translate` (el servicio de traducción) y
+  `DialMediaRouteProvider` (busca dispositivos en la red local por UDP, que el proxy no ve). Las otras tres
+  no abren conexiones.
+- **`--disable-client-side-phishing-detection`:** Playwright dejó de pasarlo. La detección de phishing baja
+  modelos de Google: va en `ARGUMENTOS_CHROMIUM`.
+- **`--enable-features`:** Playwright pasa uno propio (`CDPScreenshotNewSurface` y
+  `SkipListAccountsWithoutGaiaCookies`). QAtlas no pasa ninguno, así que el de Playwright vale; el E2E
+  verifica que haya uno solo.
+- **`accounts.google.com` ya no aparece:** con `SkipListAccountsWithoutGaiaCookies`, el reconciliador no
+  pregunta sin cookies de Google. Se sacó de los conocidos del test de ruido, que queda más estricto: solo
+  admite `update.googleapis.com`.
+
+### Sin WebGL por software
+
+Playwright 1.65 pasa `--enable-unsafe-swiftshader`, que habilita WebGL por software en un equipo sin GPU.
+Chromium lo considera inseguro con contenido no confiable, y el sitio probado lo es. **`opcionesChromium` lo
+saca con `ignoreDefaultArgs`** (`ARGUMENTOS_SACADOS`).
+
+- **Qué se pierde:** en un equipo sin GPU, una página que necesita WebGL puede fallar. Chromium 159 todavía
+  usa el respaldo por software sin el flag, con un aviso de que está obsoleto; cuando lo deje de usar, ese
+  equipo se queda sin WebGL. En Windows, sin GPU, usa el renderizador por software del sistema.
+- **Cómo se informa:** si un error de la página nombra WebGL, el crawler averigua una vez si el navegador
+  tiene WebGL, con un canvas en su mundo aislado que la página no ve (`EXPRESION_HAY_WEBGL`). Si no lo
+  tiene, esas excepciones y `console.error` no son hallazgos: la página cuenta en `noRecorridosSinWebGL` y
+  el resumen dice «Cobertura no alcanzada: N páginas fallaron porque WebGL no está disponible en el
+  navegador de pruebas». Con WebGL disponible, un error de WebGL es del sitio y se informa.
+- **Límite:** una página que se queda sin WebGL sin tirar un error que lo nombre no se cuenta. Detectar
+  todo pedido de WebGL necesitaría código en el mundo de la página, que la página vería (ADR 021).
+- **Caso del sandbox:** `/webgl` dibuja como una biblioteca de gráficos y tira una excepción sin WebGL. El
+  equipo sin GPU se simula con `control: { sinWebGL: true }` (`--disable-3d-apis`), igual en los dos
+  sistemas.
+
 ## Verificación
 
 - `packages/runner/src/motor/opciones-chromium.test.ts`: un solo `--disable-features`, con las dos listas, y
@@ -71,7 +109,11 @@ credencial, o apareciera otra, falla.
   queda como `servicio-interno-navegador`, sin resolver ni conectar; al cerrar se registra lo pendiente.
 - `apps/desktop/src/main/ejecuciones/ejecuciones.test.ts`: se guarda y se ve en el monitor, sin sumar al
   resumen.
-- `e2e/navegador-ruido.e2e.ts`: la línea de comandos efectiva; con el Chromium completo y el proxy real, el
+- `e2e/escaneo-webgl.e2e.ts`: sin WebGL, `/webgl` cuenta como cobertura no alcanzada y no da hallazgos.
+  Controles: sin WebGL la página sí falla; con WebGL dibuja y no se informa nada; sin WebGL, una excepción
+  que no es de WebGL sigue siendo un hallazgo.
+- `e2e/navegador-ruido.e2e.ts`: la línea de comandos efectiva (con lo que QAtlas agrega y sin
+  `--enable-unsafe-swiftshader`, con un control que muestra que Playwright lo pasa); con el Chromium completo y el proxy real, el
   net-log no tiene nada fuera de lo conocido, y todo lo que Chromium intentó está en el registro del proxy. Control: con AI Mode y la hora
   de red encendidas, el net-log las ve.
 - `e2e/ejecuciones.e2e.ts`: el monitor de la app real, sin destinos de Google ni ajenos al recorrido.

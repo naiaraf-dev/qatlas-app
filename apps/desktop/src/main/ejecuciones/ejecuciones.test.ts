@@ -126,6 +126,7 @@ const terminado = (
   detenido: null,
   noRecorridosSoloLectura: 0,
   noRecorridosExclusiones: 0,
+  noRecorridosSinWebGL: 0,
   urlsDescartadas: 0,
   websocketDescartados: 0,
 });
@@ -638,6 +639,7 @@ describe('Resultados del escaneo', () => {
       detenido: 'max-tiempo',
       noRecorridosSoloLectura: 4,
       noRecorridosExclusiones: 5,
+      noRecorridosSinWebGL: 8,
       urlsDescartadas: 6,
       websocketDescartados: 7,
     });
@@ -649,6 +651,7 @@ describe('Resultados del escaneo', () => {
       detenido: 'max-tiempo',
       noRecorridosSoloLectura: 4,
       noRecorridosExclusiones: 5,
+      noRecorridosSinWebGL: 8,
       urlsDescartadas: 6,
       websocketDescartados: 7,
     });
@@ -669,7 +672,11 @@ describe('Resultados del escaneo', () => {
         id,
       );
     });
-    expect(estado(proyecto, id)?.resumen).toMatchObject({ hallazgos: 0, detenido: null });
+    expect(estado(proyecto, id)?.resumen).toMatchObject({
+      hallazgos: 0,
+      detenido: null,
+      noRecorridosSinWebGL: 0,
+    });
   });
 
   it('el escaneo manda al runner la profundidad y el tiempo máximo del proyecto', async () => {

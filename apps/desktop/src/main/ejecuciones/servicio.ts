@@ -116,6 +116,7 @@ const RESUMEN_VACIO: ResumenEjecucion = {
   detenido: null,
   noRecorridosSoloLectura: 0,
   noRecorridosExclusiones: 0,
+  noRecorridosSinWebGL: 0,
   urlsDescartadas: 0,
   websocketDescartados: 0,
   logins: 0,
@@ -805,6 +806,7 @@ export class ServicioEjecuciones {
           detenido: mensaje.detenido,
           noRecorridosSoloLectura: mensaje.noRecorridosSoloLectura,
           noRecorridosExclusiones: mensaje.noRecorridosExclusiones,
+          noRecorridosSinWebGL: mensaje.noRecorridosSinWebGL,
           urlsDescartadas: mensaje.urlsDescartadas,
           websocketDescartados: mensaje.websocketDescartados,
         });

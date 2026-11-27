@@ -298,6 +298,7 @@ export const MensajeDelRunner = z.discriminatedUnion('tipo', [
       detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
       noRecorridosSoloLectura: Cantidad,
       noRecorridosExclusiones: Cantidad,
+      noRecorridosSinWebGL: Cantidad,
       urlsDescartadas: Cantidad,
       websocketDescartados: Cantidad,
     })
