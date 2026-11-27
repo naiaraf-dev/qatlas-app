@@ -535,6 +535,14 @@ export function fusionarEnHuella(
       .run(destino, ...otros);
     base.prepare(`DELETE FROM hallazgo WHERE id IN (${marcadores})`).run(...otros);
   }
+  // Lo guardado antes de la semana 8 tiene todas sus apariciones como «nueva»: la primera lo es, las demás no.
+  base
+    .prepare(
+      `UPDATE hallazgo_ocurrencia SET aparicion = 'recurrente'
+       WHERE hallazgo_id = ? AND aparicion = 'nueva' AND id <> (SELECT o.id FROM hallazgo_ocurrencia o
+         WHERE o.hallazgo_id = ? ORDER BY o.created_at, o.rowid LIMIT 1)`,
+    )
+    .run(destino, destino);
   base
     .prepare(
       `UPDATE hallazgo SET huella = ?, alcance = ?, clave = ?, version_normalizacion = ?, estado = ?,

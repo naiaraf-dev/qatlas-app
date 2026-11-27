@@ -30,6 +30,8 @@ const { status, error } = spawnSync(
     'apps/desktop/src/main/proyectos',
     // Las bóvedas de formatos anteriores también abren en Electron (ADR 006).
     'apps/desktop/src/main/boveda/formatos-anteriores',
+    // La huella es un HMAC con una subclave derivada por HKDF (ADR 046).
+    'apps/desktop/src/main/hallazgos',
   ],
   {
     cwd: raiz,

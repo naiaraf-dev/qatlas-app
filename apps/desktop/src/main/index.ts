@@ -196,6 +196,7 @@ async function cargarServicios(): Promise<{
   const { ServicioProyectos: Proyectos } = await import('./proyectos/servicio');
   const { ServicioEjecuciones: Ejecuciones } = await import('./ejecuciones/servicio');
   const { redactarLoGuardado } = await import('./ejecuciones/redaccion-guardada');
+  const { fusionarLoGuardado } = await import('./hallazgos/huellas-guardadas');
   const { ServicioEvidencias: Evidencias } = await import('./evidencias/servicio');
   // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
   const dependientes: { ejecuciones?: ServicioEjecuciones; evidencias?: ServicioEvidencias } = {};
@@ -204,6 +205,8 @@ async function cargarServicios(): Promise<{
     // Lo guardado antes de la redacción (semana 7) se redacta al abrir la base (ADR 033).
     alAbrir: (base, maestra) => {
       redactarLoGuardado(base, maestra);
+      // Después de redactar: la huella de lo guardado antes de la semana 8, y la fusión (ADR 047).
+      fusionarLoGuardado(base, maestra);
       // EVI-06: la retención, y los restos ilegibles de una ejecución cortada (ADR 038).
       dependientes.evidencias?.alAbrir(base);
     },
