@@ -83,7 +83,23 @@ export function agrupar(filas: readonly HallazgoBandeja[], modo: Agrupacion): Gr
   return [...grupos.values()].sort((a, b) => b.filas.length - a.filas.length);
 }
 
-export function Bandeja() {
+/** Se puede incluir en un reporte: abierto, ni descartado ni resuelto. */
+const REPORTABLE = new Set<EstadoHallazgo>([
+  'nuevo',
+  'confirmado',
+  'regresion',
+  'posiblemente_resuelto',
+  'reportado',
+]);
+
+const NO_SE_PUDO_REPORTAR: Record<'no-existe' | 'otro-proyecto' | 'no-corresponde', string> = {
+  'no-existe': 'No se pudo crear el reporte: un hallazgo ya no existe.',
+  'otro-proyecto':
+    'Un reporte junta hallazgos de un solo proyecto. Elegí hallazgos del mismo proyecto.',
+  'no-corresponde': 'Un hallazgo descartado o resuelto no se reporta.',
+};
+
+export function Bandeja({ onAbrirReporte }: { onAbrirReporte: (reporteId: string) => void }) {
   const [proyectos, setProyectos] = useState<ProyectoResumen[]>([]);
   const [filtros, setFiltros] = useState<FiltrosBandeja>(FILTROS_INICIALES);
   const [agrupacion, setAgrupacion] = useState<Agrupacion>('ninguna');
@@ -168,6 +184,23 @@ export function Bandeja() {
     );
     cargar();
   };
+
+  const crearReporte = async (hallazgoIds: string[]) => {
+    const res = await window.qatlas.reportes.crear({ hallazgoIds });
+    if (res.ok && res.data.resultado === 'creado') {
+      onAbrirReporte(res.data.reporteId);
+      return;
+    }
+    setMensaje(
+      res.ok && res.data.resultado === 'rechazada'
+        ? NO_SE_PUDO_REPORTAR[res.data.motivo]
+        : 'No se pudo crear el reporte.',
+    );
+    cargar();
+  };
+
+  const seleccionadas = (filas ?? []).filter((f) => seleccion.has(f.id));
+  const proyectosSeleccionados = new Set(seleccionadas.map((f) => f.proyectoId)).size;
 
   const alternarDetalle = async (fila: HallazgoBandeja) => {
     if (abiertos[fila.id]) {
@@ -310,6 +343,26 @@ export function Bandeja() {
         </div>
       )}
 
+      {seleccion.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="primary"
+            disabled={
+              proyectosSeleccionados !== 1 || seleccionadas.some((f) => !REPORTABLE.has(f.estado))
+            }
+            onClick={() => void crearReporte(seleccionadas.map((f) => f.id))}
+          >
+            Crear un reporte con los seleccionados ({seleccion.size})
+          </Button>
+          {proyectosSeleccionados > 1 && (
+            <p className="text-[13.5px] text-muted">
+              Un reporte junta hallazgos de un solo proyecto.
+            </p>
+          )}
+        </div>
+      )}
+
+      {mensaje && <p className="text-[13.5px] text-text-2">{mensaje}</p>}
       {error && <Aviso tipo="peligro">{error}</Aviso>}
       {filas !== null && filas.length === 0 && (
         <p className="text-muted">No hay hallazgos con estos filtros.</p>
@@ -329,6 +382,7 @@ export function Bandeja() {
                 fila={fila}
                 detalle={abiertos[fila.id]}
                 lote={loteActivo}
+                alReportar={() => void crearReporte([fila.id])}
                 seleccionada={seleccion.has(fila.id)}
                 alSeleccionar={(marcada) => {
                   setSeleccion((previa) => {
@@ -418,6 +472,7 @@ function FilaHallazgo({
   alDecidir,
   alCambiarSeveridad,
   alVerDetalle,
+  alReportar,
 }: {
   fila: HallazgoBandeja;
   detalle: Detalle | 'cargando' | undefined;
@@ -427,6 +482,7 @@ function FilaHallazgo({
   alDecidir: (accion: 'confirmar' | 'resolver' | 'reabrir' | 'descartar') => void;
   alCambiarSeveridad: (severidad: SeveridadHallazgo) => void;
   alVerDetalle: () => void;
+  alReportar: () => void;
 }) {
   const idTitulo = useId();
   const idDetalle = useId();
@@ -438,7 +494,7 @@ function FilaHallazgo({
         className={`flex flex-col gap-2 rounded-[var(--radius-card)] border bg-surface p-4 ${regresion ? 'border-2 border-crit-text' : 'border-border'}`}
       >
         <div className="flex flex-wrap items-center gap-2.5">
-          {lote && (
+          {(lote || REPORTABLE.has(fila.estado)) && (
             <Casilla
               etiqueta={<span className="sr-only">Seleccionar «{fila.titulo}»</span>}
               marcada={seleccionada}
@@ -511,6 +567,11 @@ function FilaHallazgo({
               }}
             >
               Reabrir
+            </Button>
+          )}
+          {REPORTABLE.has(fila.estado) && (
+            <Button aria-label={`Crear un reporte con «${fila.titulo}»`} onClick={alReportar}>
+              Crear reporte
             </Button>
           )}
           <Selector<SeveridadHallazgo>

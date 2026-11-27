@@ -191,7 +191,7 @@ export function aMarkdown(
     } else if (conImagenes && e.archivo) {
       lineas.push(`![Captura ${e.id}](${e.archivo})`, '');
     } else {
-      lineas.push(`- Captura ${e.id}: incluida en el ZIP del reporte.`, '');
+      lineas.push(`- Captura ${e.id}: va en el ZIP o en el PDF del reporte, no en este texto.`, '');
     }
   }
   lineas.push('---', 'Generado con QAtlas. Los datos sensibles se redactaron antes de exportar.');

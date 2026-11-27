@@ -16,6 +16,7 @@ import { Bandeja } from './pages/hallazgos/Bandeja';
 import { EjecucionesTodas } from './pages/hallazgos/EjecucionesTodas';
 import { Escaneos } from './pages/hallazgos/Escaneos';
 import { Proyectos, type VistaProyectos } from './pages/proyectos/Proyectos';
+import { Reportes } from './pages/reportes/Reportes';
 import { applyTheme } from './theme';
 
 /**
@@ -95,6 +96,8 @@ function Principal({
 }) {
   const [page, setPage] = useState<PageId>('inicio');
   const [vistaInicial, setVistaInicial] = useState<VistaProyectos>({ tipo: 'lista' });
+  // El reporte recién creado desde Hallazgos se abre directo.
+  const [reporteInicial, setReporteInicial] = useState<string | null>(null);
   // Volver a tocar el menú abre la lista, aunque ya se esté en la página.
   const [visita, setVisita] = useState(0);
   const [status, setStatus] = useState<SecurityStatus | null>(null);
@@ -154,6 +157,7 @@ function Principal({
 
   const navegar = (destino: PageId) => {
     setVistaInicial({ tipo: 'lista' });
+    setReporteInicial(null);
     setVisita((n) => n + 1);
     setPage(destino);
   };
@@ -195,10 +199,20 @@ function Principal({
         <Privacidad status={status} connections={connections} onRefresh={refreshConnections} />
       )}
       {page === 'boveda' && <Boveda />}
-      {page === 'hallazgos' && <Bandeja key={visita} />}
+      {page === 'hallazgos' && (
+        <Bandeja
+          key={visita}
+          onAbrirReporte={(id) => {
+            setReporteInicial(id);
+            setVisita((n) => n + 1);
+            setPage('reportes');
+          }}
+        />
+      )}
+      {page === 'reportes' && <Reportes key={visita} inicial={reporteInicial} />}
       {page === 'ejecuciones' && <EjecucionesTodas key={visita} onAbrirProyecto={abrirProyecto} />}
       {page === 'escaneos' && <Escaneos key={visita} onAbrirProyecto={abrirProyecto} />}
-      {(page === 'casos' || page === 'reportes' || page === 'uat') && (
+      {(page === 'casos' || page === 'uat') && (
         <Proximamente
           page={page}
           onIrAProyectos={() => {
