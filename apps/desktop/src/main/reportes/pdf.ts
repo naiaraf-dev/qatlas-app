@@ -93,8 +93,12 @@ export async function renderizarPdf(html: string): Promise<Buffer> {
     });
     if (otrosPedidos > 0) throw new PdfNoLimpiable('el documento pidió recursos externos');
     const limpio = limpiarMetadatosPdf(crudo);
-    const ajenas = fuentesDelPdf(limpio).filter((f) => !FUENTE_PERMITIDA.test(f));
-    if (ajenas.length > 0) throw new PdfNoLimpiable('usó una fuente del sistema');
+    // Todo reporte tiene texto: sin fuentes identificables no se puede afirmar que no usó una del sistema.
+    const usadas = fuentesDelPdf(limpio);
+    if (usadas.length === 0) throw new PdfNoLimpiable('no se pudieron identificar las fuentes');
+    if (usadas.some((f) => !FUENTE_PERMITIDA.test(f))) {
+      throw new PdfNoLimpiable('usó una fuente del sistema o una sin nombre');
+    }
     return limpio;
   } finally {
     ventana.destroy();

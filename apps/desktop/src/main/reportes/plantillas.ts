@@ -268,12 +268,32 @@ img{max-width:100%;border:1px solid #ccc}figure{margin:12px 0}figcaption{font-si
 </body></html>`;
 }
 
-/** Los nombres de las fuentes embebidas en un PDF (`/BaseFont`, sin el prefijo del subconjunto). */
+const NOMBRE_DE_FUENTE = /\/(?:BaseFont|FontName)\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/;
+
+/**
+ * El nombre de cada fuente de un PDF, sin el prefijo del subconjunto. Por objeto: `/BaseFont` o, si no tiene
+ * (Chromium incrusta las fuentes variables como Type 3), el `/FontName` de su `/FontDescriptor`. Una fuente
+ * sin nombre identificable aparece como `''`: quien llama la rechaza (falla cerrado). Sirve para PDF sin
+ * `/ObjStm`, que es lo único que acepta la limpieza.
+ */
 export function fuentesDelPdf(pdf: Uint8Array): string[] {
   const texto = Buffer.from(pdf).toString('latin1');
-  return [
-    ...new Set(
-      [...texto.matchAll(/\/BaseFont\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/g)].map((m) => m[1] ?? ''),
-    ),
-  ];
+  const objetos = new Map<string, string>();
+  for (const m of texto.matchAll(/(\d+) 0 obj\b([\s\S]*?)endobj/g)) {
+    // Solo el diccionario: lo que va antes del stream.
+    objetos.set(m[1] ?? '', (m[2] ?? '').split(/\bstream\r?\n/)[0] ?? '');
+  }
+  const nombres: string[] = [];
+  for (const dic of objetos.values()) {
+    if (!/\/Type\s*\/Font\b/.test(dic)) continue;
+    const propio = NOMBRE_DE_FUENTE.exec(dic)?.[1];
+    if (propio) {
+      nombres.push(propio);
+      continue;
+    }
+    const ref = /\/FontDescriptor\s+(\d+)\s+0\s+R/.exec(dic)?.[1];
+    const delDescriptor = ref ? NOMBRE_DE_FUENTE.exec(objetos.get(ref) ?? '')?.[1] : undefined;
+    nombres.push(delDescriptor ?? '');
+  }
+  return [...new Set(nombres)];
 }

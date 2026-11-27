@@ -248,10 +248,9 @@ function Editor({ reporteId, alVolver }: { reporteId: string; alVolver: () => vo
       <div>
         <Button onClick={alVolver}>Volver a los reportes</Button>
       </div>
-      <p role="status" className="sr-only">
+      <p role="status" className="text-[13.5px] text-text-2">
         {mensaje}
       </p>
-      {mensaje && <p className="text-[13.5px] text-text-2">{mensaje}</p>}
       {alertasGuardadas > 0 && (
         <Aviso>
           El detector encontró {alertasGuardadas} posibles secretos en el texto y los tapó. Antes de

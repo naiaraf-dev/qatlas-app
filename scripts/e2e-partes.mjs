@@ -38,7 +38,14 @@ export const PARTES = [
   },
   {
     nombre: 'OCR y evidencias',
-    archivos: ['evidencias', 'evidencias-app', 'ocr', 'ts-01-canario', 'ts-06-login-asistido'],
+    archivos: [
+      'evidencias',
+      'evidencias-app',
+      'ocr',
+      'reportes',
+      'ts-01-canario',
+      'ts-06-login-asistido',
+    ],
     grep: LENTOS,
   },
 ];
