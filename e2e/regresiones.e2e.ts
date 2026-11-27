@@ -94,7 +94,7 @@ async function guardarProyecto(inicio: string): Promise<string> {
       }
       return id;
     },
-    { entrada: entradaCon(inicio), id: proyectoId as string | undefined },
+    { entrada: entradaCon(inicio), id: proyectoId },
   );
 }
 

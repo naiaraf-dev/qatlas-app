@@ -800,6 +800,13 @@ describe('Huella, estados y regresiones entre ejecuciones (semana 8, ADR 046 y 0
     expect(estado(proyecto, b)?.resumen).toMatchObject({ hallazgosNuevos: 0, regresiones: 0 });
   });
 
+  it('el detalle de cada ejecución muestra lo que apareció en ella, también lo recurrente', async () => {
+    const proyecto = crearProyecto();
+    await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    const b = await corrida(proyecto, [{ pagina: '/x', hallazgos: [{ clave: 'image-alt' }] }]);
+    expect(ejecuciones.detalle(b)?.hallazgos).toHaveLength(1);
+  });
+
   it('control: otra clave u otra forma de página es otro hallazgo', async () => {
     const proyecto = crearProyecto();
     await corrida(proyecto, [

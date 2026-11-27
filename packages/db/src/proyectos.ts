@@ -389,21 +389,25 @@ export function leerHallazgosDeEjecucion(
   secretosRedactados: number;
   paginaVisitadaId: string | null;
 })[] {
-  return orm(base)
-    .select({
-      ...getTableColumns(hallazgo),
-      ocurrenciaId: hallazgoOcurrencia.id,
-      urlOrigen: hallazgoOcurrencia.urlOrigen,
-      detalleCifrado: hallazgoOcurrencia.detalleCifrado,
-      secretosRedactados: hallazgoOcurrencia.secretosRedactados,
-      paginaVisitadaId: hallazgoOcurrencia.paginaVisitadaId,
-    })
-    .from(hallazgo)
-    .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
-    .where(eq(hallazgo.ejecucionId, ejecucionId))
-    .orderBy(asc(sql`hallazgo.rowid`))
-    .limit(1000)
-    .all();
+  return (
+    orm(base)
+      .select({
+        ...getTableColumns(hallazgo),
+        ocurrenciaId: hallazgoOcurrencia.id,
+        urlOrigen: hallazgoOcurrencia.urlOrigen,
+        detalleCifrado: hallazgoOcurrencia.detalleCifrado,
+        secretosRedactados: hallazgoOcurrencia.secretosRedactados,
+        paginaVisitadaId: hallazgoOcurrencia.paginaVisitadaId,
+      })
+      .from(hallazgo)
+      .innerJoin(hallazgoOcurrencia, eq(hallazgoOcurrencia.hallazgoId, hallazgo.id))
+      // Por la ocurrencia: desde la semana 8 un hallazgo aparece en varias ejecuciones, y su
+      // `ejecucion_id` es la primera.
+      .where(eq(hallazgoOcurrencia.ejecucionId, ejecucionId))
+      .orderBy(asc(sql`hallazgo_ocurrencia.rowid`))
+      .limit(1000)
+      .all()
+  );
 }
 
 export function registrarIntentoLogin(
