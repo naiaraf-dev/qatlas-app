@@ -116,6 +116,38 @@ jobs siguientes.
 - **Si falla una verificación:** el job se frena. Hay que borrar esa entrada (Actions → Caches) y averiguar
   cómo llegó ahí antes de volver a correr.
 
+## Firmas de npm y la caché de npm (agregado el 2026-11-27)
+
+En `develop`, `npm audit signatures` falló dos veces seguidas con `EMISSINGSIGNATUREKEY`:
+«enhanced-resolve@5.27.0 has attestations but no corresponding public key(s) can be found».
+
+- **El paquete está bien.** `enhanced-resolve` 5.27.0 llega por `@tailwindcss/vite` → `@tailwindcss/node`
+  (desde la actualización a Tailwind 4.3.5). Su firma del registro y su atestación de publicación usan la
+  clave `SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U`, que el registro publica (en su API y en el
+  repositorio TUF de sigstore) para firmas y para atestaciones, sin vencimiento. Con una caché vacía, npm
+  10.9.3 verifica los 266 paquetes.
+- **No es nuestra versión de npm.** npm 10.9.11, la última 10.9.x, busca las claves de las atestaciones de
+  la misma manera; ese error sale cuando la respuesta de atestaciones no trae un `keyid` que coincida.
+- **El mecanismo: una respuesta incompleta, guardada en caché.** El registro sirve las atestaciones con
+  `Cache-Control: max-age=31557600` (un año). npm las guarda en su caché, y `actions/setup-node` (`cache:
+npm`) la restaura en cada corrida con el mismo lockfile. Si una vez llegó una respuesta sin la atestación
+  de publicación (un problema pasajero del registro), cada corrida la reusa: por eso el reintento también
+  falló. Se reprodujo en local con una caché así: el mismo error y el mismo mensaje.
+- **Qué se hizo, sin desactivar nada:**
+  - `npm audit signatures --prefer-online`: npm revalida con el registro lo que tiene en caché, y verifica
+    contra lo que el registro sirve hoy. La verificación es la misma.
+  - Antes, `scripts/diagnostico-atestaciones.mjs` muestra las respuestas de atestaciones que trae la caché
+    y marca las incompletas. Solo lee; con eso la próxima corrida confirma si la caché tenía la respuesta
+    incompleta.
+- **Si con datos frescos igual fallara,** el problema sería del registro: entonces se evalúa una excepción
+  acotada a ese paquete y versión, con vencimiento y el reporte del problema, y se consulta antes.
+
+## Cuando no corre ninguna parte
+
+Si falla el job de calidad, las partes del E2E no corren. El reporte unificado lo dice
+(«No corrió ninguna parte del E2E porque falló el job…») en vez de caerse con «Directory does not exist».
+Si las partes corrieron pero ninguna subió su reporte, también lo dice.
+
 ## Verificación
 
 - `security-tests/e2e-etiquetas.test.ts`: etiquetas, cada test en una sola parte, y las partes del CI y
@@ -125,4 +157,6 @@ jobs siguientes.
   verificación, con control positivo (sin alterar, pasa).
 - `security-tests/acciones-ci.test.ts`: toda acción de terceros fijada por SHA; la caché, con clave exacta,
   verificada antes de usarse y guardada recién después de verificar.
+- `security-tests/atestaciones-npm.test.ts`: el diagnóstico distingue una respuesta de atestaciones completa
+  de una incompleta, sobre una caché con la forma de la de npm.
 - Los workflows se validaron contra el esquema de GitHub Actions.
