@@ -43,12 +43,17 @@ export const FUNCIONES_APAGADAS_POR_PLAYWRIGHT = [
  * - `Translate`: el servicio de traducción. Playwright la apagaba hasta 1.64.
  * - `DialMediaRouteProvider`: busca televisores y parlantes en la red local, por UDP, que el proxy no
  *   ve. Playwright la apagaba hasta 1.64; `MediaRouter`, que la contiene, sigue apagada.
+ * - `WebRtcHideLocalIpsWithMdns`: oculta las IP locales de WebRTC detrás de un nombre `.local`, y para
+ *   eso abre un responder mDNS en el puerto 5353 de todas las interfaces: acepta paquetes de la red
+ *   (ADR 045). No hace falta: con `disable_non_proxied_udp`, WebRTC no da candidatos ni direcciones, y un
+ *   E2E lo prueba sin la ocultación.
  */
 export const FUNCIONES_APAGADAS_POR_QATLAS = [
   'PreconnectToSearch',
   'AutofillServerCommunication',
   'Translate',
   'DialMediaRouteProvider',
+  'WebRtcHideLocalIpsWithMdns',
 ] as const;
 
 export const FUNCIONES_APAGADAS: readonly string[] = [
@@ -61,11 +66,15 @@ export const FUNCIONES_APAGADAS: readonly string[] = [
  * - WebRTC y QUIC usan UDP. El nombre importa: la variante `--force-` de este flag no hace nada en esta
  *   versión, y sin decir nada. Por eso hay un control positivo en los E2E.
  * - No se pasa `--host-resolver-rules`: con proxy, Chromium le manda el nombre sin resolverlo.
+ * - `WebRTC-IPv6Default/Disabled/`: sin esto, WebRTC liga un socket UDP en `::` para averiguar su
+ *   dirección IPv6 por defecto, aunque no la use (ADR 045). Es un solo `--force-fieldtrials`: como con
+ *   `--disable-features`, Chromium se queda con el último, y por eso no se acepta como argumento suelto.
  */
 export const ARGUMENTOS_DE_RED = [
   '--proxy-bypass-list=<-loopback>',
   '--webrtc-ip-handling-policy=disable_non_proxied_udp',
   '--disable-quic',
+  '--force-fieldtrials=WebRTC-IPv6Default/Disabled/',
 ] as const;
 
 export const ARGUMENTOS_CHROMIUM: readonly string[] = [
@@ -129,6 +138,7 @@ export interface OpcionesDeLanzamiento {
 }
 
 const PISA_FUNCIONES = /^--(disable|enable)-features(=|$)/;
+const PISA_PRUEBAS_DE_CAMPO = /^--force-fieldtrials(=|$)/;
 
 /**
  * Las opciones de `launch` y `launchPersistentContext`:
@@ -146,6 +156,9 @@ export function opcionesChromium(opciones: OpcionesChromium = {}): OpcionesDeLan
     control = {},
   } = opciones;
   for (const argumento of argumentos) {
+    if (PISA_PRUEBAS_DE_CAMPO.test(argumento)) {
+      throw new Error('opcionesChromium: --force-fieldtrials pisaría el de ARGUMENTOS_DE_RED');
+    }
     if (PISA_FUNCIONES.test(argumento)) {
       throw new Error(
         'opcionesChromium: las funciones van en funcionesApagadas, nunca como argumento',

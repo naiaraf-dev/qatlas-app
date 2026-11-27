@@ -85,6 +85,8 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
 - Todo navegador de pruebas, de la app, de un test o de un script, se lanza con `opcionesChromium`
   (`opciones-chromium.ts`): un solo `--disable-features`, porque Chromium se queda con el último (ADR 041). Un
   test busca su conexión por destino, nunca «la última».
+- El navegador de pruebas no liga sockets fuera de loopback: `e2e/webrtc-sin-escucha.e2e.ts` lo mira por PID (ADR 045).
+  El aviso del firewall en un control positivo (`sinArgumentosDeRed`) es esperable: «Cancelar».
 - Sin `--enable-unsafe-swiftshader` (`ignoreDefaultArgs`): una página que falla por no tener WebGL es cobertura
   no alcanzada, no un hallazgo (ADR 041). Al subir Playwright, revisar qué apaga y qué pasa de nuevo, y registrar
   el hash de su Chromium (ADR 020).
