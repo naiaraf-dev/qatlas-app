@@ -288,24 +288,25 @@ describe('Lo que llega del runner se redacta antes de guardarse (ADR 032)', () =
         websocketDescartados: 0,
       });
       await pausa();
-      return boveda.conAcceso((base) =>
-        (
+      return boveda.conAcceso(
+        (base) =>
           base
-            .prepare('SELECT clave FROM hallazgo WHERE ejecucion_id = ? ORDER BY rowid')
-            .all(id) as {
-            clave: string;
-          }[]
-        ).map((f) => f.clave),
+            .prepare(
+              `SELECT h.clave, (SELECT COUNT(*) FROM hallazgo_ocurrencia o WHERE o.hallazgo_id = h.id) AS veces
+               FROM hallazgo h WHERE h.ejecucion_id = ? ORDER BY h.rowid`,
+            )
+            .all(id) as { clave: string; veces: number }[],
       );
     };
     const deA = await claves(a);
     const deB = await claves(b);
-    expect(deA[0]).toMatch(/^msj:[0-9a-f]{32}$/);
-    // El mismo problema da la misma clave; uno distinto, otra.
-    expect(deA[0]).toBe(deA[1]);
-    expect(deA[2]).not.toBe(deA[0]);
+    expect(deA[0]?.clave).toMatch(/^msj:[0-9a-f]{32}$/);
+    // El mismo problema da la misma clave, y desde la semana 8 es un solo hallazgo con dos apariciones
+    // (ADR 046); uno distinto, otra clave.
+    expect(deA.map((f) => f.veces)).toEqual([2, 1]);
+    expect(deA[1]?.clave).not.toBe(deA[0]?.clave);
     // En otro proyecto, otra clave: sin la clave del proyecto no se puede probar candidatos.
-    expect(deB[0]).not.toBe(deA[0]);
+    expect(deB[0]?.clave).not.toBe(deA[0]?.clave);
   });
 
   it('un secreto partido en dos mensajes consecutivos se redacta en los dos', async () => {

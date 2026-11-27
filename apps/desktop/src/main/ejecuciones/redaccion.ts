@@ -11,12 +11,12 @@ import {
   abrirClaveProyecto,
   borrar,
   derivarSubclaveHallazgos,
+  derivarSubclaveHuellas,
   descifrarCampo,
 } from '@qatlas/crypto';
 import { leerCredenciales, type BaseCifrada, type NuevaRedaccion } from '@qatlas/db';
 import {
   ComparadorDeSecretos,
-  normalizarMensaje,
   redactarEncabezados,
   redactarFormulario,
   redactarJson,
@@ -29,6 +29,7 @@ import {
   type Resultado,
   type TextoRedactado,
 } from '@qatlas/redaction';
+import { normalizarMensajeV2 } from '../hallazgos/huella';
 import { contextoSecreto } from '../proyectos/servicio';
 
 /** Sube cuando cambia lo que se redacta: lo guardado se vuelve a pasar al desbloquear (ADR 033). */
@@ -110,10 +111,20 @@ export function subclaveDeHallazgos(maestra: Buffer, proyecto: ProyectoConClave)
   }
 }
 
+/** La subclave del proyecto para las huellas (ADR 046). Quien la recibe la borra. */
+export function subclaveDeHuellas(maestra: Buffer, proyecto: ProyectoConClave): Buffer {
+  const clave = abrirClaveProyecto(maestra, proyecto.id, proyecto.claveProyectoCifrada);
+  try {
+    return derivarSubclaveHuellas(clave);
+  } finally {
+    borrar(clave);
+  }
+}
+
 /**
  * La clave de un mensaje (ADR 032): HMAC-SHA-256 con la subclave del proyecto, sobre el mensaje ya
- * redactado y normalizado. El mismo problema da la misma clave dentro del proyecto; sin la clave del
- * proyecto no se puede probar candidatos.
+ * redactado y normalizado con la normalización v2 (ADR 046). El mismo problema da la misma clave dentro del
+ * proyecto; sin la clave del proyecto no se puede probar candidatos.
  */
 export function claveDeMensaje(
   subclave: Buffer,
@@ -121,7 +132,7 @@ export function claveDeMensaje(
   normalizar = true,
 ): TextoRedactado {
   const hmac = createHmac('sha256', subclave)
-    .update(normalizar ? normalizarMensaje(detalleRedactado) : detalleRedactado)
+    .update(normalizar ? normalizarMensajeV2(detalleRedactado) : detalleRedactado)
     .digest('hex')
     .slice(0, 32);
   // Un HMAC no tiene nada que redactar: pasa por la redacción para tener el tipo.

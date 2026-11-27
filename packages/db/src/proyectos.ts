@@ -28,10 +28,10 @@ export type FilaHallazgo = typeof hallazgo.$inferSelect;
 export type FilaOcurrencia = typeof hallazgoOcurrencia.$inferSelect;
 
 type Comunes = 'createdAt' | 'updatedAt';
-export type NuevoProyecto = Omit<FilaProyecto, Comunes | 'redaccionVersion'>;
+export type NuevoProyecto = Omit<FilaProyecto, Comunes | 'redaccionVersion' | 'huellasVersion'>;
 type DatosProyecto = Omit<
   FilaProyecto,
-  Comunes | 'id' | 'claveProyectoCifrada' | 'redaccionVersion'
+  Comunes | 'id' | 'claveProyectoCifrada' | 'redaccionVersion' | 'huellasVersion'
 >;
 type NuevaAutorizacion = Omit<
   FilaAutorizacion,
@@ -58,7 +58,15 @@ export type AccionAuditoria =
   | 'evidencias.retencion'
   | 'evidencias.modo-sensible-eliminar'
   | 'evidencias.modo-sensible-conservar'
-  | 'configuracion.editar';
+  | 'configuracion.editar'
+  // Hallazgos (semana 8, ADR 047): solo IDs, nombres de campos y cantidades.
+  | 'hallazgo.confirmar'
+  | 'hallazgo.descartar'
+  | 'hallazgo.resolver'
+  | 'hallazgo.reabrir'
+  | 'hallazgo.severidad'
+  | 'hallazgo.resolver-lote'
+  | 'hallazgo.fusionar';
 
 const orm = (base: BaseCifrada) => drizzle(base);
 
@@ -201,7 +209,7 @@ export function registrarAuditoria(
   base: BaseCifrada,
   entrada: {
     accion: AccionAuditoria;
-    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion';
+    entidad: 'proyecto' | 'autorizacion' | 'credencial' | 'configuracion' | 'hallazgo';
     entidadId: string;
     detalle?: DetalleAuditoria;
   },

@@ -329,6 +329,11 @@ export const ResumenEjecucion = z
     conexionesBloqueadas: Cantidad,
     motivo: MotivoFinEjecucion.nullable(),
     hallazgos: Cantidad,
+    // Semana 8 (ADR 047): cuántos hallazgos aparecieron por primera vez, cuántos volvieron estando resueltos
+    // (se destacan, CU-09) y cuántos pasaron a «posiblemente resuelto» porque la ejecución los cubrió.
+    hallazgosNuevos: Cantidad,
+    regresiones: Cantidad,
+    posiblementeResueltos: Cantidad,
     // RN-ESC-05: por qué se detuvo antes de recorrer todo. `null` si no quedó nada por recorrer.
     detenido: z.enum(['max-paginas', 'max-tiempo', 'sesion']).nullable(),
     // Cobertura no alcanzada: un reporte tiene que decir qué no cubrió.
