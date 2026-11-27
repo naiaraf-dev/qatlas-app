@@ -21,20 +21,20 @@
     "argon2": "0.45.2",
     "axe-core": "4.14.0",
     "better-sqlite3-multiple-ciphers": "13.0.3",
-    "playwright-core": "1.64.1",
+    "playwright-core": "1.65.1",
     "react": "^19.3.1",
     "react-aria-components": "1.22.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@react-aria/optimize-locales-plugin": "2.1.0",
-    "@tailwindcss/vite": "^4.3.4",
-    "@types/react": "^19.3.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "^19.3.3",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
-    "electron": "^45.2.2",
+    "electron": "^45.5.0",
     "electron-vite": "^6.0.0",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.5",
     "vite": "^8.3.5"
   }
 }

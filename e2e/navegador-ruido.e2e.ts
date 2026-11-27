@@ -3,8 +3,8 @@
  * completo y las opciones de la app (`opcionesChromium`), detrás del proxy real.
  *
  * Se mira en dos lugares:
- * - El net-log de Chromium: todo lo que el navegador intenta. Solo se admiten los dos servicios conocidos
- *   que Chromium no deja apagar por línea de comando, y solo sin la credencial del proxy: sin ella, el
+ * - El net-log de Chromium: todo lo que el navegador intenta. Solo se admite el servicio conocido que
+ *   Chromium no deja apagar por línea de comando, y solo sin la credencial del proxy: sin ella, el
  *   proxy no decide destino ni abre conexión.
  * - El registro del proxy, que es lo que ve el monitor de conexiones. Muestra todo lo que se intentó: el
  *   sitio con su regla, y cada servicio interno, bloqueado con `servicio-interno-navegador`.
@@ -39,14 +39,16 @@ vigilarEntorno(test);
 const CREDENCIAL = { usuario: 'ejecucion', clave: 'clave-de-prueba-de-un-solo-uso' };
 
 /**
- * Lo que Chromium 156 intenta sin que haya cómo apagarlo por línea de comando. Sale por el contexto del
- * sistema o del perfil por defecto, que no tienen la credencial del proxy: recibe 407 y nunca se
- * autentica. Si alguno llegara a autenticarse, o apareciera otro, el test falla.
- * - `accounts.google.com`: el reconciliador de cuentas (`ListAccounts`).
+ * Lo que Chromium 159 intenta sin que haya cómo apagarlo por línea de comando. Sale por el contexto del
+ * sistema o del perfil por defecto, que no tiene la credencial del proxy: recibe 407 y nunca se
+ * autentica. Si llegara a autenticarse, o apareciera otro, el test falla.
  * - `update.googleapis.com`: la instalación a pedido del manifiesto de modelos locales de la guía de
  *   optimización; no es la actualización de fondo, que `--disable-component-update` sí apaga.
+ *
+ * `accounts.google.com` (`ListAccounts`) ya no está: Playwright 1.65 enciende
+ * `SkipListAccountsWithoutGaiaCookies`, y sin cookies de Google el reconciliador no pregunta.
  */
-const CONOCIDOS_SIN_CREDENCIAL = new Set(['accounts.google.com', 'update.googleapis.com']);
+const CONOCIDOS_SIN_CREDENCIAL = new Set(['update.googleapis.com']);
 
 let sitio: SandboxActivo;
 
@@ -179,6 +181,15 @@ test(
       // Control: Playwright sí pone el suyo, así que la comparación prueba algo.
       expect(listas.length).toBeGreaterThan(1);
       expect(listas[0]).toContain('AimEnabled');
+      // Lo que Playwright 1.65 dejó de apagar, apagado por QAtlas.
+      expect(efectiva).toEqual(expect.arrayContaining(['Translate', 'DialMediaRouteProvider']));
+      expect(linea).toContain('--disable-client-side-phishing-detection');
+      // Sin WebGL por software: Playwright lo pasa, y QAtlas lo saca (ADR 041).
+      expect(linea).not.toContain('--enable-unsafe-swiftshader');
+      // Un solo --enable-features, el de Playwright: el que evita ListAccounts.
+      const encendidas = linea.filter((a) => a.startsWith('--enable-features='));
+      expect(encendidas).toHaveLength(1);
+      expect(encendidas[0]).toContain('SkipListAccountsWithoutGaiaCookies');
     } finally {
       await navegador.close();
     }
@@ -208,6 +219,24 @@ test(
     expect([...conCredencial].filter((h) => h !== HOST_SITIO)).toEqual([]);
     // Control: el net-log ve los túneles al sitio con credencial (si no, la última aserción no prueba nada).
     expect(intentados.has(HOST_SITIO)).toBe(true);
+  },
+);
+
+test(
+  'control: sin ignoreDefaultArgs, Playwright pasa --enable-unsafe-swiftshader',
+  { tag: ['@seguridad'] },
+  async () => {
+    const navegador = await chromium.launch(
+      opcionesChromium({ control: { conSwiftshader: true } }),
+    );
+    try {
+      const pagina = await (await navegador.newContext()).newPage();
+      await pagina.goto('chrome://version');
+      const linea = ((await pagina.locator('#command_line').textContent()) ?? '').split(/\s+/);
+      expect(linea).toContain('--enable-unsafe-swiftshader');
+    } finally {
+      await navegador.close();
+    }
   },
 );
 

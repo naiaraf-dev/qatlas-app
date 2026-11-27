@@ -7,6 +7,9 @@ alta o crítica. Las moderadas y bajas no lo frenan; se revisan acá.
 
 ## minimatch < 11.0.1: denegación de servicio por amplificación de `globParts` (moderada)
 
+- **Estado:** resuelta el 2026-11-26. `eslint` 10.15.0 pide `minimatch` ^11.0.5 (lo cita por la
+  CVE-2026-118764) y `typescript-eslint` 8.74.0, ^11.0.1. Se sacó el `overrides` y su comentario: queda
+  `minimatch` 11.0.9 en todo el árbol, y `npm audit` no reporta nada.
 - **Fecha:** 2026-11-07.
 - **Por dónde llega:** `eslint` 10.14.0 (y `@eslint/config-array`) y `typescript-eslint` 8.72.1, que piden
   `minimatch` ^10. Solo dependencias de desarrollo: `npm ls minimatch --omit=dev` da vacío, y el bundle
