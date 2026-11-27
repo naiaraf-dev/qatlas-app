@@ -31,9 +31,15 @@ jobs:
           cache: npm
       # .npmrc tiene ignore-scripts=true: ningún paquete ejecuta código al instalarse.
       - run: npm ci
-      # Firmas del registro de npm y procedencia de cada paquete instalado.
+      # Las respuestas de atestaciones que trae la caché de npm (restaurada por setup-node): solo las muestra,
+      # para saber si una incompleta quedó guardada. No falla ni borra (ADR 044).
+      - name: Atestaciones en la caché de npm
+        run: node scripts/diagnostico-atestaciones.mjs --cache "$(npm config get cache)"
+      # Firmas del registro de npm y procedencia de cada paquete instalado. --prefer-online: npm revalida con
+      # el registro lo que tiene en caché (las atestaciones se cachean un año), así que se verifica contra
+      # lo que el registro sirve hoy. La verificación es la misma: nada se saltea.
       - name: Firmas de los paquetes
-        run: npm audit signatures
+        run: npm audit signatures --prefer-online
       # Cada .node de cada plataforma, contra el registro revisado (ADR 007).
       - name: Módulos nativos registrados
         run: npm run nativos:verificar
@@ -141,9 +147,16 @@ jobs:
     name: E2E · reporte unificado
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: e2e
+    needs: [calidad, e2e]
     if: ${{ !cancelled() }}
     steps:
+      # Si no corrió ninguna parte, no hay reportes que juntar: se dice por qué, en vez de fallar más abajo
+      # con «Directory does not exist».
+      - name: Partes del E2E que corrieron
+        if: needs.e2e.result == 'skipped'
+        run: |
+          echo "::error title=E2E::No corrió ninguna parte del E2E porque falló el job «Lint, tipos, tests y seguridad» (${{ needs.calidad.result }})."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -157,6 +170,14 @@ jobs:
           pattern: blob-report-*
           path: blobs
           merge-multiple: true
+      # Las partes corrieron, pero ninguna llegó a subir su reporte (por ejemplo, fallaron al prepararse).
+      - name: Reportes de las partes
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -z "$(ls -A blobs 2>/dev/null)" ]; then
+            echo "::error title=E2E::Ninguna parte del E2E subió su reporte (resultado de las partes: ${{ needs.e2e.result }}). Ver los logs de cada parte."
+            exit 1
+          fi
       - name: Reporte unificado
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: e2e-report
