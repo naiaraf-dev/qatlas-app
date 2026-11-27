@@ -52,12 +52,17 @@ const grupoDe = (tipo: string, clave: string): string =>
 
 const AUDITORIA: Record<
   AccionDePersona['accion'],
-  'hallazgo.confirmar' | 'hallazgo.descartar' | 'hallazgo.resolver' | 'hallazgo.reabrir'
+  | 'hallazgo.confirmar'
+  | 'hallazgo.descartar'
+  | 'hallazgo.resolver'
+  | 'hallazgo.reabrir'
+  | 'hallazgo.reportar'
 > = {
   confirmar: 'hallazgo.confirmar',
   descartar: 'hallazgo.descartar',
   resolver: 'hallazgo.resolver',
   reabrir: 'hallazgo.reabrir',
+  reportar: 'hallazgo.reportar',
 };
 
 export class ServicioHallazgos {

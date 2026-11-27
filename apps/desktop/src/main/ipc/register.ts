@@ -6,6 +6,7 @@ import type { ServicioBoveda } from '../boveda/servicio';
 import type { ServicioEjecuciones } from '../ejecuciones/servicio';
 import type { ServicioEvidencias } from '../evidencias/servicio';
 import type { ServicioHallazgos } from '../hallazgos/servicio';
+import type { ServicioReportes } from '../reportes/servicio';
 import type { ServicioProyectos } from '../proyectos/servicio';
 import { REQUIRED_PREFERENCE_VALUES } from '../security/web-preferences';
 import type { ConnectionLog } from '../security/network-policy';
@@ -22,13 +23,16 @@ export interface IpcDependencies {
   ejecuciones: ServicioEjecuciones;
   evidencias: ServicioEvidencias;
   hallazgos: ServicioHallazgos;
+  reportes: ServicioReportes;
+  /** Copia redactado; lo sensible se limpia a los 30 segundos (3.9). */
+  copiar: (texto: string, sensible: boolean) => Promise<{ limpiaEnMs: number | null }>;
   alCambiarBloqueoMinutos: (minutos: number) => void;
 }
 
 type Implementations = { [C in IpcChannel]: IpcImplementation<C> };
 
 function buildImplementations(deps: IpcDependencies): Implementations {
-  const { boveda, proyectos, ejecuciones, evidencias, hallazgos } = deps;
+  const { boveda, proyectos, ejecuciones, evidencias, hallazgos, reportes } = deps;
   return {
     'app:getInfo': () => ({
       name: app.getName(),
@@ -161,6 +165,18 @@ function buildImplementations(deps: IpcDependencies): Implementations {
     'hallazgos:decidir': (solicitud) => hallazgos.decidir(solicitud),
     'hallazgos:cambiarSeveridad': (solicitud) => hallazgos.cambiarSeveridad(solicitud),
     'hallazgos:resolverEnLote': ({ hallazgoIds }) => hallazgos.resolverEnLote(hallazgoIds),
+    'reportes:crear': ({ hallazgoIds }) => reportes.crear(hallazgoIds),
+    'reportes:obtener': ({ reporteId }) => reportes.obtener(reporteId),
+    'reportes:listar': ({ proyectoId }) => reportes.listar(proyectoId),
+    'reportes:guardar': ({ reporteId, severidad, contenido }) =>
+      reportes.guardar(reporteId, { severidad, contenido }),
+    'reportes:vistaPrevia': ({ reporteId, formato, evidenciaIds }) =>
+      reportes.vistaPrevia(reporteId, formato, evidenciaIds),
+    'reportes:exportar': ({ reporteId, formato, evidenciaIds, confirmaAlertas }) =>
+      reportes.exportar(reporteId, formato, evidenciaIds, confirmaAlertas),
+    'reportes:exportarCaptura': ({ reporteId, evidenciaId, imagen, tapados }) =>
+      reportes.exportarCaptura(reporteId, evidenciaId, imagen, tapados),
+    'portapapeles:copiar': ({ texto, sensible }) => deps.copiar(texto, sensible),
     'evidencias:listar': ({ ejecucionId }) => evidencias.listar(ejecucionId),
     'evidencias:obtenerVista': ({ evidenciaId }) => evidencias.vista(evidenciaId),
     'evidencias:obtenerFotograma': ({ evidenciaId, indice }) =>

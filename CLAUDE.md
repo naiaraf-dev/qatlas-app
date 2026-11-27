@@ -59,7 +59,19 @@ privacidad) antes de cualquier cambio: es el requisito central del proyecto.
   forma y contexto, decisiones de la persona (motivo de descarte cifrado, auditoría con IDs), fusión de lo
   guardado al desbloquear, bandeja, comparar ejecuciones, las páginas Hallazgos, Ejecuciones y Escaneos, y el
   sandbox con bugs arreglables. Ver las ADR 046 y 047.
-- Próximo: semana 9, reportes y exportación.
+- Fase 1, semana 9a terminada: reportes de bug (cifrados, desde uno o varios hallazgos del mismo proyecto, que
+  pasan a «reportado»), exportación guiada en PDF, Markdown, captura anotada y ZIP sin cifrar, portapapeles por el
+  proceso principal, TS-01 sobre las exportaciones, TS-10 con los reportes y TS-14. Ver la ADR 048.
+- Próximo: semana 9b, reporte de ejecución en PDF y HTML con gráficos propios en SVG (EXP-04), paquete cifrado
+  `.qatlas-paquete` con contraseña nueva por paquete y su importación (ENT-01, ENT-08), y traza y HAR (EXP-05).
+- Una exportación nunca recibe ni devuelve una ruta: el destino lo elige `destinos.elegir` en el proceso principal,
+  con el aviso de carpeta sincronizada, y `exportacion` guarda qué salió, nunca dónde. Lo exportado se arma desde lo
+  guardado (redactado); todo texto de la persona pasa por la redacción al guardar y al copiar.
+- El PDF sale solo de `renderizarPdf` (`main/reportes/pdf.ts`): ventana aislada sin JavaScript, fuentes empaquetadas,
+  `limpiarMetadatosPdf` y verificación de fuentes, que fallan cerrado. Al subir Electron, correr el TS-14 de
+  `e2e/reportes.e2e.ts`: si Chromium cambia la forma del PDF (`/ObjStm`, XMP), el PDF deja de salir y hay que revisarlo.
+- Toda imagen que sale se vuelve a codificar con `codificarPng` (solo IHDR, IDAT e IEND). Tapar destruye (negro
+  opaco) y lo vuelve a aplicar el proceso principal; nunca desenfocar.
 - Un hallazgo se guarda por su huella (`registrarPorHuella` en el servicio de ejecuciones): nunca se inserta
   directo. Si cambia cómo se calcula la huella o la normalización, subir `VERSION_NORMALIZACION` (si es la
   normalización) y siempre `VERSION_HUELLAS`: esa es la que hace recalcular lo guardado al desbloquear (ADR 047).
@@ -227,6 +239,9 @@ npm run build && npm run test:e2e:area -- <área> # E2E del área tocada, más e
   `test:e2e:smoke`. La suite completa (`test:e2e`) la confirma el CI, en cinco partes paralelas.
 - **Las «3 corridas seguidas»** son el job nocturno (`.github/workflows/nocturno.yml`): la suite completa
   con `--repeat-each=3` y `failOnFlakyTests`. Ya no se piden localmente.
+- **Un archivo E2E en modo serial cae entero en una parte** (un test lo exige): si un test suyo no es `@lento`
+  pero el resto sí, va con `@lento`. Un `describe` que prepara su propio estado puede ir aparte, declarado en
+  `GRUPOS_INDEPENDIENTES` (ADR 044). Cada test prepara lo que necesita y se puede correr solo con `--grep`.
 - **Cada test E2E lleva al menos una etiqueta** (`@seguridad`, `@lento`, `@ocr`, `@interfaz`, `@smoke`). Un
   test `@lento` u `@ocr` de un archivo nuevo necesita su parte en `scripts/e2e-partes.mjs` (un test lo
   exige). Cada archivo E2E termina con `vigilarProcesos(test, import.meta.filename)` (ADR 044).

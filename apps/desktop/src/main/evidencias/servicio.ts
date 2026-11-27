@@ -678,6 +678,24 @@ export class ServicioEvidencias {
     }
   }
 
+  /**
+   * Los bytes de una captura, descifrados, para que el proceso principal la incluya en una exportación
+   * (ADR 048). Nunca llega a la interfaz por acá. Null si no es una captura o no es un PNG válido.
+   */
+  async capturaPng(evidenciaId: string): Promise<Buffer | null> {
+    const tipo = this.boveda.conAcceso(
+      (base) => leerEvidenciaParaDescifrar(base, evidenciaId)?.tipo ?? null,
+    );
+    if (tipo !== 'captura') return null;
+    try {
+      const descifrada = await this.descifrar(evidenciaId, MAX_BYTES_IMAGEN);
+      if (!descifrada || !esPng(descifrada.datos)) return null;
+      return descifrada.datos;
+    } catch {
+      return null;
+    }
+  }
+
   private async abrirVideo(evidenciaId: string): Promise<VideoAbierto | null> {
     if (this.abierto?.evidenciaId === evidenciaId) return this.abierto;
     const descifrada = await this.descifrar(evidenciaId, LIMITES_EVIDENCIAS.bytesVideoVista);

@@ -134,3 +134,19 @@ export {
   type NuevaAparicion,
   type OcurrenciaHistorial,
 } from './hallazgos';
+export {
+  actualizarReporte,
+  evidenciasParaReporte,
+  idsDeEvidenciasEnReportes,
+  insertarReporte,
+  leerReporte,
+  listarReportes,
+  ocurrenciasParaReporte,
+  registrarExportacion,
+  type EvidenciaParaReporte,
+  type FilaListaReportes,
+  type FilaReporte,
+  type NuevaExportacion,
+  type NuevoReporte,
+  type OcurrenciaParaReporte,
+} from './reportes';

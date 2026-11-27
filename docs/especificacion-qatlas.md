@@ -234,7 +234,7 @@ Qué se protege:
 | Cadena de suministro                  | Paquete npm comprometido, instalador alterado                                           | Dependencias mínimas y auditadas, builds firmados, SBOM (3.11)                                 |
 | Actualización maliciosa               | Servidor de actualizaciones comprometido                                                | Actualizaciones opcionales, firmadas y verificadas (3.12)                                      |
 | Logs y archivos temporales            | Secretos en logs, temporales sin cifrar                                                 | Logs con redacción; temporales cifrados o en memoria (3.13)                                    |
-| Archivo de entrada malicioso          | Excel con macros, vínculos externos o "bomba zip"; paquete .qatlas manipulado           | Procesamiento aislado, sin macros ni fórmulas, límites de tamaño, validación estricta (3.15)   |
+| Archivo de entrada malicioso          | Excel con macros, vínculos externos o "bomba zip"; paquete .qatlas-paquete manipulado           | Procesamiento aislado, sin macros ni fórmulas, límites de tamaño, validación estricta (3.15)   |
 | Logs del sistema probado              | Log de backend con tokens o datos personales                                            | Lectura opcional y de solo lectura, redacción y detector de secretos (3.15)                    |
 | Archivos exportados peligrosos        | Inyección de fórmulas en Excel, video con datos sensibles                               | Escapado de celdas, advertencia y exclusión de video en modo datos sensibles (3.9)             |
 
@@ -428,7 +428,7 @@ que había en pantalla y en la red. Controles:
 | EVI-03 | **Redacción de red:** en los logs de red y archivos HAR se reemplazan por \[REDACTADO\] los headers Authorization, Cookie y Set-Cookie, los parámetros y campos con nombres como password, token, secret o apikey, y el cuerpo de las respuestas (por defecto no se guarda). |
 | EVI-04 | **Detector de secretos:** consola, red, DOM y texto de reportes se analizan con patrones de JWT, claves de API conocidas y claves privadas. Lo detectado se redacta y se avisa al usuario.                                                                                   |
 | EVI-05 | **Modo datos sensibles** por proyecto: desactiva video y snapshots de DOM en trazas y aplica enmascarado a todos los campos de formulario. Recomendado para sistemas con datos reales de personas.                                                                           |
-| EVI-06 | **Retención:** las evidencias se eliminan (borrado criptográfico) tras 90 días por defecto, salvo las de hallazgos incluidos en reportes.                                                                                                                                    |
+| EVI-06 | **Retención:** las evidencias se eliminan (borrado criptográfico) tras 90 días por defecto, salvo las de hallazgos incluidos en reportes (desde la semana 9a: las de las apariciones de cada hallazgo de un reporte de bug).                                                                                                                                    |
 | EVI-07 | Los videos se graban solo cuando falla una prueba (se descartan los de ejecuciones exitosas).                                                                                                                                                                                |
 
 **Implementado en la semana 7** (ADR 030 a 034). EVI-03 y EVI-04 viven en `packages/redaction`:
@@ -479,9 +479,15 @@ del usuario. Por eso es un proceso guiado:
     revisar, se pide confirmación explícita.
 
 4.  **Formato:** PDF y Markdown (sin metadatos de autor, rutas locales
-    ni nombre del equipo) o **paquete cifrado \`.qatlas\`** con
+    ni nombre del equipo) o **paquete cifrado \`.qatlas-paquete\`** con
     contraseña de un solo uso, para compartir evidencia completa con
-    otro usuario de QAtlas.
+    otro usuario de QAtlas. «De un solo uso» significa una contraseña
+    nueva por paquete: QAtlas la genera para ese paquete y no la vuelve
+    a usar en otro. La extensión es distinta de la de la copia de
+    seguridad (\`.qatlas\`). **Semana 9 (ADR 048):** en la 9a, PDF,
+    Markdown, captura anotada y ZIP sin cifrar; el paquete cifrado
+    llega en la 9b, y hasta entonces se ve deshabilitado con «Llega en:
+    semana 9b».
 
 5.  **Destino:** si la carpeta elegida está sincronizada con un servicio
     en la nube (OneDrive, Google Drive, Dropbox, iCloud), se avisa antes
@@ -492,7 +498,12 @@ del usuario. Por eso es un proceso guiado:
 
 Copiar al portapapeles: los secretos nunca se copian en texto plano
 desde la interfaz; si el usuario copia una credencial, el portapapeles
-se limpia automáticamente a los 30 segundos.
+se limpia automáticamente a los 30 segundos. **Semana 9a (ADR 048):** la
+interfaz no tiene permiso de portapapeles; copia por el proceso
+principal, que vuelve a pasar el texto por la redacción. Lo sensible
+(pedido así, o un texto donde el detector encontró algo) se limpia a los
+30 segundos y al bloquear la bóveda, solo si el portapapeles todavía
+tiene ese texto; si no se puede leer el portapapeles, se limpia igual.
 
 ### Controles por formato de salida
 
@@ -500,10 +511,10 @@ se limpia automáticamente a los 30 segundos.
 |--------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | EXP-01 | Excel y CSV     | **Inyección de fórmulas:** toda celda de texto que empiece con =, +, -, @, tabulación o retorno de carro se escapa (prefijo con apóstrofo), porque el contenido puede venir del sitio probado o de un archivo importado. Nunca se generan fórmulas a partir de datos. |
 | EXP-02 | Video y GIF     | No se pueden redactar: si un dato sensible estuvo en pantalla, queda grabado. En modo datos sensibles no se graba video; en la vista previa de exportación el video se marca como "puede contener datos sensibles" y no se incluye por defecto.                       |
-| EXP-03 | PDF, Excel, MP4 | Se generan sin metadatos de autor, rutas locales, nombre del equipo ni software de origen.                                                                                                                                                                            |
+| EXP-03 | PDF, Excel, MP4 | Se generan sin metadatos de autor, rutas locales, nombre del equipo ni software de origen. **Semana 9a (ADR 048):** el PDF sale de `printToPDF` en una ventana oculta y aislada (sesión en memoria, sin JavaScript, todo pedido externo cancelado), con título genérico («Reporte de QAtlas») y solo las fuentes empaquetadas (Inter y JetBrains Mono); los valores de `/Info` (Producer, Creator, Title, fechas) se borran en el lugar y, si el PDF tiene otra forma (XMP, `/ObjStm`, xref en stream) o una fuente que no es la nuestra, no sale (falla cerrado). Los PNG se vuelven a codificar con solo IHDR, IDAT e IEND. MP4, en la fase 3. |
 | EXP-04 | HTML            | Un solo archivo autocontenido, con CSP restrictiva y sin recursos externos: se abre sin conexión y no hace requests al abrirse.                                                                                                                                       |
-| EXP-05 | Traza y HAR     | Pasan por la redacción de EVI-03 y EVI-04; la traza no incluye el login (EVI-01). Se marcan como "para desarrollo" en la vista previa. **Cambio de la semana 7 (ADR 037):** la traza es propia de QAtlas, no la de Playwright (que escribe en claro en disco mientras graba); qué se exporta y en qué formato se decide en la semana 9. |
-| EXP-06 | ZIP             | Opción de cifrado con contraseña (AES-256). Los nombres de archivo internos no revelan datos (se usan IDs).                                                                                                                                                           |
+| EXP-05 | Traza y HAR     | Pasan por la redacción de EVI-03 y EVI-04; la traza no incluye el login (EVI-01). Se marcan como "para desarrollo" en la vista previa. **Cambio de la semana 7 (ADR 037):** la traza es propia de QAtlas, no la de Playwright (que escribe en claro en disco mientras graba); qué se exporta y en qué formato se decide en la semana 9: en la 9b, como `.har` y como JSON de QAtlas, marcados «para desarrollo» (ADR 048). |
+| EXP-06 | ZIP             | **Cambio de la semana 9 (ADR 048):** el ZIP es sin cifrar y lo escribe QAtlas (sin dependencias, fechas fijas, sin comentarios ni campos extra). La vista previa dice claramente «Este archivo no está cifrado» y ofrece el paquete cifrado `.qatlas-paquete` (semana 9b) como alternativa: el cifrado con contraseña es el del paquete, no el de ZIP (cuyo cifrado AES no es estándar). Los nombres de archivo internos no revelan datos (se usan IDs). |
 
 ## 3.10 Almacenamiento local
 
@@ -585,7 +596,7 @@ se limpia automáticamente a los 30 segundos.
 ## 3.14 Archivos de entrada
 
 QAtlas recibe archivos que no controla: planillas de Excel, logs del
-sistema probado, paquetes .qatlas y tests .spec.ts. Todos se tratan como
+sistema probado, paquetes .qatlas-paquete y tests .spec.ts. Todos se tratan como
 **no confiables**.
 
 | **ID** | **Control**                                                                                                                                                                                                                                                                                   |
@@ -597,7 +608,7 @@ sistema probado, paquetes .qatlas y tests .spec.ts. Todos se tratan como
 | ENT-05 | Todo texto importado se trata como texto plano: nunca se interpreta como HTML ni como código en la interfaz.                                                                                                                                                                                  |
 | ENT-06 | El archivo original no se guarda; solo los datos importados, cifrados en la bóveda, más el hash del archivo para trazabilidad.                                                                                                                                                                |
 | ENT-07 | **Logs del sistema probado:** se leen solo los archivos que el usuario elige con un diálogo, en modo solo lectura y solo durante las ejecuciones; las líneas capturadas pasan por la redacción y el detector de secretos antes de guardarse.                                                  |
-| ENT-08 | Los paquetes .qatlas se verifican (integridad y versión) antes de descifrarlos y se importan a un proyecto nuevo, nunca sobre uno existente sin confirmación.                                                                                                                                 |
+| ENT-08 | Los paquetes .qatlas-paquete se verifican (integridad y versión) antes de descifrarlos y se importan a un proyecto nuevo, nunca sobre uno existente sin confirmación.                                                                                                                                 |
 
 ## 3.15 Verificación de la seguridad
 
@@ -615,11 +626,11 @@ seguridad automatizada, obligatoria en CI:
 | TS-07  | Configuración de Electron       | Análisis estático (Electronegativity) y verificación de fuses, CSP y opciones de ventana del build final.                                                                                                                                                                                   |
 | TS-08  | IPC                             | Mensajes malformados o desde orígenes no esperados se rechazan.                                                                                                                                                                                                                             |
 | TS-09  | Bloqueo                         | Tras el bloqueo automático, ningún dato es accesible y las claves no están en memoria del renderer.                                                                                                                                                                                         |
-| TS-10  | Borrado criptográfico           | Tras eliminar un proyecto, sus evidencias no pueden descifrarse.                                                                                                                                                                                                                            |
+| TS-10  | Borrado criptográfico           | Tras eliminar un proyecto, sus evidencias no pueden descifrarse. Incluye los reportes de bug y su registro de exportaciones (semana 9a): desaparecen con el proyecto y su contenido estaba cifrado con la clave del proyecto.                                                                  |
 | TS-11  | Inyección de fórmulas           | Datos con =, +, -, @ en casos y hallazgos se exportan a Excel y CSV sin generar fórmulas.                                                                                                                                                                                                   |
 | TS-12  | Excel malicioso                 | Archivos de prueba con macros, vínculos externos, conexiones de datos, bomba zip y contenido oculto: no se ejecuta nada, no se conecta a nada y se informa cada caso.                                                                                                                       |
 | TS-13  | Logs con secretos               | Un log del backend de prueba que imprime el secreto canario y un JWT: ninguno de los dos queda guardado ni exportado en texto plano.                                                                                                                                                        |
-| TS-14  | Metadatos                       | PDF, Excel y MP4 exportados no contienen nombre de usuario del sistema, nombre del equipo ni rutas locales.                                                                                                                                                                                 |
+| TS-14  | Metadatos                       | PDF, Excel y MP4 exportados no contienen nombre de usuario del sistema, nombre del equipo ni rutas locales, ni el software de origen. Desde la semana 9a, también el ZIP y las imágenes; con control positivo: el PDF de `printToPDF` sin la limpieza sí dice Skia y Chromium.                          |
 
 Además, por cada versión mayor: modelado de amenazas actualizado
 (STRIDE), revisión contra el **checklist de seguridad de Electron** y
@@ -661,7 +672,7 @@ divulgación responsable (SECURITY.md) para reportar vulnerabilidades.
 | Proxy de salida                | Filtra todo el tráfico del navegador de pruebas                                                        | Lista de dominios de la ejecución en curso                          |
 | Navegadores de prueba          | Chromium, Firefox o WebKit controlados por Playwright                                                  | Perfil efímero; red solo vía proxy                                  |
 | Sandbox de importados (fase 3) | Ejecuta archivos .spec.ts importados                                                                   | Entorno mínimo, sin claves, red solo vía proxy                      |
-| Procesador de archivos         | Lee y valida Excel, logs y paquetes .qatlas (ENT-01)                                                   | Sin claves ni red; devuelve datos validados                         |
+| Procesador de archivos         | Lee y valida Excel, logs y paquetes .qatlas-paquete (ENT-01)                                                   | Sin claves ni red; devuelve datos validados                         |
 | Lector de logs (fase 3)        | Sigue en vivo las fuentes de log durante una ejecución                                                 | Solo los archivos elegidos, solo lectura                            |
 
 ## 4.3 Diagrama
@@ -1193,11 +1204,17 @@ compartir de forma segura.
 
 - Reporte de ejecución con métricas y gráficos.
 
-- Importar paquetes .qatlas recibidos de otro usuario.
+- Importar paquetes .qatlas-paquete recibidos de otro usuario.
 
 ### Reglas
 
 - RN-REP-01: un reporte siempre tiene al menos una evidencia.
+  **Actualizada en la semana 9 (ADR 048):** la evidencia puede ser una
+  captura o el detalle redactado de una aparición del hallazgo
+  (consola, error HTTP, etc.), que ya existe cifrado; no se bloquea el
+  reporte por no tener captura (EVI-07 la hace opcional). Si no hay
+  captura, el reporte lo dice. Sin ninguna evidencia elegida, no se
+  exporta.
 
 - RN-REP-02: ninguna exportación contiene secretos de credenciales
   (verificado por TS-01).
@@ -1210,7 +1227,7 @@ compartir de forma segura.
 
 | **Reporte**            | **Para quién** | **Formatos**                                                                                                                                                                                            | **Fase** |
 |------------------------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| Reporte de bug         | Desarrollo     | PDF · Markdown · captura anotada (PNG con el elemento resaltado) · ZIP con todas las evidencias (cifrado opcional)                                                                                      | 1        |
+| Reporte de bug         | Desarrollo     | PDF · Markdown · captura anotada (PNG con el elemento resaltado) · ZIP sin cifrar (semana 9a) · paquete cifrado `.qatlas-paquete` con toda la evidencia (semana 9b)                                    | 1        |
 |                        |                | Video MP4 recortado a los segundos previos a la falla, con el nombre de cada paso como subtítulo · GIF corto para incrustar en issues · traza de Playwright · HAR redactado · líneas de log del backend | 3        |
 | Reporte de ejecución   | QA, líder, PM  | PDF ejecutivo con métricas y gráficos · HTML interactivo de un solo archivo                                                                                                                             | 1        |
 |                        |                | Excel con resultado por caso y paso, y lista de hallazgos                                                                                                                                               | 2        |
@@ -2307,7 +2324,13 @@ puedan compartir sin exponer información.
     conexiones, que se adelantó a la semana 5 sin ellos.
 
 9.  Semana 9: reportes (PDF, Markdown, HTML, captura anotada, ZIP) y
-    exportación guiada; TS-10 y TS-14.
+    exportación guiada; TS-10 y TS-14. En dos partes (ADR 048): 9a,
+    reporte de bug, exportación guiada en PDF, Markdown, captura anotada
+    y ZIP sin cifrar, portapapeles, TS-01 sobre las exportaciones, TS-10
+    con los reportes y TS-14 (hecha); 9b, reporte de ejecución en PDF y
+    HTML con gráficos propios en SVG (EXP-04), el paquete cifrado
+    `.qatlas-paquete` con su importación (ENT-01, ENT-08) y la
+    exportación de la traza y el HAR (EXP-05).
 
 10. Semana 10: firma e instaladores, compilación de SQLCipher desde
     fuente para los instaladores (ADR 006), asarUnpack con verificación
@@ -2626,7 +2649,7 @@ sin marcar.
 | CU-02 Credenciales    | PRY         | RN-PRY-04, EVI-01                     | TS-01, TS-06           | 1        |
 | CU-03 Escaneo         | ESC, EJE    | RN-ESC-01 a 05, SEG-03 a 05, 3.5, 3.7 | TS-03, TS-04, TS-05    | 1        |
 | CU-04 Hallazgos       | REP         | Sección 5, ADR 047                    | TS-08 (hallazgos); motivo de descarte cifrado y auditoría con IDs | 1        |
-| CU-05 Exportar        | REP         | RN-REP-01 a 03, 3.9                   | TS-01                  | 1        |
+| CU-05 Exportar        | REP         | RN-REP-01 a 03, 3.9                   | TS-01, TS-10, TS-14    | 1        |
 | CU-06 Conexiones      | PRV         | 3.5                                   | TS-03                  | 1        |
 | CU-07 Editor          | CAS         | RN-CAS-01, 02                         | TS-01                  | 2        |
 | CU-08 Grabar          | GRA         | RN-GRA-01, 02                         | TS-03, TS-06           | 3        |

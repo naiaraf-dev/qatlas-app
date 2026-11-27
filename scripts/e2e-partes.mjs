@@ -38,8 +38,34 @@ export const PARTES = [
   },
   {
     nombre: 'OCR y evidencias',
-    archivos: ['evidencias', 'evidencias-app', 'ocr', 'ts-01-canario', 'ts-06-login-asistido'],
+    archivos: [
+      'evidencias',
+      'evidencias-app',
+      'ocr',
+      'reportes',
+      'ts-01-canario',
+      'ts-06-login-asistido',
+    ],
     grep: LENTOS,
+  },
+];
+
+/**
+ * Un archivo en modo serial comparte su estado entre tests (el `beforeAll`, la app abierta, lo que dejó el
+ * test anterior): todos sus tests van a la **misma parte**. Si no, en una parte corren solo algunos y los
+ * que dependían de otros fallan (pasó con la inactividad de la bóveda y con los reportes).
+ *
+ * La excepción es un `describe` que prepara su propio estado en su `beforeAll`, y que va entero a una
+ * parte: se declara acá, con el motivo. `security-tests/e2e-etiquetas.test.ts` lo verifica.
+ *
+ * @type {{ archivo: string; describe: string; motivo: string }[]}
+ */
+export const GRUPOS_INDEPENDIENTES = [
+  {
+    archivo: 'contencion',
+    describe: 'TS-05 · Solo lectura y exclusiones',
+    motivo:
+      'Levanta su sandbox, su proxy y sus escaneos en su propio beforeAll; el beforeAll del archivo solo prepara el sitio compartido (ADR 044).',
   },
 ];
 

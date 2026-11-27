@@ -315,6 +315,48 @@ export const MIGRACIONES: readonly Migracion[] = [
       CREATE INDEX hallazgo_ocurrencia_ejecucion ON hallazgo_ocurrencia(ejecucion_id);
     `,
   },
+  {
+    version: 11,
+    // Reportes de bug y exportaciones (semana 9a, ADR 048). Lo que escribe la persona y lo precargado del
+    // sitio va en `contenido_cifrado`, con la clave del proyecto. Una exportación guarda qué, cuándo y en qué
+    // formato, nunca la ruta del destino.
+    sql: `
+      CREATE TABLE reporte_bug (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        severidad TEXT NOT NULL,
+        estado TEXT NOT NULL,
+        contenido_cifrado BLOB NOT NULL,
+        alertas_detector INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE reporte_hallazgo (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        reporte_id TEXT NOT NULL REFERENCES reporte_bug(id),
+        hallazgo_id TEXT NOT NULL REFERENCES hallazgo(id)
+      );
+      CREATE TABLE exportacion (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL REFERENCES proyecto(id),
+        reporte_id TEXT NOT NULL REFERENCES reporte_bug(id),
+        formato TEXT NOT NULL,
+        nivel TEXT NOT NULL,
+        evidencias_incluidas TEXT NOT NULL DEFAULT '[]',
+        destino_sincronizado INTEGER NOT NULL DEFAULT 0,
+        alertas_confirmadas INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX reporte_bug_proyecto ON reporte_bug(proyecto_id);
+      CREATE UNIQUE INDEX reporte_hallazgo_par ON reporte_hallazgo(reporte_id, hallazgo_id);
+      CREATE INDEX reporte_hallazgo_hallazgo ON reporte_hallazgo(hallazgo_id);
+      CREATE INDEX exportacion_reporte ON exportacion(reporte_id);
+    `,
+  },
 ];
 
 export const VERSION_ESQUEMA = MIGRACIONES.at(-1)?.version ?? 0;

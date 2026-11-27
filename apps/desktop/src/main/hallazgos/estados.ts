@@ -72,11 +72,13 @@ export type AccionDePersona =
   | { accion: 'confirmar' }
   | { accion: 'descartar' }
   | { accion: 'resolver' }
-  | { accion: 'reabrir' };
+  | { accion: 'reabrir' }
+  // Al incluirlo en un reporte de bug (semana 9a, ADR 048).
+  | { accion: 'reportar' };
 
 /**
  * Lo que hace la persona desde la bandeja. `null`: la acción no corresponde a ese estado (la interfaz no la
- * ofrece; si llegara, se rechaza). «Reportado» lo pone la generación de reportes (semana 9).
+ * ofrece; si llegara, se rechaza). «Reportado» lo pone la creación de un reporte de bug.
  */
 export function decidir(actual: EstadoActual, accion: AccionDePersona): EstadoActual | null {
   switch (accion.accion) {
@@ -90,6 +92,12 @@ export function decidir(actual: EstadoActual, accion: AccionDePersona): EstadoAc
       return actual.estado === 'resuelto' || actual.estado === 'descartado'
         ? null
         : { estado: 'resuelto', estadoPrevio: null };
+    case 'reportar':
+      return ['nuevo', 'confirmado', 'regresion', 'posiblemente_resuelto', 'reportado'].includes(
+        actual.estado,
+      )
+        ? { estado: 'reportado', estadoPrevio: null }
+        : null;
     case 'reabrir':
       // Solo un descartado se reabre a mano: vuelve a «nuevo», sin revisar.
       return actual.estado === 'descartado' ? { estado: 'nuevo', estadoPrevio: null } : null;

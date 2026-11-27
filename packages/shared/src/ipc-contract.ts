@@ -605,6 +605,89 @@ const respuestaConErrores = <T extends z.ZodObject>(exito: T) =>
       .strict(),
   ]);
 
+// --- Semana 9a: reportes de bug y exportación guiada (ADR 048) -----------------------------------------
+
+const TextoReporte = (max: number) => z.string().max(max);
+
+export const ContenidoReporte = z
+  .object({
+    titulo: TextoReporte(300),
+    pasos: z.array(TextoReporte(2000)).max(50),
+    esperado: TextoReporte(10_000),
+    obtenido: TextoReporte(10_000),
+    entorno: z
+      .object({
+        url: TextoReporte(2048),
+        navegador: TextoReporte(200),
+        viewport: TextoReporte(50),
+        fecha: TextoReporte(40),
+        ejecucionId: TextoReporte(40),
+      })
+      .strict(),
+  })
+  .strict();
+export type ContenidoReporte = z.infer<typeof ContenidoReporte>;
+
+export const FormatoExportacion = z.enum(['pdf', 'markdown', 'zip']);
+export type FormatoExportacion = z.infer<typeof FormatoExportacion>;
+
+export const EvidenciaDeReporte = z
+  .object({
+    id: IdEntidad,
+    // Captura o el detalle redactado de una aparición. Video, traza, HAR y snapshot, con el paquete (9b).
+    clase: z.enum(['captura', 'detalle', 'video', 'traza', 'har', 'snapshot-dom']),
+    exportable: z.boolean(),
+    hallazgoId: IdEntidad.nullable(),
+    secretosRedactados: Cantidad,
+    revisionPendiente: z.boolean(),
+    puedeTenerDatosSensibles: z.boolean(),
+  })
+  .strict();
+
+export const ReporteVista = z
+  .object({
+    id: IdEntidad,
+    proyectoId: IdEntidad,
+    severidad: SeveridadHallazgo,
+    estado: z.enum(['borrador', 'exportado']),
+    contenido: ContenidoReporte,
+    alertasDetector: Cantidad,
+    hallazgos: z
+      .array(
+        z
+          .object({
+            id: IdEntidad,
+            tipo: TipoHallazgo,
+            severidad: SeveridadHallazgo,
+            titulo: z.string().max(300),
+            url: z.string().max(2048),
+            estado: EstadoHallazgo,
+          })
+          .strict(),
+      )
+      .max(50),
+    evidencias: z.array(EvidenciaDeReporte).max(500),
+  })
+  .strict();
+export type ReporteVista = z.infer<typeof ReporteVista>;
+
+const Recuadro = z
+  .object({
+    x: z.number().int().min(0).max(20_000),
+    y: z.number().int().min(0).max(20_000),
+    ancho: z.number().int().min(1).max(20_000),
+    alto: z.number().int().min(1).max(20_000),
+  })
+  .strict();
+
+const RechazoExportacion = z.enum([
+  'no-existe',
+  'sin-evidencia',
+  'evidencia-ajena',
+  'requiere-confirmacion',
+  'no-se-pudo-generar',
+]);
+
 export const ipcContract = {
   'app:getInfo': { request: Empty, response: AppInfo },
   'security:getStatus': { request: Empty, response: SecurityStatus },
@@ -893,6 +976,117 @@ export const ipcContract = {
         })
         .strict(),
     ]),
+  },
+  'reportes:crear': {
+    request: z.object({ hallazgoIds: z.array(IdEntidad).min(1).max(50) }).strict(),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('creado'), reporteId: IdEntidad }).strict(),
+      z
+        .object({
+          resultado: z.literal('rechazada'),
+          motivo: z.enum(['no-existe', 'otro-proyecto', 'no-corresponde']),
+        })
+        .strict(),
+    ]),
+  },
+  'reportes:obtener': {
+    request: z.object({ reporteId: IdEntidad }).strict(),
+    response: ReporteVista.nullable(),
+  },
+  'reportes:listar': {
+    request: z.object({ proyectoId: IdEntidad.nullable() }).strict(),
+    response: z
+      .array(
+        z
+          .object({
+            id: IdEntidad,
+            proyectoId: IdEntidad,
+            proyectoNombre: z.string().max(120),
+            titulo: z.string().max(300),
+            severidad: SeveridadHallazgo,
+            estado: z.enum(['borrador', 'exportado']),
+            hallazgos: Cantidad,
+            exportaciones: Cantidad,
+            actualizadoEn: z.string().max(40),
+          })
+          .strict(),
+      )
+      .max(500),
+  },
+  // Lo que se guarda vuelve redactado: la persona ve qué se tapó (EVI-04).
+  'reportes:guardar': {
+    request: z
+      .object({ reporteId: IdEntidad, severidad: SeveridadHallazgo, contenido: ContenidoReporte })
+      .strict(),
+    response: z
+      .object({ contenido: ContenidoReporte, alertasDetector: Cantidad })
+      .strict()
+      .nullable(),
+  },
+  // Exactamente lo que sale: el texto y los archivos, por nombre (IDs), y si está cifrado.
+  'reportes:vistaPrevia': {
+    request: z
+      .object({
+        reporteId: IdEntidad,
+        formato: FormatoExportacion,
+        evidenciaIds: z.array(IdEntidad).max(500),
+      })
+      .strict(),
+    response: z.discriminatedUnion('resultado', [
+      z
+        .object({
+          resultado: z.literal('lista'),
+          texto: z.string().max(2_000_000),
+          archivos: z.array(z.string().max(200)).max(600),
+          cifrado: z.literal(false),
+          capturas: Cantidad,
+          alertasSinRevisar: Cantidad,
+        })
+        .strict(),
+      z.object({ resultado: z.literal('rechazada'), motivo: RechazoExportacion }).strict(),
+    ]),
+  },
+  // El destino lo elige el proceso principal: la interfaz nunca manda ni recibe una ruta.
+  'reportes:exportar': {
+    request: z
+      .object({
+        reporteId: IdEntidad,
+        formato: FormatoExportacion,
+        evidenciaIds: z.array(IdEntidad).max(500),
+        confirmaAlertas: z.boolean(),
+      })
+      .strict(),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('exportado') }).strict(),
+      z.object({ resultado: z.literal('cancelado') }).strict(),
+      z.object({ resultado: z.literal('rechazada'), motivo: RechazoExportacion }).strict(),
+    ]),
+  },
+  // La imagen la arma la interfaz; el proceso principal vuelve a tapar los recuadros y la limpia.
+  'reportes:exportarCaptura': {
+    request: z
+      .object({
+        reporteId: IdEntidad,
+        evidenciaId: IdEntidad,
+        imagen: Imagen,
+        tapados: z.array(Recuadro).max(100),
+      })
+      .strict(),
+    response: z.discriminatedUnion('resultado', [
+      z.object({ resultado: z.literal('exportado') }).strict(),
+      z.object({ resultado: z.literal('cancelado') }).strict(),
+      z
+        .object({
+          resultado: z.literal('rechazada'),
+          motivo: z.enum(['no-existe', 'evidencia-ajena', 'imagen-invalida']),
+        })
+        .strict(),
+    ]),
+  },
+  // La interfaz no tiene permiso de portapapeles: copia por acá, redactado (3.9).
+  'portapapeles:copiar': {
+    request: z.object({ texto: z.string().max(2_000_000), sensible: z.boolean() }).strict(),
+    response: z.object({ limpiaEnMs: Cantidad.nullable() }).strict(),
   },
   'ejecuciones:detalle': {
     request: z.object({ ejecucionId: IdEntidad }).strict(),

@@ -1,12 +1,23 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, Menu, nativeTheme, powerMonitor, protocol } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  Menu,
+  nativeTheme,
+  powerMonitor,
+  protocol,
+} from 'electron';
 import { conectarActividad, DetectorInactividad } from './boveda/inactividad';
 import type { ServicioBoveda } from './boveda/servicio';
 import type { ServicioEjecuciones } from './ejecuciones/servicio';
 import type { ServicioEvidencias } from './evidencias/servicio';
 import type { ServicioHallazgos } from './hallazgos/servicio';
+import type { ServicioReportes } from './reportes/servicio';
+import type { CopiaSegura } from './reportes/portapapeles';
 import { limpiarPerfilesHuerfanos } from './ejecuciones/perfiles';
 import { crearLanzador } from './ejecuciones/procesos';
 import type { ServicioProyectos } from './proyectos/servicio';
@@ -189,6 +200,9 @@ async function cargarServicios(): Promise<{
   ejecuciones: ServicioEjecuciones;
   evidencias: ServicioEvidencias;
   hallazgos: ServicioHallazgos;
+  reportes: ServicioReportes;
+  copia: CopiaSegura;
+  copiar: (texto: string, sensible: boolean) => Promise<{ limpiaEnMs: number | null }>;
 } | null> {
   const carpetaDelPaquete = (paquete: string): string =>
     path.dirname(requerir.resolve(`${paquete}/package.json`));
@@ -201,6 +215,18 @@ async function cargarServicios(): Promise<{
   const { fusionarLoGuardado } = await import('./hallazgos/huellas-guardadas');
   const { ServicioEvidencias: Evidencias } = await import('./evidencias/servicio');
   const { ServicioHallazgos: Hallazgos } = await import('./hallazgos/servicio');
+  const { ServicioReportes: Reportes } = await import('./reportes/servicio');
+  const { CopiaSegura: Copia } = await import('./reportes/portapapeles');
+  const { destinosNativos } = await import('./reportes/destino');
+  const { fuentesEmpaquetadas, renderizarPdf } = await import('./reportes/pdf');
+  const { REDACTOR } = await import('./ejecuciones/redaccion');
+  const copia = new Copia({
+    escribir: (texto) => clipboard.writeText(texto),
+    leer: () => clipboard.readText(),
+    limpiar: () => {
+      clipboard.clear();
+    },
+  });
   // Se completa enseguida: ejecuciones depende de los otros dos servicios, y la bóveda la avisa.
   const dependientes: { ejecuciones?: ServicioEjecuciones; evidencias?: ServicioEvidencias } = {};
   const boveda = new Servicio({
@@ -218,6 +244,8 @@ async function cargarServicios(): Promise<{
     },
     alBloquear: () => {
       dependientes.evidencias?.alBloquear();
+      // Lo sensible que quedó en el portapapeles no sobrevive al bloqueo (3.9).
+      void copia.limpiarPendiente();
       // Las pantallas previas al desbloqueo siguen al sistema: la preferencia está cifrada.
       nativeTheme.themeSource = 'system';
       // Recargar descarta todo el estado de la interfaz: vuelve al desbloqueo sin datos.
@@ -258,7 +286,21 @@ async function cargarServicios(): Promise<{
   );
   dependientes.ejecuciones = ejecuciones;
   const hallazgos = new Hallazgos(boveda, proyectos);
-  return { boveda, proyectos, ejecuciones, evidencias, hallazgos };
+  const reportes = new Reportes({
+    boveda,
+    proyectos,
+    evidencias,
+    destinos: destinosNativos(() => mainWindow),
+    renderizarPdf,
+    fuentes: fuentesEmpaquetadas,
+  });
+  // Se redacta otra vez antes de copiar: un secreto nunca se copia en claro. Si el detector encontró algo,
+  // es sensible y se limpia a los 30 segundos (3.9).
+  const copiar = (texto: string, sensible: boolean) => {
+    const { texto: redactado, registros } = REDACTOR.texto(texto);
+    return copia.copiar(redactado, sensible || registros.length > 0);
+  };
+  return { boveda, proyectos, ejecuciones, evidencias, hallazgos, reportes, copia, copiar };
 }
 
 function vigilarBloqueo(boveda: ServicioBoveda): void {
@@ -293,7 +335,7 @@ void app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  const { boveda, proyectos, ejecuciones, evidencias, hallazgos } = servicios;
+  const { boveda, proyectos, ejecuciones, evidencias, hallazgos, reportes, copiar } = servicios;
   vigilarBloqueo(boveda);
   limpiarPerfilesHuerfanos(dataDirectory);
 
@@ -315,6 +357,8 @@ void app.whenReady().then(async () => {
       ejecuciones,
       evidencias,
       hallazgos,
+      reportes,
+      copiar,
       alCambiarBloqueoMinutos: (minutos) => {
         inactividad.cambiarLimite(minutos * MS_POR_MINUTO);
       },

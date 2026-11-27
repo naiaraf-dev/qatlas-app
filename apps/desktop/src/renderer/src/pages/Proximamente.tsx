@@ -11,10 +11,6 @@ const ROADMAP: Partial<Record<PageId, { description: string; when: string }>> = 
     description: 'Importar casos desde Excel, crearlos sin código y agruparlos en suites.',
     when: 'Fase 2',
   },
-  reportes: {
-    description: 'Generar reportes de bug y de ejecución, y exportarlos de forma segura.',
-    when: 'Fase 1 · semana 9',
-  },
   uat: {
     description: 'Ejecutar rondas de UAT paso a paso y emitir el acta de conformidad.',
     when: 'Fase 2',

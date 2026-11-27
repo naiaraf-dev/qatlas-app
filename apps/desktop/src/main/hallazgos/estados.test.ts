@@ -112,6 +112,16 @@ describe('Decisiones de la persona', () => {
   });
 });
 
+describe('Reportar (semana 9a)', () => {
+  it('un hallazgo abierto pasa a reportado; uno descartado o resuelto no se reporta', () => {
+    for (const estado of ['nuevo', 'confirmado', 'regresion', 'posiblemente_resuelto'] as const) {
+      expect(decidir(en(estado), { accion: 'reportar' })).toEqual(en('reportado'));
+    }
+    expect(decidir(en('descartado'), { accion: 'reportar' })).toBeNull();
+    expect(decidir(en('resuelto'), { accion: 'reportar' })).toBeNull();
+  });
+});
+
 describe('Fusión de duplicados (lo guardado antes de la semana 8)', () => {
   const fila = (estado: EstadoHallazgo, decisionEn: string | null, ultimaVezEn: string) => ({
     estado,
